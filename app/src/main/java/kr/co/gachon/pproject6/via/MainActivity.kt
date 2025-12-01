@@ -22,6 +22,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import org.tensorflow.lite.gpu.CompatibilityList
 
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+
 class MainActivity : AppCompatActivity() {
     private lateinit var viewFinder: PreviewView
     private lateinit var overlay: OverlayView
@@ -60,6 +63,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Handle Window Insets for edge-to-edge
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
 
         viewFinder = findViewById(R.id.viewFinder)
         overlay = findViewById(R.id.overlay)
@@ -132,19 +142,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initDetector(useGpu: Boolean) {
-        val oldDetector = detector
-        detector = null // Pause detection
-        oldDetector?.close()
+        cameraExecutor?.execute {
+            val oldDetector = detector
+            detector = null // Pause detection
+            
+            try {
+                oldDetector?.close()
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error closing detector", e)
+            }
 
-        try {
-            val newDetector = YoloDetector(this, "yolo11n_float32.tflite", useGpu = useGpu)
-            newDetector.setup()
-            detector = newDetector
-        } catch (e: Exception) {
-            Log.e("MainActivity", "Error initializing detector", e)
-            Toast.makeText(this, "Error initializing detector: ${e.message}", Toast.LENGTH_LONG).show()
-            // Revert switch if failed?
-            if (useGpu) gpuSwitch.isChecked = false
+            try {
+                val newDetector = YoloDetector(this, "yolo11n_float32.tflite", useGpu = useGpu)
+                newDetector.setup()
+                detector = newDetector
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error initializing detector", e)
+                runOnUiThread {
+                    Toast.makeText(this, "Error initializing detector: ${e.message}", Toast.LENGTH_LONG).show()
+                    // Revert switch if failed?
+                    if (useGpu) gpuSwitch.isChecked = false
+                }
+            }
         }
     }
 
