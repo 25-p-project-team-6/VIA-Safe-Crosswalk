@@ -92,7 +92,7 @@ class YoloDetector(
         val outputArray = outputBuffer.floatArray
         val results = postProcess(outputArray, confidenceThreshold)
 
-        return DetectionResult(results, inferenceTime, if (useGpu) 1 else 0) // 1 for GPU, 0 for CPU (simplified)
+        return DetectionResult(results, inferenceTime)
     }
 
     private fun postProcess(output: FloatArray, threshold: Float): List<OverlayView.BoundingBox> {
