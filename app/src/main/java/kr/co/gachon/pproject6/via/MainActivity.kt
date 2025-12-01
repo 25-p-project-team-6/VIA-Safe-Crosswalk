@@ -1,5 +1,4 @@
 package kr.co.gachon.pproject6.via
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -21,12 +20,13 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import org.tensorflow.lite.gpu.CompatibilityList
 
 class MainActivity : AppCompatActivity() {
-
     private lateinit var viewFinder: PreviewView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
+    private lateinit var avgFpsText: TextView
     private lateinit var latencyText: TextView
     private lateinit var hardwareText: TextView
     private lateinit var confidenceSlider: Slider
@@ -43,6 +43,9 @@ class MainActivity : AppCompatActivity() {
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
+    
+    private var totalFrameCount = 0L
+    private var startTime = 0L
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -62,10 +65,13 @@ class MainActivity : AppCompatActivity() {
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         fpsText = findViewById(R.id.fpsText)
+        avgFpsText = findViewById(R.id.avgFpsText)
         latencyText = findViewById(R.id.latencyText)
         hardwareText = findViewById(R.id.hardwareText)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
+        
+        startTime = System.currentTimeMillis()
 
         debugContainer.visibility = if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
 
@@ -75,12 +81,20 @@ class MainActivity : AppCompatActivity() {
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             initDetector(isChecked)
+            // Reset average stats when hardware changes
+            totalFrameCount = 0
+            startTime = System.currentTimeMillis()
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // Initialize Detector
-        initDetector(false)
+        // Check GPU compatibility and set default
+        val compatList = CompatibilityList()
+        val isGpuSupported = compatList.isDelegateSupportedOnThisDevice
+        
+        gpuSwitch.isChecked = isGpuSupported
+        // Initialize Detector with GPU if supported, otherwise CPU
+        initDetector(isGpuSupported)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -88,6 +102,32 @@ class MainActivity : AppCompatActivity() {
             startCamera()
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+    
+
+
+    private fun updateDebugInfo(inferenceTime: Long, hardwareType: Int) {
+        latencyText.text = "Latency: ${inferenceTime}ms"
+        hardwareText.text = "Hardware: ${if (hardwareType == 1) "GPU" else "CPU"}"
+
+        frameCount++
+        totalFrameCount++
+        val currentTime = System.currentTimeMillis()
+        val timeDiff = currentTime - lastFpsTimestamp
+        
+        if (timeDiff >= 1000) {
+            val fps = frameCount * 1000.0 / timeDiff
+            fpsText.text = String.format("FPS: %.2f", fps)
+            frameCount = 0
+            lastFpsTimestamp = currentTime
+            
+            // Update Average FPS
+            val totalTimeDiff = currentTime - startTime
+            if (totalTimeDiff > 0) {
+                val avgFps = totalFrameCount * 1000.0 / totalTimeDiff
+                avgFpsText.text = String.format("Avg FPS: %.2f", avgFps)
+            }
         }
     }
 
@@ -181,21 +221,6 @@ class MainActivity : AppCompatActivity() {
         val matrix = Matrix()
         matrix.postRotate(degrees)
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-    }
-
-    private fun updateDebugInfo(inferenceTime: Long, hardwareType: Int) {
-        latencyText.text = "Latency: ${inferenceTime}ms"
-        hardwareText.text = "Hardware: ${if (hardwareType == 1) "GPU" else "CPU"}"
-
-        frameCount++
-        val currentTime = System.currentTimeMillis()
-        val timeDiff = currentTime - lastFpsTimestamp
-        if (timeDiff >= 1000) {
-            val fps = frameCount * 1000.0 / timeDiff
-            fpsText.text = String.format("FPS: %.2f", fps)
-            frameCount = 0
-            lastFpsTimestamp = currentTime
-        }
     }
 
     override fun onDestroy() {

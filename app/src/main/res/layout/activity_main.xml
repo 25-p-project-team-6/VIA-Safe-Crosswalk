@@ -34,6 +34,13 @@
             android:textColor="#FFFFFF" />
 
         <TextView
+            android:id="@+id/avgFpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Avg FPS: 0"
+            android:textColor="#FFFFFF" />
+
+        <TextView
             android:id="@+id/latencyText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
