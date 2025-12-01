@@ -31,7 +31,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fpsText: TextView
     private lateinit var avgFpsText: TextView
     private lateinit var latencyText: TextView
-    private lateinit var hardwareText: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var debugContainer: android.widget.LinearLayout
@@ -77,7 +76,6 @@ class MainActivity : AppCompatActivity() {
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
         latencyText = findViewById(R.id.latencyText)
-        hardwareText = findViewById(R.id.hardwareText)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
         
@@ -94,6 +92,7 @@ class MainActivity : AppCompatActivity() {
             // Reset average stats when hardware changes
             totalFrameCount = 0
             startTime = System.currentTimeMillis()
+            avgFpsText.text = "Avg FPS: 0"
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -115,11 +114,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-
-
-    private fun updateDebugInfo(inferenceTime: Long, hardwareType: Int) {
+    private fun updateDebugInfo(inferenceTime: Long) {
         latencyText.text = "Latency: ${inferenceTime}ms"
-        hardwareText.text = "Hardware: ${if (hardwareType == 1) "GPU" else "CPU"}"
 
         frameCount++
         totalFrameCount++
@@ -230,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
             overlay.setResults(result.boxes)
-            updateDebugInfo(result.inferenceTime, result.hardwareType)
+            updateDebugInfo(result.inferenceTime)
         }
 
         imageProxy.close()

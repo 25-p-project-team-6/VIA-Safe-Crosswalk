@@ -48,13 +48,6 @@
             android:text="Latency: 0ms"
             android:textColor="#FFFFFF" />
 
-        <TextView
-            android:id="@+id/hardwareText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Hardware: CPU"
-            android:textColor="#FFFFFF" />
-
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/gpuSwitch"
             android:layout_width="wrap_content"
