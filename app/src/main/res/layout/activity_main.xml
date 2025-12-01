@@ -2,18 +2,75 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <androidx.camera.view.PreviewView
+        android:id="@+id/viewFinder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <kr.co.gachon.pproject6.via.OverlayView
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:translationZ="5dp" />
+
+    <LinearLayout
+        android:id="@+id/debugContainer"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Hello World!"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:orientation="vertical"
+        android:background="#80000000"
+        android:padding="16dp"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/fpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FPS: 0"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/latencyText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Latency: 0ms"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/hardwareText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Hardware: CPU"
+            android:textColor="#FFFFFF" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/gpuSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Use GPU"
+            android:textColor="#FFFFFF"
+            android:checked="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Confidence Threshold"
+            android:textColor="#FFFFFF"
+            android:layout_marginTop="8dp"/>
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/confidenceSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="0.0"
+            android:valueTo="1.0"
+            android:value="0.5"
+            android:stepSize="0.05" />
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
