@@ -37,6 +37,8 @@ class MainActivity : AppCompatActivity() {
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private val showDebugInfo = true
+    // Set this to false to hide bounding boxes and labels
+    private val showBBoxOverlay = false
 
     private var cameraExecutor: ExecutorService? = null
     @Volatile
@@ -225,7 +227,11 @@ class MainActivity : AppCompatActivity() {
 
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
-            overlay.setResults(result.boxes)
+            if (showBBoxOverlay) {
+                overlay.setResults(result.boxes)
+            } else {
+                overlay.setResults(emptyList())
+            }
             updateDebugInfo(result.inferenceTime)
         }
 
