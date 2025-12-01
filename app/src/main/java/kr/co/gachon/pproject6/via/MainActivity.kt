@@ -38,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private val showDebugInfo = true
     // Set this to false to hide bounding boxes and labels
-    private val showBBoxOverlay = false
+    private val showBBoxOverlay = true
 
     private var cameraExecutor: ExecutorService? = null
     @Volatile
