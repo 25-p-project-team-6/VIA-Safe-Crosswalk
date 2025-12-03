@@ -68,7 +68,7 @@ class YoloDetector(
     }
 
     fun detect(bitmap: Bitmap, confidenceThreshold: Float): DetectionResult {
-        if (interpreter == null) return DetectionResult(emptyList(), 0, 0)
+        if (interpreter == null) return DetectionResult(emptyList(), 0)
 
         val inferenceStartTime = SystemClock.uptimeMillis()
 
@@ -219,7 +219,6 @@ class YoloDetector(
 
     data class DetectionResult(
         val boxes: List<OverlayView.BoundingBox>,
-        val inferenceTime: Long,
-        val hardwareType: Int // 0: CPU, 1: GPU
+        val inferenceTime: Long
     )
 }
