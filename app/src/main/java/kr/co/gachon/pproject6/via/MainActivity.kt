@@ -1,4 +1,5 @@
 package kr.co.gachon.pproject6.via
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -37,17 +38,19 @@ class MainActivity : AppCompatActivity() {
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private val showDebugInfo = true
+
     // Set this to false to hide bounding boxes and labels
     private val showBBoxOverlay = true
 
     private var cameraExecutor: ExecutorService? = null
+
     @Volatile
     private var detector: YoloDetector? = null
     private var confidenceThreshold = 0.5f
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
-    
+
     private var totalFrameCount = 0L
     private var startTime = 0L
 
@@ -80,10 +83,11 @@ class MainActivity : AppCompatActivity() {
         latencyText = findViewById(R.id.latencyText)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
-        
+
         startTime = System.currentTimeMillis()
 
-        debugContainer.visibility = if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+        debugContainer.visibility =
+            if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             confidenceThreshold = value
@@ -102,7 +106,7 @@ class MainActivity : AppCompatActivity() {
         // Check GPU compatibility and set default
         val compatList = CompatibilityList()
         val isGpuSupported = compatList.isDelegateSupportedOnThisDevice
-        
+
         gpuSwitch.isChecked = isGpuSupported
         // Initialize Detector with GPU if supported, otherwise CPU
         initDetector(isGpuSupported)
@@ -115,7 +119,7 @@ class MainActivity : AppCompatActivity() {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
-    
+
     private fun updateDebugInfo(inferenceTime: Long) {
         latencyText.text = "Latency: ${inferenceTime}ms"
 
@@ -123,13 +127,13 @@ class MainActivity : AppCompatActivity() {
         totalFrameCount++
         val currentTime = System.currentTimeMillis()
         val timeDiff = currentTime - lastFpsTimestamp
-        
+
         if (timeDiff >= 1000) {
             val fps = frameCount * 1000.0 / timeDiff
             fpsText.text = String.format("FPS: %.2f", fps)
             frameCount = 0
             lastFpsTimestamp = currentTime
-            
+
             // Update Average FPS
             val totalTimeDiff = currentTime - startTime
             if (totalTimeDiff > 0) {
@@ -143,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor?.execute {
             val oldDetector = detector
             detector = null // Pause detection
-            
+
             try {
                 oldDetector?.close()
             } catch (e: Exception) {
@@ -151,13 +155,28 @@ class MainActivity : AppCompatActivity() {
             }
 
             try {
-                val newDetector = YoloDetector(this, "yolo11n_float32.tflite", useGpu = useGpu)
+                // fps 5 (640)
+                // val newDetector = YoloDetector(this, "yolo11n_float32.tflite", useGpu = useGpu)
+
+                // fps 5 (640, half)
+                // val newDetector = YoloDetector(this, "yolo11n_float16.tflite", useGpu = useGpu)
+
+                // fps 20 (320, int8) -> int8 fit for CPU
+                // val newDetector = YoloDetector(this, "yolo11n_int8.tflite", useGpu = useGpu)
+                
+                // fps 30 (320) BEST!!
+                val newDetector = YoloDetector(this, "yolo11n_float32_320.tflite", useGpu = useGpu)
+
                 newDetector.setup()
                 detector = newDetector
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error initializing detector", e)
                 runOnUiThread {
-                    Toast.makeText(this, "Error initializing detector: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        this,
+                        "Error initializing detector: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
                     // Revert switch if failed?
                     if (useGpu) gpuSwitch.isChecked = false
                 }
@@ -210,12 +229,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         val bitmap = imageProxy.toBitmap()
-        
+
         // Handle rotation if needed (toBitmap usually handles it if RGBA_8888 is used with latest CameraX, 
         // but sometimes we need to rotate manually based on imageProxy.imageInfo.rotationDegrees)
         // For now, let's assume toBitmap() gives us the correct orientation or we might need to rotate.
         // Actually, toBitmap() returns the bitmap as is in the buffer. We need to rotate it.
-        
+
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
         val rotatedBitmap = if (rotationDegrees != 0) {
             rotateBitmap(bitmap, rotationDegrees.toFloat())
@@ -237,7 +256,7 @@ class MainActivity : AppCompatActivity() {
 
         imageProxy.close()
     }
-    
+
     private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
         val matrix = Matrix()
         matrix.postRotate(degrees)
