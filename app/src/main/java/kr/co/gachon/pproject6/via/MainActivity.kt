@@ -64,6 +64,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    // Labels (COCO filtered classes)
+    private val filteredLabels = listOf("person", "bicycle", "car", "motorcycle", "bus", "train", "truck")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -163,9 +166,17 @@ class MainActivity : AppCompatActivity() {
 
                 // fps 20 (320, int8) -> int8 fit for CPU
                 // val newDetector = YoloDetector(this, "yolo11n_int8.tflite", useGpu = useGpu)
-                
+
                 // fps 30 (320) BEST!!
-                val newDetector = YoloDetector(this, "yolo11n_float32_320.tflite", useGpu = useGpu)
+                // val newDetector = YoloDetector(this, "yolo11n_float32_320.tflite", useGpu = useGpu)
+
+                // fps 30 (320)
+                // val newDetector =
+                    YoloDetector(this, "yolo11n_filtered_float32.tflite", useGpu = useGpu, labels = filteredLabels)
+
+                // fps 20+ (416)
+                val newDetector =
+                    YoloDetector(this, "yolo11n_filtered_float32_416.tflite", useGpu = useGpu, labels = filteredLabels)
 
                 newDetector.setup()
                 detector = newDetector

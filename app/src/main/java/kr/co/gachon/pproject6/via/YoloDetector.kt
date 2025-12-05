@@ -21,29 +21,30 @@ import java.util.PriorityQueue
 import kotlin.math.max
 import kotlin.math.min
 
+// Labels (COCO 80 classes)
+private val cocoLabels = listOf(
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+    "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+    "hair drier", "toothbrush"
+)
+
 class YoloDetector(
     private val context: Context,
     private val modelPath: String,
-    private val useGpu: Boolean = false
+    private val useGpu: Boolean = false,
+    private val labels: List<String> = cocoLabels
 ) {
 
     private var interpreter: Interpreter? = null
     private var inputImageWidth = 0
     private var inputImageHeight = 0
     private var outputShape = intArrayOf()
-    
-    // Labels (COCO 80 classes)
-    private val labels = listOf(
-        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-        "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-        "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-        "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-        "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
-        "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-        "hair drier", "toothbrush"
-    )
 
     fun setup() {
         val options = Interpreter.Options()
@@ -128,7 +129,8 @@ class YoloDetector(
             var maxClassIndex = -1
             
             // Classes start at index 4
-            for (c in 0 until 80) {
+            val numClasses = cols - 4
+            for (c in 0 until numClasses) {
                 val score = get(i, 4 + c)
                 if (score > maxScore) {
                     maxScore = score
