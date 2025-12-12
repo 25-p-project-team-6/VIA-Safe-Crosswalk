@@ -1,8 +1,9 @@
-package kr.co.gachon.pproject6.via
+package kr.co.gachon.pproject6.via.ml
 
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
+import kr.co.gachon.pproject6.via.ui.OverlayView
 
 object PostProcessor {
     private const val TAG = "PostProcessor"
@@ -139,8 +140,9 @@ object PostProcessor {
 
             val area = rect.width() * rect.height()
 
-            // Score Formula: Area / (Distance + epsilon)
-            val score = area / (dist + 0.1f)
+            // Score Formula: (Area * 1000) / (Distance + epsilon)
+            // Maps typical values (0.001 area) to range 0..100
+            val score = (area * 1000) / (dist + 0.1f)
 
             if (score > bestScore) {
                 bestScore = score

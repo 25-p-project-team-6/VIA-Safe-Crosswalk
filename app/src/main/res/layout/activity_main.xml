@@ -32,7 +32,7 @@
         android:background="@drawable/border_transparent"
         android:translationZ="5dp" />
 
-    <kr.co.gachon.pproject6.via.OverlayView
+    <kr.co.gachon.pproject6.via.ui.OverlayView
         android:id="@+id/overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
