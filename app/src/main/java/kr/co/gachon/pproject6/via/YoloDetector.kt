@@ -145,10 +145,7 @@ class YoloDetector(
                 var w = get(i, 2)
                 var h = get(i, 3)
 
-                // Debug log for the first detection to check values
-                if (boundingBoxes.isEmpty()) {
-                    android.util.Log.d("YoloDetector", "Raw coords: cx=$cx, cy=$cy, w=$w, h=$h, inputSize=$inputImageWidth x $inputImageHeight")
-                }
+
 
                 // Normalize coordinates if they are in pixels
                 if (cx > 1.0f || cy > 1.0f || w > 1.0f || h > 1.0f) {

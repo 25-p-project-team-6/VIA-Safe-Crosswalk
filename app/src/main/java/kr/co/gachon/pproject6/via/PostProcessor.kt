@@ -11,7 +11,7 @@ object PostProcessor {
         RED, GREEN, UNKNOWN
     }
     
-    private const val BUFFER_SIZE = 5
+
 
     // State variables for robustness
     private var lastKnownState: TrafficLightState = TrafficLightState.UNKNOWN
@@ -67,7 +67,7 @@ object PostProcessor {
                             // Log.d(TAG, "Swapped $clsName -> $newClsName (Ratio: $currentRatio vs $otherRatio)")
                         }
                     } else {
-                        // Log.d(TAG, "Validated $clsName (Ratio: $currentRatio)")
+                        // Color validated
                     }
                 }
             }
@@ -92,12 +92,7 @@ object PostProcessor {
             val s = hsv[1] // 0..1
             val v = hsv[2] // 0..1
 
-            // Notebook Green: H[25..100] (OpenCV 0-180) -> H[50..200] (Android 0-360)
-            // Notebook Red: H[0..10] U [170..180] -> H[0..20] U [340..360]
-
-            // S, V thresholds:
-            // Green: S>25 (~0.1), V>40 (~0.15)
-            // Red: S>50 (~0.2), V>50 (~0.2)
+            // S, V thresholds: Green: S>25, V>40 | Red: S>50, V>50
 
             if (isGreen) {
                 if (h in 50f..200f && s >= 0.1f && v >= 0.15f) {
