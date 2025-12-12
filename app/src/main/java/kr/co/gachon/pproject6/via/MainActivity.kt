@@ -32,6 +32,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fpsText: TextView
     private lateinit var avgFpsText: TextView
     private lateinit var latencyText: TextView
+    private lateinit var avgLatencyText: TextView
+    private lateinit var modelNameText: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var debugContainer: android.widget.LinearLayout
@@ -51,8 +53,15 @@ class MainActivity : AppCompatActivity() {
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
 
-    private var totalFrameCount = 0L
-    private var startTime = 0L
+    // Store timestamps and latencies for 10s sliding window
+    // Pair(timestamp, latency)
+    private val frameData = java.util.ArrayDeque<Pair<Long, Long>>()
+    
+    // We don't need totalFrameCount and startTime for the simple average anymore, 
+    // but useful if we want total session average. 
+    // However, user requested 10s average.
+    // private var totalFrameCount = 0L // Removed/Unused for 10s avg
+    // private var startTime = 0L // Removed/Unused for 10s avg
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -64,8 +73,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    // Labels (COCO filtered classes)
-    private val filteredLabels = listOf("person", "bicycle", "car", "motorcycle", "bus", "train", "truck")
+    // traffic lights fine-tuned model label
+    private val finetunedLabels = listOf("bicycle", "car", "motorcycle", "bus", "truck", "red", "green")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,14 +89,17 @@ class MainActivity : AppCompatActivity() {
 
         viewFinder = findViewById(R.id.viewFinder)
         overlay = findViewById(R.id.overlay)
+        overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
+        modelNameText = findViewById(R.id.modelNameText)
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
         latencyText = findViewById(R.id.latencyText)
+        avgLatencyText = findViewById(R.id.avgLatencyText)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
 
-        startTime = System.currentTimeMillis()
+        // startTime = System.currentTimeMillis()
 
         debugContainer.visibility =
             if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
@@ -99,9 +111,9 @@ class MainActivity : AppCompatActivity() {
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             initDetector(isChecked)
             // Reset average stats when hardware changes
-            totalFrameCount = 0
-            startTime = System.currentTimeMillis()
+            frameData.clear()
             avgFpsText.text = "Avg FPS: 0"
+            avgLatencyText.text = "Avg Latency: 0ms"
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -126,22 +138,63 @@ class MainActivity : AppCompatActivity() {
     private fun updateDebugInfo(inferenceTime: Long) {
         latencyText.text = "Latency: ${inferenceTime}ms"
 
-        frameCount++
-        totalFrameCount++
         val currentTime = System.currentTimeMillis()
-        val timeDiff = currentTime - lastFpsTimestamp
+        
+        // Add current frame data
+        frameData.addLast(Pair(currentTime, inferenceTime))
 
+        // Remove old data (older than 10 seconds)
+        while (!frameData.isEmpty() && currentTime - frameData.peekFirst().first > 10000) {
+            frameData.removeFirst()
+        }
+
+        // Calculate Average Latency (10s window)
+        if (!frameData.isEmpty()) {
+            var totalLatency = 0L
+            for (p in frameData) {
+                totalLatency += p.second
+            }
+            val avgLatency = totalLatency / frameData.size
+            avgLatencyText.text = "Avg Latency: ${avgLatency}ms"
+        }
+
+        frameCount++
+        val timeDiff = currentTime - lastFpsTimestamp
+        
+        // Update Instant FPS every 1 second (stats for last 1 sec)
         if (timeDiff >= 1000) {
             val fps = frameCount * 1000.0 / timeDiff
             fpsText.text = String.format("FPS: %.2f", fps)
             frameCount = 0
             lastFpsTimestamp = currentTime
 
-            // Update Average FPS
-            val totalTimeDiff = currentTime - startTime
-            if (totalTimeDiff > 0) {
-                val avgFps = totalFrameCount * 1000.0 / totalTimeDiff
-                avgFpsText.text = String.format("Avg FPS: %.2f", avgFps)
+            // Calculate Average FPS (10s window)
+            // effective duration is min(10s, current duration of window)
+            if (!frameData.isEmpty()) {
+                val oldestTime = frameData.peekFirst()?.first
+                val duration = currentTime - oldestTime!!
+                // Avoid division by zero, though unlikely if list not empty and size > 1
+                // If only 1 frame, duration is 0. 
+                if (duration > 0) {
+                    val avgFps = (frameData.size - 1) * 1000.0 / duration 
+                    // Note: strictly speaking, frames count is intervals. 
+                    // If we have N frames, we have N-1 intervals. 
+                    // For short duration, this is more accurate.
+                    // Or for simple user facing "count over 10s": frameData.size / 10.0 (if full)
+                    
+                    // Let's use simple count / window_size_seconds where window_size_seconds is bounded by 10.
+                    // But if we just started, window size is small.
+                    
+                    // Option A: frameData.size / ((currentTime - oldestTime)/1000.0)
+                    // If window is full 10s, this is frameData.size / 10.
+                    
+                    // val windowSizeSeconds = if (duration in 1..9999) duration / 1000.0 else 10.0
+                    // If duration is very small (start), FPS might spike. 
+                    
+                    // Let's stick to standard: (count) / (time_range)
+                    val calculatedAvgFps = frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
+                    avgFpsText.text = String.format("Avg FPS: %.2f", calculatedAvgFps)
+                } 
             }
         }
     }
@@ -158,28 +211,64 @@ class MainActivity : AppCompatActivity() {
             }
 
             try {
-                // fps 5 (640)
-                // val newDetector = YoloDetector(this, "yolo11n_float32.tflite", useGpu = useGpu)
+                // 640
+                // emulator: 5.45 fps, 180ms latency
+                // S21U: 11 fps, 80ms latency
+                // val modelName = "best_float32_640.tflite"
 
-                // fps 5 (640, half)
-                // val newDetector = YoloDetector(this, "yolo11n_float16.tflite", useGpu = useGpu)
+                // 512
+                // emulator: 8.38 fps, 115ms latency
+                // S21U: 13 fps, 70ms latency
+                // val modelName = "best_float32_512.tflite"
 
-                // fps 20 (320, int8) -> int8 fit for CPU
-                // val newDetector = YoloDetector(this, "yolo11n_int8.tflite", useGpu = useGpu)
+                // 416
+                // emulator: 12.04 fps, 75ms latency
+                // S21U: 16 fps, 50ms latency
+                // val modelName = "best_float32_416.tflite"
 
-                // fps 30 (320) BEST!!
-                // val newDetector = YoloDetector(this, "yolo11n_float32_320.tflite", useGpu = useGpu)
+                // 320
+                // emulator: 20.2 fps, 45ms latency
+                // S21U: 21 fps, 40ms latency
+                // val modelName = YoloDetector(this, "best_float32_320.tflite"
 
-                // fps 30 (320)
-                // val newDetector =
-                    YoloDetector(this, "yolo11n_filtered_float32.tflite", useGpu = useGpu, labels = filteredLabels)
+                // 640 half(fp16)
+                // emulator: 5.3 fps, 184ms latency
+                // S21U: 8.8 fps, 100ms latency
+                //val modelName = "best_float16_640.tflite"
 
-                // fps 20+ (416)
-                val newDetector =
-                    YoloDetector(this, "yolo11n_filtered_float32_416.tflite", useGpu = useGpu, labels = filteredLabels)
+                // 512 half(fp16)
+                // emulator: 8.2 fps, 118ms latency
+                // S21U: 13 fps, 66ms latency
+                // val modelName = "best_float16_512.tflite"
+
+                // 448 half(fp16)
+                // emulator: 8.2 fps, 118ms latency
+                // S21U: 15 fps, 61ms latency
+                val modelName = "best_float16_448.tflite"
+
+                // 416 half(fp16)
+                // emulator: 12 fps, 79ms latency
+                // S21U: 16 fps, 51ms latency
+                // val modelName = "best_float16_416.tflite"
+
+                // 320 half(fp16)
+                // emulator: 20.2 fps, 46.5ms latency
+                // S21U: 23 fps, 30ms latency
+                // val modelName = "best_float16_320.tflite"
+
+                // 320 int8(quant, cpu)
+                // emulator: 15+ fps, 45ms latency
+                // S21U: 23 fps, 34ms latency
+                // val modelName = "best_int8_320.tflite"
+
+                val newDetector = YoloDetector(this, modelName, useGpu = useGpu, labels = finetunedLabels)
 
                 newDetector.setup()
                 detector = newDetector
+                
+                runOnUiThread {
+                    modelNameText.text = "Model: $modelName"
+                }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error initializing detector", e)
                 runOnUiThread {
@@ -205,7 +294,7 @@ class MainActivity : AppCompatActivity() {
                 .setTargetAspectRatio(AspectRatio.RATIO_4_3)
                 .build()
                 .also {
-                    it.setSurfaceProvider(viewFinder.surfaceProvider)
+                    it.surfaceProvider = viewFinder.surfaceProvider
                 }
 
             val imageAnalyzer = ImageAnalysis.Builder()
@@ -214,9 +303,9 @@ class MainActivity : AppCompatActivity() {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor!!, { image ->
+                    it.setAnalyzer(cameraExecutor!!) { image ->
                         processImage(image)
-                    })
+                    }
                 }
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
