@@ -204,18 +204,16 @@ class YoloDetector(
                 }
             }
 
-            if (maxScore > threshold) {
-                // Determine confidence threshold for this class
+            // Optimization: Skip obvious background (score < 0.1)
+            if (maxScore > 0.1f) {
                 val clsName = labels.getOrElse(maxClassIndex) { "Unknown" }
                 val confThreshold = specificConfidenceThresholds[clsName] ?: threshold
 
-                // Apply specific threshold
                 if (maxScore > confThreshold) {
                     var cx = get(i, 0)
                     var cy = get(i, 1)
                     var w = get(i, 2)
                     var h = get(i, 3)
-
 
                     // Normalize coordinates if they are in pixels
                     if (cx > 1.0f || cy > 1.0f || w > 1.0f || h > 1.0f) {

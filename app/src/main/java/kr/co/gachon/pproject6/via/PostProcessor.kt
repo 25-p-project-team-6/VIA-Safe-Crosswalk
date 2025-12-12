@@ -177,9 +177,15 @@ object PostProcessor {
             }
 
             // If we have enough consistent frames, update the "Real" state
-            if (consecutiveCount >= TRIGGER_THRESHOLD) {
+            // Fast-Track: If high confidence (>= 0.5), update immediately!
+            val isHighConfidence = targetBox != null && targetBox.score >= 0.5f
+
+            if (consecutiveCount >= TRIGGER_THRESHOLD || isHighConfidence) {
                 lastKnownState = currentState
                 lastStateTimeTime = currentTime
+                // Reset counter if we fast-tracked to keep logic clean? 
+                // Actually if fast-tracked, we can just let counter grow or set it to max.
+                if (isHighConfidence) consecutiveCount = TRIGGER_THRESHOLD
             }
         }
 
