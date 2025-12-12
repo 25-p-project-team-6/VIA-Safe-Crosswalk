@@ -1,4 +1,4 @@
-package kr.co.gachon.pproject6.via
+package kr.co.gachon.pproject6.via.ui
 
 import android.content.Context
 import android.graphics.Canvas

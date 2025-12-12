@@ -8,23 +8,24 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.AspectRatio
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import org.tensorflow.lite.gpu.CompatibilityList
-
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+
+import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.ml.PostProcessor
+import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.ui.OverlayView
+import kr.co.gachon.pproject6.via.util.ImageUtils
+import kr.co.gachon.pproject6.via.util.PerformanceTracker
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewFinder: PreviewView
@@ -40,7 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var debugContainer: android.widget.LinearLayout
     private lateinit var debugToggleButton: android.widget.ImageButton
 
-    private var camera: androidx.camera.core.Camera? = null
+    private var cameraManager: CameraManager? = null
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private var showDebugInfo = true
@@ -61,13 +62,9 @@ class MainActivity : AppCompatActivity() {
     private var confidenceThreshold = 0.15f 
     
     private var currentModelName = "best_float16_640.tflite" // Default model
-
-    private var lastFpsTimestamp = System.currentTimeMillis()
-    private var frameCount = 0
-
-    // Store timestamps and latencies for 10s sliding window
-    // Pair(timestamp, latency)
-    private val frameData = java.util.ArrayDeque<Pair<Long, Long>>()
+    
+    // Performance Tracker
+    private val performanceTracker = PerformanceTracker()
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -139,7 +136,7 @@ class MainActivity : AppCompatActivity() {
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             initDetector(isChecked)
             // Reset average stats when hardware changes
-            frameData.clear()
+            performanceTracker.clear()
             avgFpsText.text = "Avg FPS: 0"
             avgLatencyText.text = "Avg Latency: 0ms"
         }
@@ -147,7 +144,7 @@ class MainActivity : AppCompatActivity() {
         zoomSwitch = findViewById(R.id.swZoom2x)
         zoomSwitch.setOnCheckedChangeListener { _, isChecked ->
             val zoomRatio = if (isChecked) 2.0f else 1.0f
-            camera?.cameraControl?.setZoomRatio(zoomRatio)
+            cameraManager?.setZoom(zoomRatio)
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -240,50 +237,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDebugInfo(inferenceTime: Long) {
         latencyText.text = "Latency: ${inferenceTime}ms"
-
-        val currentTime = System.currentTimeMillis()
-
-        // Add current frame data
-        frameData.addLast(Pair(currentTime, inferenceTime))
-
-        // Remove old data (older than 10 seconds)
-        while (!frameData.isEmpty() && currentTime - frameData.peekFirst().first > 10000) {
-            frameData.removeFirst()
-        }
-
-        // Calculate Average Latency (10s window)
-        if (!frameData.isEmpty()) {
-            var totalLatency = 0L
-            for (p in frameData) {
-                totalLatency += p.second
-            }
-            val avgLatency = totalLatency / frameData.size
-            avgLatencyText.text = "Avg Latency: ${avgLatency}ms"
-        }
-
-        frameCount++
-        val timeDiff = currentTime - lastFpsTimestamp
-
-        // Update Instant FPS every 1 second (stats for last 1 sec)
-        if (timeDiff >= 1000) {
-            val fps = frameCount * 1000.0 / timeDiff
-            fpsText.text = String.format("FPS: %.2f", fps)
-            frameCount = 0
-            lastFpsTimestamp = currentTime
-
-            // Calculate Average FPS (10s window)
-            // effective duration is min(10s, current duration of window)
-            if (!frameData.isEmpty()) {
-                val oldestTime = frameData.peekFirst()?.first
-                val duration = currentTime - oldestTime!!
-
-                if (duration > 0) {
-                    val calculatedAvgFps =
-                        frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
-                    avgFpsText.text = String.format("Avg FPS: %.2f", calculatedAvgFps)
-                }
-            }
-        }
+        
+        // Delegate calculation to Tracker
+        performanceTracker.update(inferenceTime)
+        
+        // Update UI with results
+        fpsText.text = performanceTracker.currentFpsStr
+        avgFpsText.text = performanceTracker.avgFpsStr
+        avgLatencyText.text = performanceTracker.avgLatencyStr
     }
 
     private fun initDetector(useGpu: Boolean) {
@@ -343,71 +304,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-
-        cameraProviderFuture.addListener({
-            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .build()
-                .also {
-                    it.surfaceProvider = viewFinder.surfaceProvider
-                }
-
-            val imageAnalyzer = ImageAnalysis.Builder()
-                .setTargetAspectRatio(AspectRatio.RATIO_4_3)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor!!) { image ->
-                        processImage(image)
+        cameraManager = CameraManager(this, this, viewFinder, cameraExecutor!!) { image ->
+            processImage(image)
+        }
+        
+        cameraManager?.startCamera { maxZoom ->
+            // Update Zoom Switch UI based on supported Max Zoom
+            if (maxZoom >= 2.0f) {
+                runOnUiThread {
+                    if (!zoomSwitch.isChecked) {
+                        zoomSwitch.isChecked = true 
+                        // Force update via manager
+                        cameraManager?.setZoom(2.0f)
                     }
                 }
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-            try {
-                cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageAnalyzer
-                )
-
-                // Check for 2x Zoom support and auto-enable
-                val zoomState = camera?.cameraInfo?.zoomState?.value
-                if (zoomState != null) {
-                    val maxZoom = zoomState.maxZoomRatio
-                    if (maxZoom >= 2.0f) {
-                        runOnUiThread {
-                            if (!zoomSwitch.isChecked) {
-                                zoomSwitch.isChecked =
-                                    true // This will trigger listener and set zoom to 2.0
-                                // If listener doesn't trigger automatically on setChecked (sometimes it doesn't if not attached), force it
-                                camera?.cameraControl?.setZoomRatio(2.0f)
-                            }
-                        }
-                    } else {
-                        runOnUiThread {
-                            zoomSwitch.isEnabled = false
-                            zoomSwitch.text = "2x Zoom (Not Supported)"
-                        }
-                    }
+            } else {
+                runOnUiThread {
+                    zoomSwitch.isEnabled = false
+                    zoomSwitch.text = "2x Zoom (Not Supported)"
                 }
-
-                // Also observe zoom state for dynamic updates if needed
-                camera?.cameraInfo?.zoomState?.observe(this) { state ->
-                    // Just log or update UI if needed
-                    // Log.d("MainActivity", "Zoom: ${state.zoomRatio}x / Max: ${state.maxZoomRatio}x")
-                }
-
-            } catch (exc: Exception) {
-                Log.e("MainActivity", "Use case binding failed", exc)
             }
-
-        }, ContextCompat.getMainExecutor(this))
+        }
     }
-
+    
     private fun processImage(imageProxy: ImageProxy) {
         if (detector == null) {
             imageProxy.close()
@@ -415,18 +334,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         val bitmap = imageProxy.toBitmap()
-
-        // Handle rotation if needed (toBitmap usually handles it if RGBA_8888 is used with latest CameraX, 
-        // but sometimes we need to rotate manually based on imageProxy.imageInfo.rotationDegrees)
-        // For now, let's assume toBitmap() gives us the correct orientation or we might need to rotate.
-        // Actually, toBitmap() returns the bitmap as is in the buffer. We need to rotate it.
-
+        
+        // Use ImageUtils for rotation
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val rotatedBitmap = if (rotationDegrees != 0) {
-            rotateBitmap(bitmap, rotationDegrees.toFloat())
-        } else {
-            bitmap
-        }
+        val rotatedBitmap = ImageUtils.rotateBitmap(bitmap, rotationDegrees.toFloat())
 
         val result = detector!!.detect(rotatedBitmap, confidenceThreshold)
 
@@ -489,7 +400,7 @@ class MainActivity : AppCompatActivity() {
                     } else {
                         ""
                     }
-                    String.format("Target: %s (Score: %.5f)%s", targetCls, targetScore, ratioText)
+                    String.format("Target: %s (Score: %.2f)%s", targetCls, targetScore, ratioText)
                 } else {
                     "Logic Disabled"
                 }
@@ -509,12 +420,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         imageProxy.close()
-    }
-
-    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-        val matrix = Matrix()
-        matrix.postRotate(degrees)
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     override fun onDestroy() {
