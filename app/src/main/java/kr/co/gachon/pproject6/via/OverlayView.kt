@@ -18,7 +18,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     private var boxPaint = Paint()
     private var textBackgroundPaint = Paint()
     private var textPaint = Paint()
-    
+
     private var sourceWidth: Int = 0
     private var sourceHeight: Int = 0
 
@@ -47,7 +47,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxPaint.strokeWidth = 8F
         boxPaint.style = Paint.Style.STROKE
     }
-    
+
     // Paint for target (Highlighted)
     private val targetPaint = Paint().apply {
         color = Color.YELLOW
@@ -64,21 +64,21 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         // PreviewView scales the image to fill the view, cropping if necessary.
         val viewWidth = width.toFloat()
         val viewHeight = height.toFloat()
-        
+
         val scale = max(viewWidth / sourceWidth, viewHeight / sourceHeight)
         val dx = (viewWidth - sourceWidth * scale) / 2
         val dy = (viewHeight - sourceHeight * scale) / 2
 
         for (result in results) {
             val boundingBox = result.box
-            
+
             // Transform normalized coordinates to view coordinates
             // 1. Denormalize to source image coordinates
             val topPx = boundingBox.top * sourceHeight
             val bottomPx = boundingBox.bottom * sourceHeight
             val leftPx = boundingBox.left * sourceWidth
             val rightPx = boundingBox.right * sourceWidth
-            
+
             // 2. Apply scale and offset
             val top = topPx * scale + dy
             val bottom = bottomPx * scale + dy
@@ -87,7 +87,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
             // Draw bounding box
             val drawableRect = RectF(left, top, right, bottom)
-            
+
             if (result.isTarget) {
                 canvas.drawRect(drawableRect, targetPaint)
             } else {
@@ -117,7 +117,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         results = boundingBoxes
         invalidate()
     }
-    
+
     fun setInputImageSize(width: Int, height: Int) {
         this.sourceWidth = width
         this.sourceHeight = height

@@ -6,11 +6,10 @@ import android.util.Log
 
 object PostProcessor {
     private const val TAG = "PostProcessor"
-    
+
     enum class TrafficLightState {
         RED, GREEN, UNKNOWN
     }
-    
 
 
     // State variables for robustness
@@ -78,7 +77,7 @@ object PostProcessor {
             }
             correctedBoxes.add(newBox)
         }
-        
+
         return correctedBoxes
     }
 
@@ -165,9 +164,9 @@ object PostProcessor {
             targetBox.clsName.equals("green", ignoreCase = true) -> TrafficLightState.GREEN
             else -> TrafficLightState.UNKNOWN
         }
-        
+
         val currentTime = System.currentTimeMillis()
-        
+
         // 1. Consecutive Detection Logic (Debouncing)
         if (currentState != TrafficLightState.UNKNOWN) {
             if (currentState == candidateState) {
@@ -176,14 +175,14 @@ object PostProcessor {
                 candidateState = currentState
                 consecutiveCount = 1
             }
-            
+
             // If we have enough consistent frames, update the "Real" state
             if (consecutiveCount >= TRIGGER_THRESHOLD) {
                 lastKnownState = currentState
                 lastStateTimeTime = currentTime
             }
         }
-        
+
         // 2. Persistence Logic (Handling Occlusion)
         // If current detection is lost (UNKNOWN), check if we can persist the old state
         return if (currentState == TrafficLightState.UNKNOWN) {
@@ -197,7 +196,7 @@ object PostProcessor {
             // If currently detecting something, return the robust (debounced) state
             // Logic: We return lastKnownState which is only updated after N frames.
             // This prevents single-frame flickers.
-            
+
             // Bug Fix: Only return lastKnownState if it is still valid (within persistence window).
             // If it's too old, we should show nothing (UNKNOWN) while verifying the new input.
             if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
