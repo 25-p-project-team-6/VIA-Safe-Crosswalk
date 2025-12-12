@@ -39,6 +39,8 @@ class YoloDetector(
     private val defaultIouThreshold: Float = 0.5f,
     private val specificIouThresholds: Map<String, Float> = emptyMap()
 ) {
+    
+    var specificConfidenceThresholds: Map<String, Float> = emptyMap()
 
 
     private var interpreter: Interpreter? = null
@@ -132,7 +134,13 @@ class YoloDetector(
             }
 
             if (maxScore > threshold) {
-                var cx = get(i, 0)
+                // Determine confidence threshold for this class
+                val clsName = labels.getOrElse(maxClassIndex) { "Unknown" }
+                val confThreshold = specificConfidenceThresholds[clsName] ?: threshold
+
+                // Apply specific threshold
+                if (maxScore > confThreshold) {
+                    var cx = get(i, 0)
                 var cy = get(i, 1)
                 var w = get(i, 2)
                 var h = get(i, 3)
@@ -162,9 +170,10 @@ class YoloDetector(
                     min(1f, bottom)
                 )
                 
-                boundingBoxes.add(OverlayView.BoundingBox(rect, labels.getOrElse(maxClassIndex) { "Unknown" }, maxScore))
+                boundingBoxes.add(OverlayView.BoundingBox(rect, clsName, maxScore))
             }
         }
+    }
 
         return boundingBoxes // nms is called in detect now
     }
