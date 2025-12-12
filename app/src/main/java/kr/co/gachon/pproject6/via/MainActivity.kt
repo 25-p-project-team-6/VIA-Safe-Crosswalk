@@ -57,7 +57,7 @@ class MainActivity : AppCompatActivity() {
     // Store timestamps and latencies for 10s sliding window
     // Pair(timestamp, latency)
     private val frameData = java.util.ArrayDeque<Pair<Long, Long>>()
-    
+
     // We don't need totalFrameCount and startTime for the simple average anymore, 
     // but useful if we want total session average. 
     // However, user requested 10s average.
@@ -75,7 +75,8 @@ class MainActivity : AppCompatActivity() {
         }
 
     // traffic lights fine-tuned model label
-    private val finetunedLabels = listOf("bicycle", "car", "motorcycle", "bus", "truck", "red", "green")
+    private val finetunedLabels =
+        listOf("bicycle", "car", "motorcycle", "bus", "truck", "red", "green")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -147,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         latencyText.text = "Latency: ${inferenceTime}ms"
 
         val currentTime = System.currentTimeMillis()
-        
+
         // Add current frame data
         frameData.addLast(Pair(currentTime, inferenceTime))
 
@@ -168,7 +169,7 @@ class MainActivity : AppCompatActivity() {
 
         frameCount++
         val timeDiff = currentTime - lastFpsTimestamp
-        
+
         // Update Instant FPS every 1 second (stats for last 1 sec)
         if (timeDiff >= 1000) {
             val fps = frameCount * 1000.0 / timeDiff
@@ -184,25 +185,26 @@ class MainActivity : AppCompatActivity() {
                 // Avoid division by zero, though unlikely if list not empty and size > 1
                 // If only 1 frame, duration is 0. 
                 if (duration > 0) {
-                    val avgFps = (frameData.size - 1) * 1000.0 / duration 
+                    val avgFps = (frameData.size - 1) * 1000.0 / duration
                     // Note: strictly speaking, frames count is intervals. 
                     // If we have N frames, we have N-1 intervals. 
                     // For short duration, this is more accurate.
                     // Or for simple user facing "count over 10s": frameData.size / 10.0 (if full)
-                    
+
                     // Let's use simple count / window_size_seconds where window_size_seconds is bounded by 10.
                     // But if we just started, window size is small.
-                    
+
                     // Option A: frameData.size / ((currentTime - oldestTime)/1000.0)
                     // If window is full 10s, this is frameData.size / 10.
-                    
+
                     // val windowSizeSeconds = if (duration in 1..9999) duration / 1000.0 else 10.0
                     // If duration is very small (start), FPS might spike. 
-                    
+
                     // Let's stick to standard: (count) / (time_range)
-                    val calculatedAvgFps = frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
+                    val calculatedAvgFps =
+                        frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
                     avgFpsText.text = String.format("Avg FPS: %.2f", calculatedAvgFps)
-                } 
+                }
             }
         }
     }
@@ -269,11 +271,12 @@ class MainActivity : AppCompatActivity() {
                 // S21U: 23 fps, 34ms latency
                 // val modelName = "best_int8_320.tflite"
 
-                val newDetector = YoloDetector(this, modelName, useGpu = useGpu, labels = finetunedLabels)
+                val newDetector =
+                    YoloDetector(this, modelName, useGpu = useGpu, labels = finetunedLabels)
 
                 newDetector.setup()
                 detector = newDetector
-                
+
                 runOnUiThread {
                     modelNameText.text = "Model: $modelName"
                 }
@@ -285,11 +288,15 @@ class MainActivity : AppCompatActivity() {
                         "Error initializing detector: ${e.message}",
                         Toast.LENGTH_LONG
                     ).show()
-                    
+
                     if (useGpu) {
-                         Toast.makeText(this, "GPU init failed. Switching to CPU.", Toast.LENGTH_SHORT).show()
-                         gpuSwitch.isChecked = false
-                         gpuSwitch.isEnabled = false
+                        Toast.makeText(
+                            this,
+                            "GPU init failed. Switching to CPU.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        gpuSwitch.isChecked = false
+                        gpuSwitch.isEnabled = false
                     }
                 }
             }
@@ -358,7 +365,7 @@ class MainActivity : AppCompatActivity() {
 
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
-            if (showBBoxOverlay) {
+            if (showBBoxOverlay && showDebugInfo) {
                 overlay.setResults(result.boxes)
             } else {
                 overlay.setResults(emptyList())
