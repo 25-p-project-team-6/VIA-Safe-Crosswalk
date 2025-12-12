@@ -49,7 +49,7 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var detector: YoloDetector? = null
-    private var confidenceThreshold = 0.5f
+    private var confidenceThreshold = 0.3f
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
@@ -76,7 +76,7 @@ class MainActivity : AppCompatActivity() {
 
     // traffic lights fine-tuned model label
     private val finetunedLabels =
-        listOf("bicycle", "car", "motorcycle", "bus", "truck", "red", "green")
+        listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -185,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                 // Avoid division by zero, though unlikely if list not empty and size > 1
                 // If only 1 frame, duration is 0. 
                 if (duration > 0) {
-                    val avgFps = (frameData.size - 1) * 1000.0 / duration
+                    // val avgFps = (frameData.size - 1) * 1000.0 / duration
                     // Note: strictly speaking, frames count is intervals. 
                     // If we have N frames, we have N-1 intervals. 
                     // For short duration, this is more accurate.
@@ -221,58 +221,19 @@ class MainActivity : AppCompatActivity() {
             }
 
             try {
-                // 640
-                // emulator: 5.45 fps, 180ms latency
-                // S21U: 11 fps, 80ms latency
-                // val modelName = "best_float32_640.tflite"
-
-                // 512
-                // emulator: 8.38 fps, 115ms latency
-                // S21U: 13 fps, 70ms latency
-                // val modelName = "best_float32_512.tflite"
-
-                // 416
-                // emulator: 12.04 fps, 75ms latency
-                // S21U: 16 fps, 50ms latency
-                // val modelName = "best_float32_416.tflite"
-
-                // 320
-                // emulator: 20.2 fps, 45ms latency
-                // S21U: 21 fps, 40ms latency
-                // val modelName = YoloDetector(this, "best_float32_320.tflite"
-
-                // 640 half(fp16)
-                // emulator: 5.3 fps, 184ms latency
-                // S21U: 8.8 fps, 100ms latency
-                //val modelName = "best_float16_640.tflite"
-
-                // 512 half(fp16)
-                // emulator: 8.2 fps, 118ms latency
-                // S21U: 13 fps, 66ms latency
-                // val modelName = "best_float16_512.tflite"
-
                 // 448 half(fp16)
                 // emulator: 8.2 fps, 118ms latency
                 // S21U: 15 fps, 61ms latency
                 val modelName = "best_float16_448.tflite"
 
-                // 416 half(fp16)
-                // emulator: 12 fps, 79ms latency
-                // S21U: 16 fps, 51ms latency
-                // val modelName = "best_float16_416.tflite"
-
-                // 320 half(fp16)
-                // emulator: 20.2 fps, 46.5ms latency
-                // S21U: 23 fps, 30ms latency
-                // val modelName = "best_float16_320.tflite"
-
-                // 320 int8(quant, cpu)
-                // emulator: 15+ fps, 45ms latency
-                // S21U: 23 fps, 34ms latency
-                // val modelName = "best_int8_320.tflite"
-
-                val newDetector =
-                    YoloDetector(this, modelName, useGpu = useGpu, labels = finetunedLabels)
+                val newDetector = YoloDetector(
+                    this,
+                    modelName,
+                    useGpu = useGpu,
+                    labels = finetunedLabels,
+                    defaultIouThreshold = 0.5f,
+                    specificIouThresholds = mapOf("red" to 0.05f, "green" to 0.05f)
+                )
 
                 newDetector.setup()
                 detector = newDetector
@@ -362,6 +323,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val result = detector!!.detect(rotatedBitmap, confidenceThreshold)
+
+        // Execute PostProcessor for logging (logic test)
+        // This will print logs but we don't use the return value for the overlay
+        // Execute PostProcessor for logging (logic test)
+        // This will print logs but we don't use the return value for the overlay
+        val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
+        PostProcessor.selectTargetTrafficLight(correctedBoxes)
 
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
