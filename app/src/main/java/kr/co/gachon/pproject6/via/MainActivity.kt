@@ -23,6 +23,7 @@ import androidx.core.view.WindowInsetsCompat
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.ml.PostProcessor
 import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.ml.ObjectTracker
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
@@ -65,6 +66,9 @@ class MainActivity : AppCompatActivity() {
     
     // Performance Tracker
     private val performanceTracker = PerformanceTracker()
+
+    // Object Tracker
+    private val objectTracker = ObjectTracker()
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -366,7 +370,9 @@ class MainActivity : AppCompatActivity() {
         if (enableTrafficLogic) {
             // Execute PostProcessor for logging and logic
             val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
-            val targetData = PostProcessor.selectTargetTrafficLight(correctedBoxes)
+            
+            // Use ObjectTracker to select target (with tracking)
+            val targetData = objectTracker.selectTarget(correctedBoxes)
 
             targetBox = targetData?.first
             targetScore = targetData?.second ?: 0f
