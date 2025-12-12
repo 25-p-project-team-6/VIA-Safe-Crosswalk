@@ -116,8 +116,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize Slider Values
-        confidenceSlider.value = 0.5f
-        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).value = 0.15f
+
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             generalObjThreshold = value
@@ -132,6 +131,10 @@ class MainActivity : AppCompatActivity() {
                 String.format("Traffic Confidence: %.2f", value)
             updateDetectorThresholds()
         }
+
+        // Initialize Slider Values (Trigger listeners)
+        confidenceSlider.value = 0.5f
+        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).value = 0.15f
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             initDetector(isChecked)
