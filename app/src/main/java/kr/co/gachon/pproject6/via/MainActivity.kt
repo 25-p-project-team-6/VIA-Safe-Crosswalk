@@ -326,19 +326,80 @@ class MainActivity : AppCompatActivity() {
 
         // Execute PostProcessor for logging (logic test)
         // This will print logs but we don't use the return value for the overlay
-        // Execute PostProcessor for logging (logic test)
-        // This will print logs but we don't use the return value for the overlay
-        val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
-        PostProcessor.selectTargetTrafficLight(correctedBoxes)
+        var trafficState = PostProcessor.TrafficLightState.UNKNOWN
+
+        // Check switches (UI thread check not ideal here but safe enough if cached)
+        val showRawBoxes =
+            findViewById<android.widget.Switch>(R.id.swRawDetection)?.isChecked == true
+        val enableTrafficLogic =
+            findViewById<android.widget.Switch>(R.id.swTrafficLogic)?.isChecked == true
+        val enableHighlight =
+            findViewById<android.widget.Switch>(R.id.swHighlightTarget)?.isChecked == true
+
+        var targetScore = 0f
+        var targetCls = "None"
+
+        var targetBox: OverlayView.BoundingBox? = null
+        // Keep track of boxes to show. Default to raw result.
+        var boxesToShow = result.boxes 
+
+        if (enableTrafficLogic) {
+            // Execute PostProcessor for logging and logic
+            val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
+            val targetData = PostProcessor.selectTargetTrafficLight(correctedBoxes)
+
+            targetBox = targetData?.first
+            targetScore = targetData?.second ?: 0f
+            if (targetBox != null) {
+                targetCls = targetBox.clsName
+                if (enableHighlight) {
+                    targetBox.isTarget = true // Highlight the target only if enabled
+                }
+            }
+
+            trafficState = PostProcessor.updateTrafficLightState(targetBox)
+            boxesToShow = correctedBoxes // Show processed boxes (with flags/color swaps)
+        }
 
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
-            if (showBBoxOverlay && showDebugInfo) {
-                overlay.setResults(result.boxes)
+            
+            // Logic for Overlay Visibility
+            // If showRawBoxes is ON, show boxesToShow (which is either raw or corrected based on logic switch)
+            // If showRawBoxes is OFF, show nothing.
+            if (showRawBoxes && showBBoxOverlay) { // showBBoxOverlay is controlled by eye icon
+                 overlay.setResults(boxesToShow)
             } else {
-                overlay.setResults(emptyList())
+                 overlay.setResults(emptyList())
             }
             updateDebugInfo(result.inferenceTime)
+
+            // Update Target Info TextView
+            val targetText = findViewById<android.widget.TextView>(R.id.targetInfoText)
+            if (targetText != null) {
+                targetText.text = if (enableTrafficLogic) {
+                    val ratioText = if (targetBox != null && targetBox.debugRatio >= 0) {
+                        String.format(" (Ratio: %.2f)", targetBox.debugRatio)
+                    } else {
+                        ""
+                    }
+                    String.format("Target: %s (Score: %.5f)%s", targetCls, targetScore, ratioText)
+                } else {
+                    "Logic Disabled"
+                }
+            }
+
+            // Update Border UI
+            val statusBorder = findViewById<android.view.View>(R.id.statusBorder)
+            if (enableTrafficLogic) {
+                when (trafficState) {
+                    PostProcessor.TrafficLightState.RED -> statusBorder.setBackgroundResource(R.drawable.border_red)
+                    PostProcessor.TrafficLightState.GREEN -> statusBorder.setBackgroundResource(R.drawable.border_green)
+                    else -> statusBorder.setBackgroundResource(R.drawable.border_transparent)
+                }
+            } else {
+                statusBorder.setBackgroundResource(R.drawable.border_transparent)
+            }
         }
 
         imageProxy.close()

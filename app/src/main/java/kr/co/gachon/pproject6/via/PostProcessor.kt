@@ -6,7 +6,22 @@ import android.util.Log
 
 object PostProcessor {
     private const val TAG = "PostProcessor"
+    
+    enum class TrafficLightState {
+        RED, GREEN, UNKNOWN
+    }
+    
+    private const val BUFFER_SIZE = 5
 
+    // State variables for robustness
+    private var lastKnownState: TrafficLightState = TrafficLightState.UNKNOWN
+    private var lastStateTimeTime: Long = 0
+    private var consecutiveCount = 0
+    private var candidateState: TrafficLightState = TrafficLightState.UNKNOWN
+
+    // Constants
+    private const val PERSISTENCE_DURATION_MS = 5000L // Keep state for 5 seconds even if lost
+    private const val TRIGGER_THRESHOLD = 3 // Need 3 consecutive frames to switch
     fun applyColorCorrection(
         bitmap: Bitmap,
         boxes: List<OverlayView.BoundingBox>
@@ -17,6 +32,7 @@ object PostProcessor {
             var clsName = box.clsName
             var newClsName = clsName
             val newScore = box.score // Keep confidence score
+            var debugRatio = -1f
 
             if (clsName.equals("green", ignoreCase = true) || clsName.equals(
                     "red",
@@ -38,6 +54,7 @@ object PostProcessor {
                     val isCurrentGreen = clsName.equals("green", ignoreCase = true)
                     // Calculate ratio for current color
                     val currentRatio = calculateColorRatio(pixels, isCurrentGreen)
+                    debugRatio = currentRatio
 
                     if (currentRatio <= 0.05f) {
                         // Check other color
@@ -46,6 +63,7 @@ object PostProcessor {
                         if (otherRatio > 0.05f) {
                             // Swap!
                             newClsName = if (isCurrentGreen) "red" else "green"
+                            debugRatio = otherRatio // Show the ratio of the new color
                             // Log.d(TAG, "Swapped $clsName -> $newClsName (Ratio: $currentRatio vs $otherRatio)")
                         }
                     } else {
@@ -54,9 +72,13 @@ object PostProcessor {
                 }
             }
 
-            correctedBoxes.add(OverlayView.BoundingBox(box.box, newClsName, newScore))
+            val newBox = OverlayView.BoundingBox(box.box, newClsName, newScore)
+            if (debugRatio != -1f) {
+                newBox.debugRatio = debugRatio
+            }
+            correctedBoxes.add(newBox)
         }
-
+        
         return correctedBoxes
     }
 
@@ -91,7 +113,7 @@ object PostProcessor {
         return if (pixels.isNotEmpty()) count.toFloat() / pixels.size else 0f
     }
 
-    fun selectTargetTrafficLight(boxes: List<OverlayView.BoundingBox>): OverlayView.BoundingBox? {
+    fun selectTargetTrafficLight(boxes: List<OverlayView.BoundingBox>): Pair<OverlayView.BoundingBox, Float>? {
         // Filter red/green only
         val trafficLights = boxes.filter {
             it.clsName.equals("red", ignoreCase = true) || it.clsName.equals(
@@ -124,24 +146,63 @@ object PostProcessor {
             val area = rect.width() * rect.height()
 
             // Score Formula: Area / (Distance + epsilon)
-            // Larger Area -> Higher Score
-            // Smaller Distance -> Higher Score
-            // Epsilon prevents division by zero (though dist 0 is unlikely)
             val score = area / (dist + 0.1f)
 
             if (score > bestScore) {
                 bestScore = score
                 bestBox = box
             }
-
-            // Log details for debugging logic
-            // Log.d(TAG, "Candidate: ${box.clsName}, Area: $area, Dist: $dist, Score: $score")
         }
 
         if (bestBox != null) {
             Log.d(TAG, "Selected Target: ${bestBox.clsName} (Score: $bestScore)")
+            return Pair(bestBox, bestScore)
         }
 
-        return bestBox
+        return null
+    }
+
+    fun updateTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
+        // Determine raw input state
+        val currentState = when {
+            targetBox == null -> TrafficLightState.UNKNOWN
+            targetBox.clsName.equals("red", ignoreCase = true) -> TrafficLightState.RED
+            targetBox.clsName.equals("green", ignoreCase = true) -> TrafficLightState.GREEN
+            else -> TrafficLightState.UNKNOWN
+        }
+        
+        val currentTime = System.currentTimeMillis()
+        
+        // 1. Consecutive Detection Logic (Debouncing)
+        if (currentState != TrafficLightState.UNKNOWN) {
+            if (currentState == candidateState) {
+                consecutiveCount++
+            } else {
+                candidateState = currentState
+                consecutiveCount = 1
+            }
+            
+            // If we have enough consistent frames, update the "Real" state
+            if (consecutiveCount >= TRIGGER_THRESHOLD) {
+                lastKnownState = currentState
+                lastStateTimeTime = currentTime
+            }
+        }
+        
+        // 2. Persistence Logic (Handling Occlusion)
+        // If current detection is lost (UNKNOWN), check if we can persist the old state
+        return if (currentState == TrafficLightState.UNKNOWN) {
+            if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
+                // Keep showing the last known state (e.g. Red) for a while
+                lastKnownState
+            } else {
+                TrafficLightState.UNKNOWN
+            }
+        } else {
+            // If currently detecting something, return the robust (debounced) state
+            // Logic: We return lastKnownState which is only updated after N frames.
+            // This prevents single-frame flickers.
+            lastKnownState
+        }
     }
 }
