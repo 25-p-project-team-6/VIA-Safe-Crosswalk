@@ -47,6 +47,13 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         boxPaint.strokeWidth = 8F
         boxPaint.style = Paint.Style.STROKE
     }
+    
+    // Paint for target (Highlighted)
+    private val targetPaint = Paint().apply {
+        color = Color.YELLOW
+        strokeWidth = 16F
+        style = Paint.Style.STROKE
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -80,7 +87,12 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
 
             // Draw bounding box
             val drawableRect = RectF(left, top, right, bottom)
-            canvas.drawRect(drawableRect, boxPaint)
+            
+            if (result.isTarget) {
+                canvas.drawRect(drawableRect, targetPaint)
+            } else {
+                canvas.drawRect(drawableRect, boxPaint)
+            }
 
             // Create text to display
             val drawableText = "${result.clsName} ${String.format("%.2f", result.score)}"
@@ -114,6 +126,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     data class BoundingBox(
         val box: RectF,
         val clsName: String,
-        val score: Float
+        val score: Float,
+        var debugRatio: Float = -1f, // For debugging
+        var isTarget: Boolean = false // For Highlighting
     )
 }

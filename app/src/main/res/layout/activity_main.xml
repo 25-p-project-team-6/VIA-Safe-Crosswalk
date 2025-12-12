@@ -25,6 +25,13 @@
         app:layout_constraintEnd_toEndOf="parent"
         android:elevation="10dp"/>
 
+    <View
+        android:id="@+id/statusBorder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/border_transparent"
+        android:translationZ="5dp" />
+
     <kr.co.gachon.pproject6.via.OverlayView
         android:id="@+id/overlay"
         android:layout_width="match_parent"
@@ -38,43 +45,82 @@
         android:orientation="vertical"
         android:background="#80000000"
         android:padding="16dp"
-        app:layout_constraintBottom_toBottomOf="parent">
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        android:elevation="20dp">
 
         <TextView
             android:id="@+id/modelNameText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Model: "
-            android:textColor="#FFFFFF" />
+            android:text="Model: Loading..."
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/fpsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="FPS: 0"
-            android:textColor="#FFFFFF" />
+            android:text="FPS: 0.0"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/avgFpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Avg FPS: 0.0"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/latencyText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Latency: 0ms"
-            android:textColor="#FFFFFF" />
-
-        <TextView
-            android:id="@+id/avgFpsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Avg FPS: 0"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/avgLatencyText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Avg Latency: 0ms"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
 
+        <TextView
+            android:id="@+id/targetInfoText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Target: None"
+            android:textColor="#FFFF00"
+            android:textSize="14sp"
+            android:layout_marginTop="4dp"/>
+
+        <Switch
+            android:id="@+id/swRawDetection"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Raw Boxes"
+            android:textColor="#FFFFFF"
+            android:checked="true" />
+
+        <Switch
+            android:id="@+id/swTrafficLogic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Traffic Logic"
+            android:textColor="#FFFFFF"
+            android:checked="true" />
+
+        <Switch
+            android:id="@+id/swHighlightTarget"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Target Highlight"
+            android:textColor="#FFFFFF"
+            android:checked="true" />
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/gpuSwitch"
             android:layout_width="wrap_content"
