@@ -140,9 +140,9 @@ object PostProcessor {
 
             val area = rect.width() * rect.height()
 
-            // Score Formula: (Area * 1000) / (Distance + epsilon)
-            // Maps typical values (0.001 area) to range 0..100
-            val score = (area * 1000) / (dist + 0.1f)
+            // Score Formula: (Confidence * Area * 1000) / (Distance + epsilon)
+            // Confidence is the most important factor!
+            val score = (box.score * area * 1000) / (dist + 0.1f)
 
             if (score > bestScore) {
                 bestScore = score
