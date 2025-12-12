@@ -37,9 +37,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var confidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var debugContainer: android.widget.LinearLayout
+    private lateinit var debugToggleButton: android.widget.ImageButton
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
-    private val showDebugInfo = true
+    private var showDebugInfo = true
 
     // Set this to false to hide bounding boxes and labels
     private val showBBoxOverlay = true
@@ -48,7 +49,8 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var detector: YoloDetector? = null
-    private var confidenceThreshold = 0.5f
+    private var confidenceThreshold = 0.3f
+    private var currentModelName = "best_float16_448.tflite" // Default model
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
@@ -56,7 +58,7 @@ class MainActivity : AppCompatActivity() {
     // Store timestamps and latencies for 10s sliding window
     // Pair(timestamp, latency)
     private val frameData = java.util.ArrayDeque<Pair<Long, Long>>()
-    
+
     // We don't need totalFrameCount and startTime for the simple average anymore, 
     // but useful if we want total session average. 
     // However, user requested 10s average.
@@ -74,7 +76,8 @@ class MainActivity : AppCompatActivity() {
         }
 
     // traffic lights fine-tuned model label
-    private val finetunedLabels = listOf("bicycle", "car", "motorcycle", "bus", "truck", "red", "green")
+    private val finetunedLabels =
+        listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +94,7 @@ class MainActivity : AppCompatActivity() {
         overlay = findViewById(R.id.overlay)
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
+        debugToggleButton = findViewById(R.id.debugToggleButton)
         modelNameText = findViewById(R.id.modelNameText)
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
@@ -104,8 +108,27 @@ class MainActivity : AppCompatActivity() {
         debugContainer.visibility =
             if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
 
+        debugToggleButton.setOnClickListener {
+            showDebugInfo = !showDebugInfo
+            debugContainer.visibility =
+                if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+        }
+
         confidenceSlider.addOnChangeListener { _, value, _ ->
             confidenceThreshold = value
+            findViewById<android.widget.TextView>(R.id.confidenceSliderLabel).text =
+                String.format("General Confidence: %.2f", value)
+        }
+
+        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).addOnChangeListener { _, value, _ ->
+            findViewById<android.widget.TextView>(R.id.trafficConfidenceLabel).text =
+                String.format("Traffic Confidence: %.2f", value)
+            
+            // Update specific thresholds for traffic lights
+            detector?.specificConfidenceThresholds = mapOf(
+                "red" to value,
+                "green" to value
+            )
         }
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -133,13 +156,61 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+
+        setupModelSpinner()
+    }
+
+    private fun setupModelSpinner() {
+        val spinner = findViewById<android.widget.Spinner>(R.id.modelSpinner)
+        try {
+            // Scan assets for .tflite files
+            val assetManager = assets
+            val files = assetManager.list("")
+            val modelFiles = files?.filter { it.endsWith(".tflite") }?.sorted() ?: emptyList()
+
+            if (modelFiles.isNotEmpty()) {
+                val adapter = android.widget.ArrayAdapter(
+                    this,
+                    android.R.layout.simple_spinner_item,
+                    modelFiles
+                )
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                spinner.adapter = adapter
+
+                // Set selection to current default if exists
+                val defaultIndex = modelFiles.indexOf(currentModelName)
+                if (defaultIndex >= 0) {
+                    spinner.setSelection(defaultIndex)
+                }
+
+                spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(
+                        parent: android.widget.AdapterView<*>?,
+                        view: android.view.View?,
+                        position: Int,
+                        id: Long
+                    ) {
+                        val selectedModel = modelFiles[position]
+                        if (selectedModel != currentModelName) {
+                            currentModelName = selectedModel
+                            // Re-init detector with new model
+                            initDetector(gpuSwitch.isChecked)
+                        }
+                    }
+
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error setting up model spinner", e)
+        }
     }
 
     private fun updateDebugInfo(inferenceTime: Long) {
         latencyText.text = "Latency: ${inferenceTime}ms"
 
         val currentTime = System.currentTimeMillis()
-        
+
         // Add current frame data
         frameData.addLast(Pair(currentTime, inferenceTime))
 
@@ -160,7 +231,7 @@ class MainActivity : AppCompatActivity() {
 
         frameCount++
         val timeDiff = currentTime - lastFpsTimestamp
-        
+
         // Update Instant FPS every 1 second (stats for last 1 sec)
         if (timeDiff >= 1000) {
             val fps = frameCount * 1000.0 / timeDiff
@@ -176,25 +247,26 @@ class MainActivity : AppCompatActivity() {
                 // Avoid division by zero, though unlikely if list not empty and size > 1
                 // If only 1 frame, duration is 0. 
                 if (duration > 0) {
-                    val avgFps = (frameData.size - 1) * 1000.0 / duration 
+                    // val avgFps = (frameData.size - 1) * 1000.0 / duration
                     // Note: strictly speaking, frames count is intervals. 
                     // If we have N frames, we have N-1 intervals. 
                     // For short duration, this is more accurate.
                     // Or for simple user facing "count over 10s": frameData.size / 10.0 (if full)
-                    
+
                     // Let's use simple count / window_size_seconds where window_size_seconds is bounded by 10.
                     // But if we just started, window size is small.
-                    
+
                     // Option A: frameData.size / ((currentTime - oldestTime)/1000.0)
                     // If window is full 10s, this is frameData.size / 10.
-                    
+
                     // val windowSizeSeconds = if (duration in 1..9999) duration / 1000.0 else 10.0
                     // If duration is very small (start), FPS might spike. 
-                    
+
                     // Let's stick to standard: (count) / (time_range)
-                    val calculatedAvgFps = frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
+                    val calculatedAvgFps =
+                        frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
                     avgFpsText.text = String.format("Avg FPS: %.2f", calculatedAvgFps)
-                } 
+                }
             }
         }
     }
@@ -211,61 +283,23 @@ class MainActivity : AppCompatActivity() {
             }
 
             try {
-                // 640
-                // emulator: 5.45 fps, 180ms latency
-                // S21U: 11 fps, 80ms latency
-                // val modelName = "best_float32_640.tflite"
-
-                // 512
-                // emulator: 8.38 fps, 115ms latency
-                // S21U: 13 fps, 70ms latency
-                // val modelName = "best_float32_512.tflite"
-
-                // 416
-                // emulator: 12.04 fps, 75ms latency
-                // S21U: 16 fps, 50ms latency
-                // val modelName = "best_float32_416.tflite"
-
-                // 320
-                // emulator: 20.2 fps, 45ms latency
-                // S21U: 21 fps, 40ms latency
-                // val modelName = YoloDetector(this, "best_float32_320.tflite"
-
-                // 640 half(fp16)
-                // emulator: 5.3 fps, 184ms latency
-                // S21U: 8.8 fps, 100ms latency
-                //val modelName = "best_float16_640.tflite"
-
-                // 512 half(fp16)
-                // emulator: 8.2 fps, 118ms latency
-                // S21U: 13 fps, 66ms latency
-                // val modelName = "best_float16_512.tflite"
-
                 // 448 half(fp16)
                 // emulator: 8.2 fps, 118ms latency
                 // S21U: 15 fps, 61ms latency
-                val modelName = "best_float16_448.tflite"
+                val modelName = currentModelName
 
-                // 416 half(fp16)
-                // emulator: 12 fps, 79ms latency
-                // S21U: 16 fps, 51ms latency
-                // val modelName = "best_float16_416.tflite"
-
-                // 320 half(fp16)
-                // emulator: 20.2 fps, 46.5ms latency
-                // S21U: 23 fps, 30ms latency
-                // val modelName = "best_float16_320.tflite"
-
-                // 320 int8(quant, cpu)
-                // emulator: 15+ fps, 45ms latency
-                // S21U: 23 fps, 34ms latency
-                // val modelName = "best_int8_320.tflite"
-
-                val newDetector = YoloDetector(this, modelName, useGpu = useGpu, labels = finetunedLabels)
+                val newDetector = YoloDetector(
+                    this,
+                    modelName,
+                    useGpu = useGpu,
+                    labels = finetunedLabels,
+                    defaultIouThreshold = 0.5f,
+                    specificIouThresholds = mapOf("red" to 0.05f, "green" to 0.05f)
+                )
 
                 newDetector.setup()
                 detector = newDetector
-                
+
                 runOnUiThread {
                     modelNameText.text = "Model: $modelName"
                 }
@@ -277,8 +311,16 @@ class MainActivity : AppCompatActivity() {
                         "Error initializing detector: ${e.message}",
                         Toast.LENGTH_LONG
                     ).show()
-                    // Revert switch if failed?
-                    if (useGpu) gpuSwitch.isChecked = false
+
+                    if (useGpu) {
+                        Toast.makeText(
+                            this,
+                            "GPU init failed. Switching to CPU.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        gpuSwitch.isChecked = false
+                        gpuSwitch.isEnabled = false
+                    }
                 }
             }
         }
@@ -344,14 +386,82 @@ class MainActivity : AppCompatActivity() {
 
         val result = detector!!.detect(rotatedBitmap, confidenceThreshold)
 
+        // Execute PostProcessor for logging (logic test)
+        // This will print logs but we don't use the return value for the overlay
+        var trafficState = PostProcessor.TrafficLightState.UNKNOWN
+
+        // Check switches (UI thread check not ideal here but safe enough if cached)
+        val showRawBoxes =
+            findViewById<android.widget.Switch>(R.id.swRawDetection)?.isChecked == true
+        val enableTrafficLogic =
+            findViewById<android.widget.Switch>(R.id.swTrafficLogic)?.isChecked == true
+        val enableHighlight =
+            findViewById<android.widget.Switch>(R.id.swHighlightTarget)?.isChecked == true
+
+        var targetScore = 0f
+        var targetCls = "None"
+
+        var targetBox: OverlayView.BoundingBox? = null
+        // Keep track of boxes to show. Default to raw result.
+        var boxesToShow = result.boxes 
+
+        if (enableTrafficLogic) {
+            // Execute PostProcessor for logging and logic
+            val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
+            val targetData = PostProcessor.selectTargetTrafficLight(correctedBoxes)
+
+            targetBox = targetData?.first
+            targetScore = targetData?.second ?: 0f
+            if (targetBox != null) {
+                targetCls = targetBox.clsName
+                if (enableHighlight) {
+                    targetBox.isTarget = true // Highlight the target only if enabled
+                }
+            }
+
+            trafficState = PostProcessor.updateTrafficLightState(targetBox)
+            boxesToShow = correctedBoxes // Show processed boxes (with flags/color swaps)
+        }
+
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
-            if (showBBoxOverlay) {
-                overlay.setResults(result.boxes)
+            
+            // Logic for Overlay Visibility
+            // If showRawBoxes is ON, show boxesToShow (which is either raw or corrected based on logic switch)
+            // If showRawBoxes is OFF, show nothing.
+            if (showRawBoxes && showBBoxOverlay) { // showBBoxOverlay is controlled by eye icon
+                 overlay.setResults(boxesToShow)
             } else {
-                overlay.setResults(emptyList())
+                 overlay.setResults(emptyList())
             }
             updateDebugInfo(result.inferenceTime)
+
+            // Update Target Info TextView
+            val targetText = findViewById<android.widget.TextView>(R.id.targetInfoText)
+            if (targetText != null) {
+                targetText.text = if (enableTrafficLogic) {
+                    val ratioText = if (targetBox != null && targetBox.debugRatio >= 0) {
+                        String.format(" (Ratio: %.2f)", targetBox.debugRatio)
+                    } else {
+                        ""
+                    }
+                    String.format("Target: %s (Score: %.5f)%s", targetCls, targetScore, ratioText)
+                } else {
+                    "Logic Disabled"
+                }
+            }
+
+            // Update Border UI
+            val statusBorder = findViewById<android.view.View>(R.id.statusBorder)
+            if (enableTrafficLogic) {
+                when (trafficState) {
+                    PostProcessor.TrafficLightState.RED -> statusBorder.setBackgroundResource(R.drawable.border_red)
+                    PostProcessor.TrafficLightState.GREEN -> statusBorder.setBackgroundResource(R.drawable.border_green)
+                    else -> statusBorder.setBackgroundResource(R.drawable.border_transparent)
+                }
+            } else {
+                statusBorder.setBackgroundResource(R.drawable.border_transparent)
+            }
         }
 
         imageProxy.close()

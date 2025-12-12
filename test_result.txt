@@ -1,0 +1,49 @@
+                // 640
+                // emulator: 5.45 fps, 180ms latency
+                // S21U: 11 fps, 80ms latency
+                // val modelName = "best_float32_640.tflite"
+
+                // 512
+                // emulator: 8.38 fps, 115ms latency
+                // S21U: 13 fps, 70ms latency
+                // val modelName = "best_float32_512.tflite"
+
+                // 416
+                // emulator: 12.04 fps, 75ms latency
+                // S21U: 16 fps, 50ms latency
+                // val modelName = "best_float32_416.tflite"
+
+                // 320
+                // emulator: 20.2 fps, 45ms latency
+                // S21U: 21 fps, 40ms latency
+                // val modelName = YoloDetector(this, "best_float32_320.tflite"
+
+                // 640 half(fp16)
+                // emulator: 5.3 fps, 184ms latency
+                // S21U: 8.8 fps, 100ms latency
+                //val modelName = "best_float16_640.tflite"
+
+                // 512 half(fp16)
+                // emulator: 8.2 fps, 118ms latency
+                // S21U: 13 fps, 66ms latency
+                // val modelName = "best_float16_512.tflite"
+
+                // 448 half(fp16)
+                // emulator: 8.2 fps, 118ms latency
+                // S21U: 15 fps, 61ms latency
+                val modelName = "best_float16_448.tflite"
+
+                // 416 half(fp16)
+                // emulator: 12 fps, 79ms latency
+                // S21U: 16 fps, 51ms latency
+                // val modelName = "best_float16_416.tflite"
+
+                // 320 half(fp16)
+                // emulator: 20.2 fps, 46.5ms latency
+                // S21U: 23 fps, 30ms latency
+                // val modelName = "best_float16_320.tflite"
+
+                // 320 int8(quant, cpu)
+                // emulator: 15+ fps, 45ms latency
+                // S21U: 23 fps, 34ms latency
+                // val modelName = "best_int8_320.tflite"
