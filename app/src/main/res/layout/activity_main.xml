@@ -12,6 +12,19 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <ImageButton
+        android:id="@+id/debugToggleButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_margin="16dp"
+        android:background="#80000000"
+        android:src="@android:drawable/ic_menu_info_details"
+        android:contentDescription="Toggle Debug Info"
+        app:tint="#FFFFFF"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:elevation="10dp"/>
+
     <kr.co.gachon.pproject6.via.OverlayView
         android:id="@+id/overlay"
         android:layout_width="match_parent"

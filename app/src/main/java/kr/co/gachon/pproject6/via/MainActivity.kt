@@ -37,9 +37,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var confidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var debugContainer: android.widget.LinearLayout
+    private lateinit var debugToggleButton: android.widget.ImageButton
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
-    private val showDebugInfo = true
+    private var showDebugInfo = true
 
     // Set this to false to hide bounding boxes and labels
     private val showBBoxOverlay = true
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity() {
         overlay = findViewById(R.id.overlay)
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
+        debugToggleButton = findViewById(R.id.debugToggleButton)
         modelNameText = findViewById(R.id.modelNameText)
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
@@ -103,6 +105,12 @@ class MainActivity : AppCompatActivity() {
 
         debugContainer.visibility =
             if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+
+        debugToggleButton.setOnClickListener {
+            showDebugInfo = !showDebugInfo
+            debugContainer.visibility =
+                if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+        }
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             confidenceThreshold = value
@@ -277,8 +285,12 @@ class MainActivity : AppCompatActivity() {
                         "Error initializing detector: ${e.message}",
                         Toast.LENGTH_LONG
                     ).show()
-                    // Revert switch if failed?
-                    if (useGpu) gpuSwitch.isChecked = false
+                    
+                    if (useGpu) {
+                         Toast.makeText(this, "GPU init failed. Switching to CPU.", Toast.LENGTH_SHORT).show()
+                         gpuSwitch.isChecked = false
+                         gpuSwitch.isEnabled = false
+                    }
                 }
             }
         }
