@@ -55,7 +55,15 @@
             android:layout_height="wrap_content"
             android:text="Model: Loading..."
             android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            android:textSize="14sp"
+            android:visibility="gone"/>
+
+        <Spinner
+            android:id="@+id/modelSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#80FFFFFF"
+            android:layout_marginBottom="8dp"/>
 
         <TextView
             android:id="@+id/fpsText"
@@ -130,14 +138,32 @@
             android:checked="false" />
 
         <TextView
+            android:id="@+id/confidenceSliderLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Confidence Threshold"
+            android:text="General Confidence: 0.3"
             android:textColor="#FFFFFF"
             android:layout_marginTop="8dp"/>
 
         <com.google.android.material.slider.Slider
             android:id="@+id/confidenceSlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:valueFrom="0.0"
+            android:valueTo="1.0"
+            android:value="0.3"
+            android:stepSize="0.05" />
+
+        <TextView
+            android:id="@+id/trafficConfidenceLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Traffic Confidence: 0.3"
+            android:textColor="#FFFFFF"
+            android:layout_marginTop="8dp"/>
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/trafficConfidenceSlider"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:valueFrom="0.0"

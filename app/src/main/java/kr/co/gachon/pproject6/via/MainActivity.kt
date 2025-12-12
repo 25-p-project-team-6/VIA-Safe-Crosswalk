@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile
     private var detector: YoloDetector? = null
     private var confidenceThreshold = 0.3f
+    private var currentModelName = "best_float16_448.tflite" // Default model
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
@@ -115,6 +116,19 @@ class MainActivity : AppCompatActivity() {
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             confidenceThreshold = value
+            findViewById<android.widget.TextView>(R.id.confidenceSliderLabel).text =
+                String.format("General Confidence: %.2f", value)
+        }
+
+        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).addOnChangeListener { _, value, _ ->
+            findViewById<android.widget.TextView>(R.id.trafficConfidenceLabel).text =
+                String.format("Traffic Confidence: %.2f", value)
+            
+            // Update specific thresholds for traffic lights
+            detector?.specificConfidenceThresholds = mapOf(
+                "red" to value,
+                "green" to value
+            )
         }
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -141,6 +155,54 @@ class MainActivity : AppCompatActivity() {
             startCamera()
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+
+        setupModelSpinner()
+    }
+
+    private fun setupModelSpinner() {
+        val spinner = findViewById<android.widget.Spinner>(R.id.modelSpinner)
+        try {
+            // Scan assets for .tflite files
+            val assetManager = assets
+            val files = assetManager.list("")
+            val modelFiles = files?.filter { it.endsWith(".tflite") }?.sorted() ?: emptyList()
+
+            if (modelFiles.isNotEmpty()) {
+                val adapter = android.widget.ArrayAdapter(
+                    this,
+                    android.R.layout.simple_spinner_item,
+                    modelFiles
+                )
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                spinner.adapter = adapter
+
+                // Set selection to current default if exists
+                val defaultIndex = modelFiles.indexOf(currentModelName)
+                if (defaultIndex >= 0) {
+                    spinner.setSelection(defaultIndex)
+                }
+
+                spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(
+                        parent: android.widget.AdapterView<*>?,
+                        view: android.view.View?,
+                        position: Int,
+                        id: Long
+                    ) {
+                        val selectedModel = modelFiles[position]
+                        if (selectedModel != currentModelName) {
+                            currentModelName = selectedModel
+                            // Re-init detector with new model
+                            initDetector(gpuSwitch.isChecked)
+                        }
+                    }
+
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error setting up model spinner", e)
         }
     }
 
@@ -224,7 +286,7 @@ class MainActivity : AppCompatActivity() {
                 // 448 half(fp16)
                 // emulator: 8.2 fps, 118ms latency
                 // S21U: 15 fps, 61ms latency
-                val modelName = "best_float16_448.tflite"
+                val modelName = currentModelName
 
                 val newDetector = YoloDetector(
                     this,
