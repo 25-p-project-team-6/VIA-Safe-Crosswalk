@@ -61,6 +61,9 @@ class MainActivity : AppCompatActivity() {
     
     // Global threshold passed to detector (min of the two)
     private var confidenceThreshold = 0.15f 
+
+    // GPU Support Flag
+    private var isGpuSupported = false
     
     private var currentModelName = "best_float16_640.tflite" // Default model
     
@@ -158,7 +161,7 @@ class MainActivity : AppCompatActivity() {
 
         // Check GPU compatibility and set default
         val compatList = CompatibilityList()
-        val isGpuSupported = compatList.isDelegateSupportedOnThisDevice
+        isGpuSupported = compatList.isDelegateSupportedOnThisDevice
 
         gpuSwitch.isChecked = isGpuSupported
         // Initialize Detector with GPU if supported, otherwise CPU
@@ -229,8 +232,23 @@ class MainActivity : AppCompatActivity() {
                             val selectedModel = modelFiles[position]
                             if (selectedModel != currentModelName) {
                                 currentModelName = selectedModel
-                                // Re-init detector with new model
-                                initDetector(gpuSwitch.isChecked)
+                                
+                                // Reset logic: Update switch state availability based on hardware support
+                                runOnUiThread {
+                                    if (isGpuSupported) {
+                                        gpuSwitch.isEnabled = true
+                                        // Auto-turn ON GPU if supported
+                                        if (!gpuSwitch.isChecked) {
+                                            gpuSwitch.isChecked = true // Triggers listener -> initDetector(true)
+                                        } else {
+                                            // Already On, listener won't fire, so init manually
+                                            initDetector(true)
+                                        }
+                                    } else {
+                                        // GPU not supported by device
+                                        initDetector(false)
+                                    }
+                                }
                             }
                         }
 
