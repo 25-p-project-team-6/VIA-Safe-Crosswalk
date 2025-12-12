@@ -52,8 +52,15 @@ class MainActivity : AppCompatActivity() {
 
     @Volatile
     private var detector: YoloDetector? = null
-    private var confidenceThreshold = 0.3f
-    private var currentModelName = "best_float16_448.tflite" // Default model
+    
+    // User Settings
+    private var generalObjThreshold = 0.5f // For non-traffic lights (Car, Bike, etc.)
+    private var trafficLightThreshold = 0.15f // For Traffic Lights (Red, Green)
+    
+    // Global threshold passed to detector (min of the two)
+    private var confidenceThreshold = 0.15f 
+    
+    private var currentModelName = "best_float16_640.tflite" // Default model
 
     private var lastFpsTimestamp = System.currentTimeMillis()
     private var frameCount = 0
@@ -111,21 +118,22 @@ class MainActivity : AppCompatActivity() {
                 if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
         }
 
+        // Initialize Slider Values
+        confidenceSlider.value = 0.5f
+        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).value = 0.15f
+
         confidenceSlider.addOnChangeListener { _, value, _ ->
-            confidenceThreshold = value
+            generalObjThreshold = value
             findViewById<android.widget.TextView>(R.id.confidenceSliderLabel).text =
                 String.format("General Confidence: %.2f", value)
+            updateDetectorThresholds()
         }
 
         findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).addOnChangeListener { _, value, _ ->
+            trafficLightThreshold = value
             findViewById<android.widget.TextView>(R.id.trafficConfidenceLabel).text =
                 String.format("Traffic Confidence: %.2f", value)
-
-            // Update specific thresholds for traffic lights
-            detector?.specificConfidenceThresholds = mapOf(
-                "red" to value,
-                "green" to value
-            )
+            updateDetectorThresholds()
         }
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -161,6 +169,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupModelSpinner()
+    }
+
+    private fun updateDetectorThresholds() {
+        // Set global threshold to General Slider value (fallback)
+        confidenceThreshold = generalObjThreshold
+        
+        // Explicitly map each class to its respective slider value
+        val specificMap = mutableMapOf<String, Float>()
+        
+        // 1. Traffic Lights -> Traffic Slider
+        specificMap["green"] = trafficLightThreshold
+        specificMap["red"] = trafficLightThreshold
+        
+        // 2. Verified Objects -> General Slider
+        val others = listOf("bicycle", "car", "motorcycle", "bus", "train", "truck")
+        for (label in others) {
+            specificMap[label] = generalObjThreshold
+        }
+        
+        detector?.specificConfidenceThresholds = specificMap
     }
 
     private fun setupModelSpinner() {
@@ -284,6 +312,9 @@ class MainActivity : AppCompatActivity() {
 
                 newDetector.setup()
                 detector = newDetector
+                
+                // Apply current user settings
+                updateDetectorThresholds()
 
                 runOnUiThread {
                     modelNameText.text = "Model: $modelName"
