@@ -137,6 +137,14 @@
             android:textColor="#FFFFFF"
             android:checked="false" />
 
+        <Switch
+            android:id="@+id/swZoom2x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Use 2x Zoom"
+            android:textColor="#FFFFFF"
+            android:checked="false" />
+
         <TextView
             android:id="@+id/confidenceSliderLabel"
             android:layout_width="wrap_content"
