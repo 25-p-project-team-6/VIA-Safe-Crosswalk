@@ -202,7 +202,14 @@ object PostProcessor {
             // If currently detecting something, return the robust (debounced) state
             // Logic: We return lastKnownState which is only updated after N frames.
             // This prevents single-frame flickers.
-            lastKnownState
+            
+            // Bug Fix: Only return lastKnownState if it is still valid (within persistence window).
+            // If it's too old, we should show nothing (UNKNOWN) while verifying the new input.
+            if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
+                lastKnownState
+            } else {
+                TrafficLightState.UNKNOWN
+            }
         }
     }
 }
