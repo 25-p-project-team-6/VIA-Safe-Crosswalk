@@ -1,17 +1,17 @@
-package kr.co.gachon.pproject6.via
+package kr.co.gachon.pproject6.via.ml
 
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.util.Log
+import kr.co.gachon.pproject6.via.ui.OverlayView
 
 object PostProcessor {
     private const val TAG = "PostProcessor"
-    
+
     enum class TrafficLightState {
         RED, GREEN, UNKNOWN
     }
-    
-    private const val BUFFER_SIZE = 5
+
 
     // State variables for robustness
     private var lastKnownState: TrafficLightState = TrafficLightState.UNKNOWN
@@ -67,7 +67,7 @@ object PostProcessor {
                             // Log.d(TAG, "Swapped $clsName -> $newClsName (Ratio: $currentRatio vs $otherRatio)")
                         }
                     } else {
-                        // Log.d(TAG, "Validated $clsName (Ratio: $currentRatio)")
+                        // Color validated
                     }
                 }
             }
@@ -78,7 +78,7 @@ object PostProcessor {
             }
             correctedBoxes.add(newBox)
         }
-        
+
         return correctedBoxes
     }
 
@@ -92,12 +92,7 @@ object PostProcessor {
             val s = hsv[1] // 0..1
             val v = hsv[2] // 0..1
 
-            // Notebook Green: H[25..100] (OpenCV 0-180) -> H[50..200] (Android 0-360)
-            // Notebook Red: H[0..10] U [170..180] -> H[0..20] U [340..360]
-
-            // S, V thresholds:
-            // Green: S>25 (~0.1), V>40 (~0.15)
-            // Red: S>50 (~0.2), V>50 (~0.2)
+            // S, V thresholds: Green: S>25, V>40 | Red: S>50, V>50
 
             if (isGreen) {
                 if (h in 50f..200f && s >= 0.1f && v >= 0.15f) {
@@ -145,8 +140,9 @@ object PostProcessor {
 
             val area = rect.width() * rect.height()
 
-            // Score Formula: Area / (Distance + epsilon)
-            val score = area / (dist + 0.1f)
+            // Score Formula: (Confidence * Area * 1000) / (Distance + epsilon)
+            // Confidence is the most important factor!
+            val score = (box.score * area * 1000) / (dist + 0.1f)
 
             if (score > bestScore) {
                 bestScore = score
@@ -170,9 +166,9 @@ object PostProcessor {
             targetBox.clsName.equals("green", ignoreCase = true) -> TrafficLightState.GREEN
             else -> TrafficLightState.UNKNOWN
         }
-        
+
         val currentTime = System.currentTimeMillis()
-        
+
         // 1. Consecutive Detection Logic (Debouncing)
         if (currentState != TrafficLightState.UNKNOWN) {
             if (currentState == candidateState) {
@@ -181,14 +177,20 @@ object PostProcessor {
                 candidateState = currentState
                 consecutiveCount = 1
             }
-            
+
             // If we have enough consistent frames, update the "Real" state
-            if (consecutiveCount >= TRIGGER_THRESHOLD) {
+            // Fast-Track: If high confidence (>= 0.5), update immediately!
+            val isHighConfidence = targetBox != null && targetBox.score >= 0.5f
+
+            if (consecutiveCount >= TRIGGER_THRESHOLD || isHighConfidence) {
                 lastKnownState = currentState
                 lastStateTimeTime = currentTime
+                // Reset counter if we fast-tracked to keep logic clean? 
+                // Actually if fast-tracked, we can just let counter grow or set it to max.
+                if (isHighConfidence) consecutiveCount = TRIGGER_THRESHOLD
             }
         }
-        
+
         // 2. Persistence Logic (Handling Occlusion)
         // If current detection is lost (UNKNOWN), check if we can persist the old state
         return if (currentState == TrafficLightState.UNKNOWN) {
@@ -202,7 +204,14 @@ object PostProcessor {
             // If currently detecting something, return the robust (debounced) state
             // Logic: We return lastKnownState which is only updated after N frames.
             // This prevents single-frame flickers.
-            lastKnownState
+
+            // Bug Fix: Only return lastKnownState if it is still valid (within persistence window).
+            // If it's too old, we should show nothing (UNKNOWN) while verifying the new input.
+            if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
+                lastKnownState
+            } else {
+                TrafficLightState.UNKNOWN
+            }
         }
     }
 }
