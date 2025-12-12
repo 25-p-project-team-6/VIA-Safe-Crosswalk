@@ -36,8 +36,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modelNameText: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
+    private lateinit var zoomSwitch: android.widget.Switch
     private lateinit var debugContainer: android.widget.LinearLayout
     private lateinit var debugToggleButton: android.widget.ImageButton
+
+    private var camera: androidx.camera.core.Camera? = null
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private var showDebugInfo = true
@@ -137,6 +140,12 @@ class MainActivity : AppCompatActivity() {
             frameData.clear()
             avgFpsText.text = "Avg FPS: 0"
             avgLatencyText.text = "Avg Latency: 0ms"
+        }
+
+        zoomSwitch = findViewById(R.id.swZoom2x)
+        zoomSwitch.setOnCheckedChangeListener { _, isChecked ->
+            val zoomRatio = if (isChecked) 2.0f else 1.0f
+            camera?.cameraControl?.setZoomRatio(zoomRatio)
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -354,9 +363,36 @@ class MainActivity : AppCompatActivity() {
 
             try {
                 cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                camera = cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, imageAnalyzer
                 )
+
+                // Check for 2x Zoom support and auto-enable
+                val zoomState = camera?.cameraInfo?.zoomState?.value
+                if (zoomState != null) {
+                    val maxZoom = zoomState.maxZoomRatio
+                    if (maxZoom >= 2.0f) {
+                        runOnUiThread {
+                            if (!zoomSwitch.isChecked) {
+                                zoomSwitch.isChecked = true // This will trigger listener and set zoom to 2.0
+                                // If listener doesn't trigger automatically on setChecked (sometimes it doesn't if not attached), force it
+                                camera?.cameraControl?.setZoomRatio(2.0f) 
+                            }
+                        }
+                    } else {
+                        runOnUiThread {
+                            zoomSwitch.isEnabled = false
+                            zoomSwitch.text = "2x Zoom (Not Supported)"
+                        }
+                    }
+                }
+
+                // Also observe zoom state for dynamic updates if needed
+                camera?.cameraInfo?.zoomState?.observe(this) { state ->
+                    // Just log or update UI if needed
+                    // Log.d("MainActivity", "Zoom: ${state.zoomRatio}x / Max: ${state.maxZoomRatio}x")
+                }
+
             } catch (exc: Exception) {
                 Log.e("MainActivity", "Use case binding failed", exc)
             }
