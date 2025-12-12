@@ -28,10 +28,24 @@
         app:layout_constraintBottom_toBottomOf="parent">
 
         <TextView
+            android:id="@+id/modelNameText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Model: "
+            android:textColor="#FFFFFF" />
+
+        <TextView
             android:id="@+id/fpsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="FPS: 0"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/latencyText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Latency: 0ms"
             android:textColor="#FFFFFF" />
 
         <TextView
@@ -42,10 +56,10 @@
             android:textColor="#FFFFFF" />
 
         <TextView
-            android:id="@+id/latencyText"
+            android:id="@+id/avgLatencyText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Latency: 0ms"
+            android:text="Avg Latency: 0ms"
             android:textColor="#FFFFFF" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
