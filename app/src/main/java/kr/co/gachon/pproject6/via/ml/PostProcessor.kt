@@ -108,55 +108,7 @@ object PostProcessor {
         return if (pixels.isNotEmpty()) count.toFloat() / pixels.size else 0f
     }
 
-    fun selectTargetTrafficLight(boxes: List<OverlayView.BoundingBox>): Pair<OverlayView.BoundingBox, Float>? {
-        // Filter red/green only
-        val trafficLights = boxes.filter {
-            it.clsName.equals("red", ignoreCase = true) || it.clsName.equals(
-                "green",
-                ignoreCase = true
-            )
-        }
 
-        if (trafficLights.isEmpty()) return null
-
-        // Center is (0.5, 0.5) in normalized coordinates
-        val centerX = 0.5f
-        val centerY = 0.5f
-
-        var bestBox: OverlayView.BoundingBox? = null
-        var bestScore = -1f
-
-        for (box in trafficLights) {
-            val rect = box.box // Normalized RectF(0..1)
-
-            val boxCx = rect.centerX()
-            val boxCy = rect.centerY()
-
-            // Euclidean distance to center
-            val dist = Math.sqrt(
-                Math.pow((boxCx - centerX).toDouble(), 2.0) +
-                        Math.pow((boxCy - centerY).toDouble(), 2.0)
-            ).toFloat()
-
-            val area = rect.width() * rect.height()
-
-            // Score Formula: (Confidence * Area * 1000) / (Distance + epsilon)
-            // Confidence is the most important factor!
-            val score = (box.score * area * 1000) / (dist + 0.1f)
-
-            if (score > bestScore) {
-                bestScore = score
-                bestBox = box
-            }
-        }
-
-        if (bestBox != null) {
-            Log.d(TAG, "Selected Target: ${bestBox.clsName} (Score: $bestScore)")
-            return Pair(bestBox, bestScore)
-        }
-
-        return null
-    }
 
     fun updateTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
         // Determine raw input state
