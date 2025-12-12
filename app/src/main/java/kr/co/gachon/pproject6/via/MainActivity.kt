@@ -62,12 +62,6 @@ class MainActivity : AppCompatActivity() {
     // Pair(timestamp, latency)
     private val frameData = java.util.ArrayDeque<Pair<Long, Long>>()
 
-    // We don't need totalFrameCount and startTime for the simple average anymore, 
-    // but useful if we want total session average. 
-    // However, user requested 10s average.
-    // private var totalFrameCount = 0L // Removed/Unused for 10s avg
-    // private var startTime = 0L // Removed/Unused for 10s avg
-
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
             if (isGranted) {
@@ -106,7 +100,7 @@ class MainActivity : AppCompatActivity() {
         confidenceSlider = findViewById(R.id.confidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
 
-        // startTime = System.currentTimeMillis()
+
 
         debugContainer.visibility =
             if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
@@ -253,25 +247,8 @@ class MainActivity : AppCompatActivity() {
             if (!frameData.isEmpty()) {
                 val oldestTime = frameData.peekFirst()?.first
                 val duration = currentTime - oldestTime!!
-                // Avoid division by zero, though unlikely if list not empty and size > 1
-                // If only 1 frame, duration is 0. 
+                
                 if (duration > 0) {
-                    // val avgFps = (frameData.size - 1) * 1000.0 / duration
-                    // Note: strictly speaking, frames count is intervals. 
-                    // If we have N frames, we have N-1 intervals. 
-                    // For short duration, this is more accurate.
-                    // Or for simple user facing "count over 10s": frameData.size / 10.0 (if full)
-
-                    // Let's use simple count / window_size_seconds where window_size_seconds is bounded by 10.
-                    // But if we just started, window size is small.
-
-                    // Option A: frameData.size / ((currentTime - oldestTime)/1000.0)
-                    // If window is full 10s, this is frameData.size / 10.
-
-                    // val windowSizeSeconds = if (duration in 1..9999) duration / 1000.0 else 10.0
-                    // If duration is very small (start), FPS might spike. 
-
-                    // Let's stick to standard: (count) / (time_range)
                     val calculatedAvgFps =
                         frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
                     avgFpsText.text = String.format("Avg FPS: %.2f", calculatedAvgFps)
@@ -293,8 +270,6 @@ class MainActivity : AppCompatActivity() {
 
             try {
                 // 448 half(fp16)
-                // emulator: 8.2 fps, 118ms latency
-                // S21U: 15 fps, 61ms latency
                 val modelName = currentModelName
 
                 val newDetector = YoloDetector(
