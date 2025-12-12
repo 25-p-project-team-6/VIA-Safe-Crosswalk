@@ -20,15 +20,86 @@ import kotlin.math.min
 
 // Labels (COCO 80 classes) - Fallback if no labels provided
 private val cocoLabels = listOf(
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
-    "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-    "hair drier", "toothbrush"
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
+    "toothbrush"
 )
 
 class YoloDetector(
@@ -39,7 +110,7 @@ class YoloDetector(
     private val defaultIouThreshold: Float = 0.5f,
     private val specificIouThresholds: Map<String, Float> = emptyMap()
 ) {
-    
+
     var specificConfidenceThresholds: Map<String, Float> = emptyMap()
 
 
@@ -58,14 +129,14 @@ class YoloDetector(
             }
         }
         options.setNumThreads(4)
-        
+
         val model = FileUtil.loadMappedFile(context, modelPath)
         interpreter = Interpreter(model, options)
 
         val inputShape = interpreter!!.getInputTensor(0).shape() // [1, 640, 640, 3]
         inputImageWidth = inputShape[1]
         inputImageHeight = inputShape[2]
-        
+
         val outputTensor = interpreter!!.getOutputTensor(0)
         outputShape = outputTensor.shape() // [1, 84, 8400] usually
     }
@@ -105,10 +176,10 @@ class YoloDetector(
     private fun postProcess(output: FloatArray, threshold: Float): List<OverlayView.BoundingBox> {
         val boundingBoxes = mutableListOf<OverlayView.BoundingBox>()
         val isTransposed = outputShape[1] > outputShape[2] // e.g. [1, 8400, 84]
-        
+
         val rows = if (isTransposed) outputShape[1] else outputShape[2]
         val cols = if (isTransposed) outputShape[2] else outputShape[1]
-        
+
         // Helper to access data handling both NCHW and NHWC formats
         fun get(row: Int, col: Int): Float {
             return if (isTransposed) {
@@ -122,7 +193,7 @@ class YoloDetector(
             // Find max score class
             var maxScore = 0f
             var maxClassIndex = -1
-            
+
             // Classes start at index 4
             val numClasses = cols - 4
             for (c in 0 until numClasses) {
@@ -141,36 +212,35 @@ class YoloDetector(
                 // Apply specific threshold
                 if (maxScore > confThreshold) {
                     var cx = get(i, 0)
-                var cy = get(i, 1)
-                var w = get(i, 2)
-                var h = get(i, 3)
+                    var cy = get(i, 1)
+                    var w = get(i, 2)
+                    var h = get(i, 3)
 
 
+                    // Normalize coordinates if they are in pixels
+                    if (cx > 1.0f || cy > 1.0f || w > 1.0f || h > 1.0f) {
+                        cx /= inputImageWidth
+                        cy /= inputImageHeight
+                        w /= inputImageWidth
+                        h /= inputImageHeight
+                    }
 
-                // Normalize coordinates if they are in pixels
-                if (cx > 1.0f || cy > 1.0f || w > 1.0f || h > 1.0f) {
-                    cx /= inputImageWidth
-                    cy /= inputImageHeight
-                    w /= inputImageWidth
-                    h /= inputImageHeight
+                    val left = cx - w / 2
+                    val top = cy - h / 2
+                    val right = cx + w / 2
+                    val bottom = cy + h / 2
+
+                    val rect = RectF(
+                        max(0f, left),
+                        max(0f, top),
+                        min(1f, right),
+                        min(1f, bottom)
+                    )
+
+                    boundingBoxes.add(OverlayView.BoundingBox(rect, clsName, maxScore))
                 }
-
-                val left = cx - w / 2
-                val top = cy - h / 2
-                val right = cx + w / 2
-                val bottom = cy + h / 2
-
-                val rect = RectF(
-                    max(0f, left),
-                    max(0f, top),
-                    min(1f, right),
-                    min(1f, bottom)
-                )
-                
-                boundingBoxes.add(OverlayView.BoundingBox(rect, clsName, maxScore))
             }
         }
-    }
 
         return boundingBoxes // nms is called in detect now
     }
@@ -180,7 +250,7 @@ class YoloDetector(
         pq.addAll(boxes)
 
         val selected = mutableListOf<OverlayView.BoundingBox>()
-        
+
         while (pq.isNotEmpty()) {
             val best = pq.poll()
             selected.add(best!!)
@@ -209,7 +279,8 @@ class YoloDetector(
         val intersectionBottom = min(a.bottom, b.bottom)
 
         if (intersectionLeft < intersectionRight && intersectionTop < intersectionBottom) {
-            val intersectionArea = (intersectionRight - intersectionLeft) * (intersectionBottom - intersectionTop)
+            val intersectionArea =
+                (intersectionRight - intersectionLeft) * (intersectionBottom - intersectionTop)
             return intersectionArea / (areaA + areaB - intersectionArea)
         }
         return 0f

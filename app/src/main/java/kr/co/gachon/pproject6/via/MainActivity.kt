@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).addOnChangeListener { _, value, _ ->
             findViewById<android.widget.TextView>(R.id.trafficConfidenceLabel).text =
                 String.format("Traffic Confidence: %.2f", value)
-            
+
             // Update specific thresholds for traffic lights
             detector?.specificConfidenceThresholds = mapOf(
                 "red" to value,
@@ -186,23 +186,24 @@ class MainActivity : AppCompatActivity() {
                     spinner.setSelection(defaultIndex)
                 }
 
-                spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-                    override fun onItemSelected(
-                        parent: android.widget.AdapterView<*>?,
-                        view: android.view.View?,
-                        position: Int,
-                        id: Long
-                    ) {
-                        val selectedModel = modelFiles[position]
-                        if (selectedModel != currentModelName) {
-                            currentModelName = selectedModel
-                            // Re-init detector with new model
-                            initDetector(gpuSwitch.isChecked)
+                spinner.onItemSelectedListener =
+                    object : android.widget.AdapterView.OnItemSelectedListener {
+                        override fun onItemSelected(
+                            parent: android.widget.AdapterView<*>?,
+                            view: android.view.View?,
+                            position: Int,
+                            id: Long
+                        ) {
+                            val selectedModel = modelFiles[position]
+                            if (selectedModel != currentModelName) {
+                                currentModelName = selectedModel
+                                // Re-init detector with new model
+                                initDetector(gpuSwitch.isChecked)
+                            }
                         }
-                    }
 
-                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-                }
+                        override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                    }
             }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error setting up model spinner", e)
@@ -247,7 +248,7 @@ class MainActivity : AppCompatActivity() {
             if (!frameData.isEmpty()) {
                 val oldestTime = frameData.peekFirst()?.first
                 val duration = currentTime - oldestTime!!
-                
+
                 if (duration > 0) {
                     val calculatedAvgFps =
                         frameData.size * 1000.0 / (if (duration < 100) 1000.0 else duration.toDouble())
@@ -349,9 +350,10 @@ class MainActivity : AppCompatActivity() {
                     if (maxZoom >= 2.0f) {
                         runOnUiThread {
                             if (!zoomSwitch.isChecked) {
-                                zoomSwitch.isChecked = true // This will trigger listener and set zoom to 2.0
+                                zoomSwitch.isChecked =
+                                    true // This will trigger listener and set zoom to 2.0
                                 // If listener doesn't trigger automatically on setChecked (sometimes it doesn't if not attached), force it
-                                camera?.cameraControl?.setZoomRatio(2.0f) 
+                                camera?.cameraControl?.setZoomRatio(2.0f)
                             }
                         }
                     } else {
@@ -414,7 +416,7 @@ class MainActivity : AppCompatActivity() {
 
         var targetBox: OverlayView.BoundingBox? = null
         // Keep track of boxes to show. Default to raw result.
-        var boxesToShow = result.boxes 
+        var boxesToShow = result.boxes
 
         if (enableTrafficLogic) {
             // Execute PostProcessor for logging and logic
@@ -436,14 +438,14 @@ class MainActivity : AppCompatActivity() {
 
         runOnUiThread {
             overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
-            
+
             // Logic for Overlay Visibility
             // If showRawBoxes is ON, show boxesToShow (which is either raw or corrected based on logic switch)
             // If showRawBoxes is OFF, show nothing.
             if (showRawBoxes && showBBoxOverlay) { // showBBoxOverlay is controlled by eye icon
-                 overlay.setResults(boxesToShow)
+                overlay.setResults(boxesToShow)
             } else {
-                 overlay.setResults(emptyList())
+                overlay.setResults(emptyList())
             }
             updateDebugInfo(result.inferenceTime)
 
