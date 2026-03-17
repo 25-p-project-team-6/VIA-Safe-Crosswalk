@@ -2,8 +2,6 @@ package kr.co.gachon.pproject6.via
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Matrix
 import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
