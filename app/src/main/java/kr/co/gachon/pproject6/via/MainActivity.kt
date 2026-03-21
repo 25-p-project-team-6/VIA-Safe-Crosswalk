@@ -76,7 +76,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusPanel: View
     private lateinit var statusBorder: View
     private var lastLoggedDecisionSummary: String? = null
-    private var pendingBackendToast: String? = null
     private var suppressGpuToggleCallback = false
     private lateinit var preferences: AppPreferences
 
@@ -203,8 +202,15 @@ class MainActivity : AppCompatActivity() {
                 if (showDebugInfo) "디버그 정보 닫기" else "디버그 정보 열기"
         }
         resetAppButton.setOnClickListener {
+            detector?.close()
+            detector = null
+            cameraManager?.stopCamera()
             preferences.clearCalibration()
-            startActivity(Intent(this, OnboardingActivity::class.java))
+            val intent = Intent(this, OnboardingActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            }
+            startActivity(intent)
+            finishAffinity()
             finish()
         }
 
@@ -238,7 +244,7 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // Check GPU compatibility but still prefer probing GPU on float models.
+        // Check GPU compatibility, but still try GPU first for deployable GPU-friendly models.
         val compatList = CompatibilityList()
         isGpuSupported = compatList.isDelegateSupportedOnThisDevice
 
@@ -249,9 +255,11 @@ class MainActivity : AppCompatActivity() {
                 currentModelProfile = recommendedProfile
             }
         }
-        val shouldUseSavedBackend = preferences.selectedBackendLabel?.contains("GPU") ?: currentModelProfile.recommendedUseGpu
+        val shouldUseSavedBackend =
+            preferences.selectedBackendLabel?.contains("GPU") == true &&
+                currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
-            checked = shouldUseSavedBackend,
+            checked = shouldUseSavedBackend || currentModelProfile.recommendedUseGpu,
             enabled = currentModelProfile.recommendedUseGpu
         )
         publishBackendStatus("Initializing…")
@@ -307,8 +315,7 @@ class MainActivity : AppCompatActivity() {
         gpuSwitch.isEnabled = enabled
         gpuSwitch.text = when {
             !currentModelProfile.recommendedUseGpu -> "Use GPU (INT8 uses CPU)"
-            isGpuSupported -> "Use GPU"
-            else -> "Use GPU (Experimental)"
+            else -> "Use GPU"
         }
         suppressGpuToggleCallback = false
     }
@@ -392,7 +399,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun initDetector(useGpu: Boolean) {
         cameraExecutor?.execute {
-            Log.e("VIA_GPU", "detector_init_start model=$currentModelName requestedGpu=$useGpu")
             val oldDetector = detector
             detector = null // Pause detection
 
@@ -429,12 +435,10 @@ class MainActivity : AppCompatActivity() {
                             "${currentModelProfile.analysisResolution.height}"
                     modelNameText.text =
                         "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
-                    Log.i("VIA_GPU", "detector_ready $backendStatus")
-                    Log.w("VIA_GPU", "detector_ready $backendStatus")
+                    Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
                     preferences.selectedModelName = modelName
                     preferences.selectedBackendLabel = newDetector.runtimeBackendLabel
-                    maybeShowBackendToast("Inference backend: ${newDetector.runtimeBackendLabel}")
                     if (cameraManager != null) {
                         startCamera()
                     }
@@ -449,18 +453,7 @@ class MainActivity : AppCompatActivity() {
                     ).show()
 
                     if (useGpu) {
-                        Log.e(
-                            "VIA_GPU",
-                            "detector_init_failed requestedGpu=true model=$currentModelName; falling back to CPU",
-                            e
-                        )
-                        publishBackendStatus("Backend: CPU (GPU init failed)")
-                        maybeShowBackendToast("Inference backend: CPU")
-                        Toast.makeText(
-                            this,
-                            "GPU init failed. Switching to CPU.",
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        publishBackendStatus("Backend: CPU")
                         configureGpuSwitch(
                             checked = false,
                             enabled = currentModelProfile.recommendedUseGpu
@@ -483,14 +476,21 @@ class MainActivity : AppCompatActivity() {
         ) { image ->
             processImage(image)
         }
+
+        runOnUiThread {
+            zoomSwitch.isEnabled = false
+            zoomSwitch.text = "2x Zoom 확인 중"
+        }
         
         cameraManager?.startCamera { maxZoom ->
             // Update Zoom Switch UI based on supported Max Zoom
             if (maxZoom >= 2.0f) {
                 runOnUiThread {
+                    zoomSwitch.isEnabled = true
+                    zoomSwitch.text = "Use 2x Zoom"
                     if (!zoomSwitch.isChecked) {
-                        zoomSwitch.isChecked = true 
-                        // Force update via manager
+                        zoomSwitch.isChecked = true
+                    } else {
                         cameraManager?.setZoom(2.0f)
                     }
                 }
@@ -753,16 +753,6 @@ class MainActivity : AppCompatActivity() {
         layoutParams.topMargin = top
         layoutParams.bottomMargin = bottom
         view.layoutParams = layoutParams
-    }
-
-    private fun maybeShowBackendToast(message: String) {
-        if (message == pendingBackendToast) {
-            return
-        }
-        pendingBackendToast = message
-        window.decorView.post {
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-        }
     }
 
     private fun elapsedMillis(startTimeNs: Long): Long =

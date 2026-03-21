@@ -135,44 +135,29 @@ class YoloDetector(
 
     fun setup() {
         val options = Interpreter.Options()
+        compatibilityReportedSupported = CompatibilityList().isDelegateSupportedOnThisDevice
         if (useGpu) {
-            compatibilityReportedSupported = CompatibilityList().isDelegateSupportedOnThisDevice
             try {
-                gpuDelegate = if (compatibilityReportedSupported) {
+                gpuDelegate = GpuDelegate().also {
                     runtimeBackendLabel = "GPU"
-                    GpuDelegate()
-                } else {
-                    runtimeBackendLabel = "GPU (forced)"
-                    GpuDelegate()
                 }
                 options.addDelegate(gpuDelegate)
             } catch (gpuError: Exception) {
-                runtimeBackendLabel = "CPU (GPU init failed)"
+                runtimeBackendLabel = "CPU"
                 gpuDelegate?.close()
                 gpuDelegate = null
-                Log.w(
+                Log.i(
                     TAG,
-                    "gpu_delegate_init_failed model=$modelPath requestedGpu=$useGpu compat=$compatibilityReportedSupported",
-                    gpuError
+                    "gpu_fallback model=$modelPath compat=$compatibilityReportedSupported"
                 )
-                throw gpuError
             }
         } else {
-            compatibilityReportedSupported = CompatibilityList().isDelegateSupportedOnThisDevice
             runtimeBackendLabel = "CPU"
         }
         options.setNumThreads(4)
 
         val model = FileUtil.loadMappedFile(context, modelPath)
         interpreter = Interpreter(model, options)
-        Log.i(
-            TAG,
-            "setup model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu compat=$compatibilityReportedSupported threads=4"
-        )
-        Log.w(
-            TAG,
-            "setup model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu compat=$compatibilityReportedSupported threads=4"
-        )
 
         val inputShape = interpreter!!.getInputTensor(0).shape() // [1, 640, 640, 3]
         inputImageWidth = inputShape[1]

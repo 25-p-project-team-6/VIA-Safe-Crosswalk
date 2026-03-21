@@ -88,17 +88,17 @@ data class InferenceModelProfile(
     fun displayName(): String {
         return when (quantization) {
             ModelQuantization.FLOAT16 -> when {
-                (inputSize ?: 0) >= 640 -> "최고 성능 GPU 모델"
-                (inputSize ?: 0) >= 512 -> "균형형 GPU 모델"
-                else -> "고속 GPU 모델"
+                (inputSize ?: 0) >= 640 -> "최고 성능 모델"
+                (inputSize ?: 0) >= 512 -> "균형형 모델"
+                else -> "고속 모델"
             }
             ModelQuantization.FLOAT32 -> when {
-                (inputSize ?: 0) >= 640 -> "고정밀 GPU 모델"
-                else -> "고정밀 GPU 모델(중간)"
+                (inputSize ?: 0) >= 640 -> "고정밀 모델"
+                else -> "고정밀 중간 모델"
             }
             ModelQuantization.INT8 -> when {
-                (inputSize ?: 0) >= 640 -> "정확도 우선 CPU 모델"
-                else -> "저사양 CPU 모델"
+                (inputSize ?: 0) >= 640 -> "절전형 모델"
+                else -> "저사양용 모델"
             }
             ModelQuantization.UNKNOWN -> "사용자 지정 모델"
         }

@@ -215,8 +215,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stepLabelText.text = "3 / 3 · 자동 최적화"
         titleText.text = "휴대폰 성능을 측정하는 중입니다"
         bodyText.text = "기기 모델과 GPU 가능 여부를 확인하고 가장 적절한 모델을 자동으로 고릅니다."
-        detailText.text =
-            "$deviceSummary\nGPU helper reported: ${CompatibilityList().isDelegateSupportedOnThisDevice}"
+        detailText.text = "$deviceSummary\n최적 성능 모델을 찾는 중입니다."
         actionButton.isEnabled = false
         actionButton.text = "측정 중"
         secondaryButton.visibility = View.VISIBLE
