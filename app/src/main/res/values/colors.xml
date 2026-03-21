@@ -2,4 +2,17 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="via_background">#FF0D1117</color>
+    <color name="via_surface">#FF182230</color>
+    <color name="via_surface_scrim">#E61A2433</color>
+    <color name="via_surface_outline">#33FFFFFF</color>
+    <color name="via_on_surface">#FFF5F7FA</color>
+    <color name="via_on_surface_variant">#FFD0D7E2</color>
+    <color name="via_accent">#FF6EDBFF</color>
+    <color name="via_accent_container">#FF14384A</color>
+    <color name="via_primary">#FF2F80ED</color>
+    <color name="via_on_primary">#FFFFFFFF</color>
+    <color name="via_secondary">#FF9BDB4D</color>
+    <color name="via_error">#FFFF6B6B</color>
 </resources>

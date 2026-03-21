@@ -84,4 +84,28 @@ data class InferenceModelProfile(
         val inputLabel = inputSize?.toString() ?: "?"
         return "$fileName | $quantization | ${inputLabel}px | $delegateLabel | analysis ${analysisResolution.width}x${analysisResolution.height}"
     }
+
+    fun displayName(): String {
+        return when (quantization) {
+            ModelQuantization.FLOAT16 -> when {
+                (inputSize ?: 0) >= 640 -> "최고 성능 GPU 모델"
+                (inputSize ?: 0) >= 512 -> "균형형 GPU 모델"
+                else -> "고속 GPU 모델"
+            }
+            ModelQuantization.FLOAT32 -> when {
+                (inputSize ?: 0) >= 640 -> "고정밀 GPU 모델"
+                else -> "고정밀 GPU 모델(중간)"
+            }
+            ModelQuantization.INT8 -> when {
+                (inputSize ?: 0) >= 640 -> "정확도 우선 CPU 모델"
+                else -> "저사양 CPU 모델"
+            }
+            ModelQuantization.UNKNOWN -> "사용자 지정 모델"
+        }
+    }
+
+    fun displayNameWithSize(): String {
+        val inputLabel = inputSize?.let { "${it}px" } ?: "해상도 미상"
+        return "${displayName()} · $inputLabel"
+    }
 }

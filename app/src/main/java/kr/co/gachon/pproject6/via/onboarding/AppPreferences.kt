@@ -1,0 +1,67 @@
+package kr.co.gachon.pproject6.via.onboarding
+
+import android.content.Context
+
+class AppPreferences(context: Context) {
+    private val prefs = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+
+    var onboardingCompleted: Boolean
+        get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, value).apply()
+
+    var selectedModelName: String?
+        get() = prefs.getString(KEY_SELECTED_MODEL_NAME, null)
+        set(value) = prefs.edit().putString(KEY_SELECTED_MODEL_NAME, value).apply()
+
+    var selectedBackendLabel: String?
+        get() = prefs.getString(KEY_SELECTED_BACKEND_LABEL, null)
+        set(value) = prefs.edit().putString(KEY_SELECTED_BACKEND_LABEL, value).apply()
+
+    var calibrationSummary: String?
+        get() = prefs.getString(KEY_CALIBRATION_SUMMARY, null)
+        set(value) = prefs.edit().putString(KEY_CALIBRATION_SUMMARY, value).apply()
+
+    var deviceSummary: String?
+        get() = prefs.getString(KEY_DEVICE_SUMMARY, null)
+        set(value) = prefs.edit().putString(KEY_DEVICE_SUMMARY, value).apply()
+
+    var calibrationCompletedAtMillis: Long
+        get() = prefs.getLong(KEY_CALIBRATION_COMPLETED_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_CALIBRATION_COMPLETED_AT, value).apply()
+
+    fun saveCalibration(
+        result: CalibrationProfileResult,
+        deviceSummary: String,
+        summary: String
+    ) {
+        prefs.edit()
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+            .putString(KEY_SELECTED_MODEL_NAME, result.profile.fileName)
+            .putString(KEY_SELECTED_BACKEND_LABEL, result.backendLabel)
+            .putString(KEY_CALIBRATION_SUMMARY, summary)
+            .putString(KEY_DEVICE_SUMMARY, deviceSummary)
+            .putLong(KEY_CALIBRATION_COMPLETED_AT, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun clearCalibration() {
+        prefs.edit()
+            .remove(KEY_SELECTED_MODEL_NAME)
+            .remove(KEY_SELECTED_BACKEND_LABEL)
+            .remove(KEY_CALIBRATION_SUMMARY)
+            .remove(KEY_DEVICE_SUMMARY)
+            .remove(KEY_CALIBRATION_COMPLETED_AT)
+            .putBoolean(KEY_ONBOARDING_COMPLETED, false)
+            .apply()
+    }
+
+    companion object {
+        private const val PREF_NAME = "via_onboarding_preferences"
+        private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
+        private const val KEY_SELECTED_MODEL_NAME = "selected_model_name"
+        private const val KEY_SELECTED_BACKEND_LABEL = "selected_backend_label"
+        private const val KEY_CALIBRATION_SUMMARY = "calibration_summary"
+        private const val KEY_DEVICE_SUMMARY = "device_summary"
+        private const val KEY_CALIBRATION_COMPLETED_AT = "calibration_completed_at"
+    }
+}

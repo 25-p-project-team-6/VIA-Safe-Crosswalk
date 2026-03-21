@@ -1,6 +1,7 @@
 package kr.co.gachon.pproject6.via
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -8,12 +9,14 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.PreviewView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -31,6 +34,8 @@ import kr.co.gachon.pproject6.via.ml.SignalAnalyzer
 import kr.co.gachon.pproject6.via.ml.TrafficLightState
 import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.onboarding.AppPreferences
+import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
@@ -48,6 +53,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var backendStatusText: TextView
     private lateinit var inputFpsText: TextView
     private lateinit var modelNameText: TextView
+    private lateinit var buildInfoText: TextView
+    private lateinit var resetAppButton: MaterialButton
     private lateinit var targetInfoText: TextView
     private lateinit var decisionDebugText: TextView
     private lateinit var tuningDebugText: TextView
@@ -58,16 +65,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var confidenceSlider: Slider
     private lateinit var trafficConfidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
-    private lateinit var zoomSwitch: android.widget.Switch
-    private lateinit var rawDetectionSwitch: android.widget.Switch
-    private lateinit var trafficLogicSwitch: android.widget.Switch
-    private lateinit var highlightTargetSwitch: android.widget.Switch
-    private lateinit var debugContainer: android.widget.LinearLayout
+    private lateinit var zoomSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var rawDetectionSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var trafficLogicSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var highlightTargetSwitch: androidx.appcompat.widget.SwitchCompat
+    private lateinit var debugContainer: View
     private lateinit var debugToggleButton: android.widget.ImageButton
+    private lateinit var buildInfoCard: View
+    private lateinit var topControlCard: View
+    private lateinit var statusPanel: View
     private lateinit var statusBorder: View
     private var lastLoggedDecisionSummary: String? = null
     private var pendingBackendToast: String? = null
     private var suppressGpuToggleCallback = false
+    private lateinit var preferences: AppPreferences
 
     private var cameraManager: CameraManager? = null
 
@@ -120,6 +131,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        preferences = AppPreferences(this)
+        if (!preferences.onboardingCompleted) {
+            startActivity(Intent(this, OnboardingActivity::class.java))
+            finish()
+            return
+        }
+
+        preferences.selectedModelName?.let { savedModel ->
+            currentModelName = savedModel
+            currentModelProfile = InferenceModelProfile.fromFileName(savedModel)
+        }
+
         setContentView(R.layout.activity_main)
 
         // Handle Window Insets for edge-to-edge
@@ -133,9 +156,14 @@ class MainActivity : AppCompatActivity() {
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         debugToggleButton = findViewById(R.id.debugToggleButton)
+        buildInfoCard = findViewById(R.id.buildInfoCard)
+        topControlCard = findViewById(R.id.topControlCard)
+        statusPanel = findViewById(R.id.statusPanel)
         backendStatusText = findViewById(R.id.backendStatusText)
+        resetAppButton = findViewById(R.id.resetAppButton)
         inputFpsText = findViewById(R.id.inputFpsText)
         modelNameText = findViewById(R.id.modelNameText)
+        buildInfoText = findViewById(R.id.buildInfoText)
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
         latencyText = findViewById(R.id.latencyText)
@@ -157,16 +185,27 @@ class MainActivity : AppCompatActivity() {
         highlightTargetSwitch = findViewById(R.id.swHighlightTarget)
         statusBorder = findViewById(R.id.statusBorder)
         feedbackManager = SignalFeedbackManager(this)
+        buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
         tuningDebugText.text = "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}"
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
+        modelNameText.text = "모델: ${currentModelProfile.displayNameWithSize()}"
 
         debugContainer.visibility =
             if (showDebugInfo) View.VISIBLE else View.GONE
+
+        applySystemBarInsets()
 
         debugToggleButton.setOnClickListener {
             showDebugInfo = !showDebugInfo
             debugContainer.visibility =
                 if (showDebugInfo) View.VISIBLE else View.GONE
+            debugToggleButton.contentDescription =
+                if (showDebugInfo) "디버그 정보 닫기" else "디버그 정보 열기"
+        }
+        resetAppButton.setOnClickListener {
+            preferences.clearCalibration()
+            startActivity(Intent(this, OnboardingActivity::class.java))
+            finish()
         }
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
@@ -205,11 +244,14 @@ class MainActivity : AppCompatActivity() {
 
         availableModelFiles = discoverModelFiles()
         InferenceModelProfile.recommend(availableModelFiles, isGpuSupported)?.let { recommendedProfile ->
-            currentModelName = recommendedProfile.fileName
-            currentModelProfile = recommendedProfile
+            if (preferences.selectedModelName == null || preferences.selectedModelName !in availableModelFiles) {
+                currentModelName = recommendedProfile.fileName
+                currentModelProfile = recommendedProfile
+            }
         }
+        val shouldUseSavedBackend = preferences.selectedBackendLabel?.contains("GPU") ?: currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
-            checked = currentModelProfile.recommendedUseGpu,
+            checked = shouldUseSavedBackend,
             enabled = currentModelProfile.recommendedUseGpu
         )
         publishBackendStatus("Initializing…")
@@ -275,6 +317,7 @@ class MainActivity : AppCompatActivity() {
         currentModelName = selectedModel
         currentModelProfile = InferenceModelProfile.fromFileName(selectedModel)
         reusableRotatedBitmap = null
+        preferences.selectedModelName = selectedModel
 
         val shouldEnableGpu = currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
@@ -292,10 +335,11 @@ class MainActivity : AppCompatActivity() {
             val modelFiles = availableModelFiles
 
             if (modelFiles.isNotEmpty()) {
+                val modelProfiles = modelFiles.map(InferenceModelProfile::fromFileName)
                 val adapter = android.widget.ArrayAdapter(
                     this,
                     android.R.layout.simple_spinner_item,
-                    modelFiles
+                    modelProfiles.map { it.displayNameWithSize() }
                 )
                 adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                 spinner.adapter = adapter
@@ -314,7 +358,7 @@ class MainActivity : AppCompatActivity() {
                             position: Int,
                             id: Long
                         ) {
-                            val selectedModel = modelFiles[position]
+                            val selectedModel = modelProfiles[position].fileName
                             if (selectedModel != currentModelName) {
                                 applyModelSelection(selectedModel)
                             }
@@ -383,10 +427,13 @@ class MainActivity : AppCompatActivity() {
                             "requestedGpu=$useGpu compat=${newDetector.compatibilityReportedSupported} " +
                             "analysis=${currentModelProfile.analysisResolution.width}x" +
                             "${currentModelProfile.analysisResolution.height}"
-                    modelNameText.text = "Model: ${currentModelProfile.summary(newDetector.runtimeBackendLabel)}"
+                    modelNameText.text =
+                        "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", "detector_ready $backendStatus")
                     Log.w("VIA_GPU", "detector_ready $backendStatus")
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
+                    preferences.selectedModelName = modelName
+                    preferences.selectedBackendLabel = newDetector.runtimeBackendLabel
                     maybeShowBackendToast("Inference backend: ${newDetector.runtimeBackendLabel}")
                     if (cameraManager != null) {
                         startCamera()
@@ -690,6 +737,24 @@ class MainActivity : AppCompatActivity() {
         backendStatusText.text = statusText
     }
 
+    private fun applySystemBarInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { _, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            updateCardMargins(buildInfoCard, top = systemBars.top + 20, bottom = 0)
+            updateCardMargins(topControlCard, top = systemBars.top + 20, bottom = 0)
+            updateCardMargins(debugContainer, top = 16, bottom = systemBars.bottom + 16)
+            updateCardMargins(statusPanel, top = 0, bottom = systemBars.bottom + 20)
+            insets
+        }
+    }
+
+    private fun updateCardMargins(view: View, top: Int, bottom: Int) {
+        val layoutParams = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+        layoutParams.topMargin = top
+        layoutParams.bottomMargin = bottom
+        view.layoutParams = layoutParams
+    }
+
     private fun maybeShowBackendToast(message: String) {
         if (message == pendingBackendToast) {
             return
@@ -706,6 +771,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor?.shutdown()
+        cameraManager?.stopCamera()
         detector?.close()
         feedbackManager.release()
         signalAnalyzer.reset()

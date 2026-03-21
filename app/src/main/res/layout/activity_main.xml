@@ -5,264 +5,369 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/via_background"
     tools:context=".MainActivity">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/viewFinder"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-    <ImageButton
-        android:id="@+id/debugToggleButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_margin="16dp"
-        android:background="#80000000"
-        android:src="@android:drawable/ic_menu_info_details"
-        android:contentDescription="Toggle Debug Info"
-        app:tint="#FFFFFF"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        android:elevation="10dp"/>
+        android:layout_height="match_parent"
+        android:contentDescription="실시간 카메라 미리보기" />
 
     <View
         android:id="@+id/statusBorder"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@drawable/border_transparent"
-        android:translationZ="5dp" />
+        android:translationZ="4dp" />
 
     <kr.co.gachon.pproject6.via.ui.OverlayView
         android:id="@+id/overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:translationZ="5dp" />
+        android:translationZ="6dp" />
 
-    <LinearLayout
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/buildInfoCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
+        <TextView
+            android:id="@+id/buildInfoText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="8dp"
+            android:text="v0.0 · --"
+            android:textColor="@color/via_on_surface_variant"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/topControlCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="20dp"
+        android:layout_marginEnd="20dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
+        <ImageButton
+            android:id="@+id/debugToggleButton"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="디버그 정보 열기"
+            android:padding="14dp"
+            android:src="@android:drawable/ic_menu_info_details"
+            app:tint="@color/via_on_surface" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/statusPanel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginHorizontal="24dp"
-        android:layout_marginBottom="132dp"
-        android:background="#AA000000"
-        android:elevation="15dp"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:paddingHorizontal="20dp"
-        android:paddingVertical="16dp"
-        android:translationZ="15dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="28dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
-
-        <TextView
-            android:id="@+id/statusTitleText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="신호 상태 확인 중"
-            android:textColor="#FFFFFF"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/statusDetailText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:text="카메라를 신호등 쪽으로 맞춰주세요"
-            android:textColor="#D9FFFFFF"
-            android:textSize="15sp" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/debugContainer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="#80000000"
-        android:padding="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:elevation="24dp"
-        android:translationZ="24dp">
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
 
-        <TextView
-            android:id="@+id/backendStatusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:background="#99000000"
-            android:paddingHorizontal="10dp"
-            android:paddingVertical="6dp"
-            android:text="Backend: unknown"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/modelNameText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Model: Loading..."
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
-
-        <Spinner
-            android:id="@+id/modelSpinner"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#80FFFFFF"
-            android:layout_marginBottom="8dp"/>
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="24dp"
+            android:paddingBottom="20dp">
 
-        <TextView
-            android:id="@+id/inputFpsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Input FPS: 0.0"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            <TextView
+                android:id="@+id/statusTitleText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="신호 상태 확인 중"
+                android:textColor="@color/via_on_surface"
+                android:textSize="30sp"
+                android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/fpsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Detect FPS: 0.0"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+            <TextView
+                android:id="@+id/statusDetailText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:lineSpacingExtra="4dp"
+                android:text="카메라를 신호등 쪽으로 맞춰주세요"
+                android:textColor="@color/via_on_surface_variant"
+                android:textSize="18sp" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <TextView
-            android:id="@+id/avgFpsText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Avg FPS: 0.0"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/debugContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="20dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:layout_constraintTop_toBottomOf="@id/topControlCard"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
 
-        <TextView
-            android:id="@+id/latencyText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Latency: 0ms"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/avgLatencyText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Avg Latency: 0ms"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp" />
-
-        <TextView
-            android:id="@+id/stageBreakdownText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Stages: n/a"
-            android:textColor="#B0FFFFFF"
-            android:textSize="12sp" />
-
-        <TextView
-            android:id="@+id/targetInfoText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Target: None"
-            android:textColor="#FFFF00"
-            android:textSize="14sp"
-            android:layout_marginTop="4dp"/>
-
-        <TextView
-            android:id="@+id/decisionDebugText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Decision: WAIT"
-            android:textColor="#80FFEA"
-            android:textSize="13sp" />
-
-        <TextView
-            android:id="@+id/tuningDebugText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Tuning: default"
-            android:textColor="#B0FFFFFF"
-            android:textSize="12sp" />
-
-        <Switch
-            android:id="@+id/swRawDetection"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Raw Boxes"
-            android:textColor="#FFFFFF"
-            android:checked="true" />
-
-        <Switch
-            android:id="@+id/swTrafficLogic"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Traffic Logic"
-            android:textColor="#FFFFFF"
-            android:checked="true" />
-
-        <Switch
-            android:id="@+id/swHighlightTarget"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Target Highlight"
-            android:textColor="#FFFFFF"
-            android:checked="true" />
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/gpuSwitch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Use GPU"
-            android:textColor="#FFFFFF"
-            android:checked="false" />
-
-        <Switch
-            android:id="@+id/swZoom2x"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Use 2x Zoom"
-            android:textColor="#FFFFFF"
-            android:checked="false" />
-
-        <TextView
-            android:id="@+id/confidenceSliderLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="General Confidence: 0.3"
-            android:textColor="#FFFFFF"
-            android:layout_marginTop="8dp"/>
-
-        <com.google.android.material.slider.Slider
-            android:id="@+id/confidenceSlider"
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:valueFrom="0.0"
-            android:valueTo="1.0"
-            android:value="0.3"
-            android:stepSize="0.05" />
+            android:fillViewport="true">
 
-        <TextView
-            android:id="@+id/trafficConfidenceLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Traffic Confidence: 0.3"
-            android:textColor="#FFFFFF"
-            android:layout_marginTop="8dp"/>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/trafficConfidenceSlider"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:valueFrom="0.0"
-            android:valueTo="1.0"
-            android:value="0.3"
-            android:stepSize="0.05" />
+                <TextView
+                    android:id="@+id/backendStatusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/debug_chip_background"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="8dp"
+                    android:text="Backend: unknown"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
-    </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/resetAppButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:minHeight="56dp"
+                    android:text="앱 초기 상태로 되돌리기"
+                    android:textAllCaps="false"
+                    android:textSize="16sp"
+                    app:cornerRadius="18dp" />
+
+                <TextView
+                    android:id="@+id/modelNameText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Model: Loading..."
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/modelSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:backgroundTint="@color/via_accent_container"
+                    android:importantForAccessibility="yes" />
+
+                <TextView
+                    android:id="@+id/inputFpsText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Input FPS: 0.0"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/fpsText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Detect FPS: 0.0"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/avgFpsText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Avg FPS: 0.0"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/latencyText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Latency: 0ms"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/avgLatencyText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Avg Latency: 0ms"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/stageBreakdownText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="Stages: n/a"
+                    android:textColor="@color/via_on_surface_variant"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/targetInfoText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Target: None"
+                    android:textColor="@color/via_accent"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/decisionDebugText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Decision: WAIT"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tuningDebugText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Tuning: default"
+                    android:textColor="@color/via_on_surface_variant"
+                    android:textSize="13sp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/swRawDetection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:checked="true"
+                    android:minHeight="56dp"
+                    android:text="Raw Boxes"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/swTrafficLogic"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:minHeight="56dp"
+                    android:text="Traffic Logic"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/swHighlightTarget"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:minHeight="56dp"
+                    android:text="Target Highlight"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/gpuSwitch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:text="Use GPU"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/swZoom2x"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:text="Use 2x Zoom"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/confidenceSliderLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="General Confidence: 0.3"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/confidenceSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="0.3"
+                    android:valueFrom="0.0"
+                    android:valueTo="1.0"
+                    android:stepSize="0.05" />
+
+                <TextView
+                    android:id="@+id/trafficConfidenceLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Traffic Confidence: 0.3"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/trafficConfidenceSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="0.3"
+                    android:valueFrom="0.0"
+                    android:valueTo="1.0"
+                    android:stepSize="0.05" />
+            </LinearLayout>
+        </ScrollView>
+    </com.google.android.material.card.MaterialCardView>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

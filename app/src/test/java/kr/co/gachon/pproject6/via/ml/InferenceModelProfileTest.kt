@@ -26,6 +26,15 @@ class InferenceModelProfileTest {
         assertFalse(profile.recommendedUseGpu)
         assertEquals(480, profile.analysisResolution.width)
         assertEquals(360, profile.analysisResolution.height)
+        assertEquals("저사양 CPU 모델", profile.displayName())
+    }
+
+    @Test
+    fun displayNameMapsHighEndFloat16ToUserFriendlyAlias() {
+        val profile = InferenceModelProfile.fromFileName("best_float16_640.tflite")
+
+        assertEquals("최고 성능 GPU 모델", profile.displayName())
+        assertEquals("최고 성능 GPU 모델 · 640px", profile.displayNameWithSize())
     }
 
     @Test

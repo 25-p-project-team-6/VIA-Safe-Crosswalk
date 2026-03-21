@@ -23,12 +23,14 @@ class CameraManager(
     private val imageAnalyzerCallback: (ImageProxy) -> Unit
 ) {
     private var camera: Camera? = null
+    private var cameraProvider: ProcessCameraProvider? = null
 
     fun startCamera(onZoomStateReady: ((maxZoom: Float) -> Unit)? = null) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+            this.cameraProvider = cameraProvider
 
             val preview = Preview.Builder()
                 .build()
@@ -70,5 +72,10 @@ class CameraManager(
 
     fun setZoom(ratio: Float) {
         camera?.cameraControl?.setZoomRatio(ratio)
+    }
+
+    fun stopCamera() {
+        cameraProvider?.unbindAll()
+        camera = null
     }
 }
