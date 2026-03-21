@@ -2,15 +2,26 @@ package kr.co.gachon.pproject6.via.util
 
 import java.util.ArrayDeque
 
-class PerformanceTracker {
+class PerformanceTracker(
+    private val timeProvider: () -> Long = System::currentTimeMillis
+) {
+    private data class FrameMeasurement(
+        val timestamp: Long,
+        val inferenceTime: Long,
+        val stageDurationsMs: Map<String, Long>
+    )
+
+    companion object {
+        private const val WINDOW_MS = 10_000L
+        private val DEFAULT_STAGE_ORDER = listOf("copy", "rotate", "detect", "analyze", "ui")
+    }
     
     // Member variables for stats
-    private var lastFpsTimestamp = System.currentTimeMillis()
+    private var lastFpsTimestamp = timeProvider()
     private var frameCount = 0
 
-    // Store timestamps and latencies for 10s sliding window
-    // Pair(timestamp, latency)
-    private val frameData = ArrayDeque<Pair<Long, Long>>()
+    // Store timestamps and latencies for 10s sliding window.
+    private val frameData = ArrayDeque<FrameMeasurement>()
     
     // Calculated stats
     var currentFpsStr: String = "FPS: 0.00"
@@ -19,35 +30,69 @@ class PerformanceTracker {
         private set
     var avgLatencyStr: String = "Avg Latency: 0ms"
         private set
+    var stageBreakdownStr: String = "Stages: n/a"
+        private set
 
     fun clear() {
         frameData.clear()
         currentFpsStr = "FPS: 0"
         avgFpsStr = "Avg FPS: 0"
         avgLatencyStr = "Avg Latency: 0ms"
+        stageBreakdownStr = "Stages: n/a"
         frameCount = 0
-        lastFpsTimestamp = System.currentTimeMillis()
+        lastFpsTimestamp = timeProvider()
     }
 
-    fun update(inferenceTime: Long) {
-        val currentTime = System.currentTimeMillis()
+    fun update(inferenceTime: Long, stageDurationsMs: Map<String, Long> = emptyMap()) {
+        val currentTime = timeProvider()
 
         // Add current frame data
-        frameData.addLast(Pair(currentTime, inferenceTime))
+        frameData.addLast(
+            FrameMeasurement(
+                timestamp = currentTime,
+                inferenceTime = inferenceTime,
+                stageDurationsMs = stageDurationsMs.toMap()
+            )
+        )
 
         // Remove old data (older than 10 seconds)
-        while (!frameData.isEmpty() && currentTime - frameData.peekFirst().first > 10000) {
+        while (true) {
+            val oldestFrame = frameData.peekFirst() ?: break
+            if (currentTime - oldestFrame.timestamp <= WINDOW_MS) {
+                break
+            }
             frameData.removeFirst()
         }
 
         // Calculate Average Latency (10s window)
         if (!frameData.isEmpty()) {
             var totalLatency = 0L
-            for (p in frameData) {
-                totalLatency += p.second
+            val stageTotals = linkedMapOf<String, Long>()
+
+            for (frame in frameData) {
+                totalLatency += frame.inferenceTime
+                for ((stage, durationMs) in frame.stageDurationsMs) {
+                    stageTotals[stage] = (stageTotals[stage] ?: 0L) + durationMs
+                }
             }
             val avgLatency = totalLatency / frameData.size
             avgLatencyStr = "Avg Latency: ${avgLatency}ms"
+
+            if (stageTotals.isNotEmpty()) {
+                val stageOrder = LinkedHashSet<String>().apply {
+                    addAll(DEFAULT_STAGE_ORDER)
+                    addAll(stageTotals.keys.sorted())
+                }
+                val breakdown = stageOrder
+                    .mapNotNull { stage ->
+                        val total = stageTotals[stage] ?: return@mapNotNull null
+                        "$stage ${total / frameData.size}ms"
+                    }
+                    .joinToString(" | ")
+                stageBreakdownStr = "Stages: $breakdown"
+            } else {
+                stageBreakdownStr = "Stages: n/a"
+            }
         }
 
         frameCount++
@@ -62,8 +107,8 @@ class PerformanceTracker {
 
             // Calculate Average FPS (10s window)
             if (!frameData.isEmpty()) {
-                val oldestTime = frameData.peekFirst()?.first
-                val duration = currentTime - oldestTime!!
+                val oldestFrame = frameData.peekFirst() ?: return
+                val duration = currentTime - oldestFrame.timestamp
 
                 if (duration > 0) {
                     val calculatedAvgFps =

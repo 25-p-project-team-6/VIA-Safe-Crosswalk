@@ -1,14 +1,43 @@
 package kr.co.gachon.pproject6.via.util
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
+import android.graphics.Paint
 
 object ImageUtils {
-    fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-        if (degrees == 0f) return bitmap
-        
-        val matrix = Matrix()
-        matrix.postRotate(degrees)
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    fun rotateBitmap(bitmap: Bitmap, degrees: Float, reusableBitmap: Bitmap? = null): Bitmap {
+        val normalizedDegrees = ((degrees % 360f) + 360f) % 360f
+        if (normalizedDegrees == 0f) return bitmap
+
+        val swapDimensions = normalizedDegrees == 90f || normalizedDegrees == 270f
+        val targetWidth = if (swapDimensions) bitmap.height else bitmap.width
+        val targetHeight = if (swapDimensions) bitmap.width else bitmap.height
+        val bitmapConfig = bitmap.config ?: Bitmap.Config.ARGB_8888
+
+        val targetBitmap = if (
+            reusableBitmap != null &&
+            reusableBitmap.width == targetWidth &&
+            reusableBitmap.height == targetHeight &&
+            reusableBitmap.config == bitmapConfig &&
+            reusableBitmap.isMutable
+        ) {
+            reusableBitmap
+        } else {
+            Bitmap.createBitmap(targetWidth, targetHeight, bitmapConfig)
+        }
+
+        targetBitmap.eraseColor(Color.TRANSPARENT)
+
+        val matrix = Matrix().apply {
+            postTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
+            postRotate(normalizedDegrees)
+            postTranslate(targetWidth / 2f, targetHeight / 2f)
+        }
+        Canvas(targetBitmap).drawBitmap(bitmap, matrix, bitmapPaint)
+        return targetBitmap
     }
 }

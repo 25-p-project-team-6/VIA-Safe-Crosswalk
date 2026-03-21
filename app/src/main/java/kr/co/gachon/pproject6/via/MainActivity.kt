@@ -2,29 +2,40 @@ package kr.co.gachon.pproject6.via
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.PreviewView
-import androidx.core.content.ContextCompat
-import androidx.activity.result.contract.ActivityResultContracts
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import org.tensorflow.lite.gpu.CompatibilityList
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-
+import androidx.core.content.ContextCompat
+import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
+import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
+import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.PostProcessor
+import kr.co.gachon.pproject6.via.ml.SignalAnalysisResult
+import kr.co.gachon.pproject6.via.ml.SignalAnalyzer
+import kr.co.gachon.pproject6.via.ml.TrafficLightState
+import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kr.co.gachon.pproject6.via.ml.YoloDetector
-import kr.co.gachon.pproject6.via.ml.ObjectTracker
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
+import kr.co.gachon.pproject6.via.util.RateTracker
+import org.tensorflow.lite.gpu.CompatibilityList
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewFinder: PreviewView
@@ -33,17 +44,35 @@ class MainActivity : AppCompatActivity() {
     private lateinit var avgFpsText: TextView
     private lateinit var latencyText: TextView
     private lateinit var avgLatencyText: TextView
+    private lateinit var stageBreakdownText: TextView
+    private lateinit var backendStatusText: TextView
+    private lateinit var inputFpsText: TextView
     private lateinit var modelNameText: TextView
+    private lateinit var targetInfoText: TextView
+    private lateinit var decisionDebugText: TextView
+    private lateinit var tuningDebugText: TextView
+    private lateinit var statusTitleText: TextView
+    private lateinit var statusDetailText: TextView
+    private lateinit var confidenceSliderLabel: TextView
+    private lateinit var trafficConfidenceLabel: TextView
     private lateinit var confidenceSlider: Slider
+    private lateinit var trafficConfidenceSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var zoomSwitch: android.widget.Switch
+    private lateinit var rawDetectionSwitch: android.widget.Switch
+    private lateinit var trafficLogicSwitch: android.widget.Switch
+    private lateinit var highlightTargetSwitch: android.widget.Switch
     private lateinit var debugContainer: android.widget.LinearLayout
     private lateinit var debugToggleButton: android.widget.ImageButton
+    private lateinit var statusBorder: View
+    private var lastLoggedDecisionSummary: String? = null
+    private var pendingBackendToast: String? = null
+    private var suppressGpuToggleCallback = false
 
     private var cameraManager: CameraManager? = null
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
-    private var showDebugInfo = true
+    private var showDebugInfo = false
 
     // Set this to false to hide bounding boxes and labels
     private val showBBoxOverlay = true
@@ -63,13 +92,17 @@ class MainActivity : AppCompatActivity() {
     // GPU Support Flag
     private var isGpuSupported = false
     
-    private var currentModelName = "best_float16_640.tflite" // Default model
+    private var currentModelName = "best_float16_640.tflite" // Practical default for current device targets
+    private var currentModelProfile = InferenceModelProfile.fromFileName(currentModelName)
+    private var availableModelFiles: List<String> = emptyList()
+    private var reusableRotatedBitmap: Bitmap? = null
     
     // Performance Tracker
     private val performanceTracker = PerformanceTracker()
+    private val inputRateTracker = RateTracker(label = "Input FPS")
 
-    // Object Tracker
-    private val objectTracker = ObjectTracker()
+    private val signalAnalyzer = SignalAnalyzer()
+    private lateinit var feedbackManager: SignalFeedbackManager
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -98,58 +131,67 @@ class MainActivity : AppCompatActivity() {
 
         viewFinder = findViewById(R.id.viewFinder)
         overlay = findViewById(R.id.overlay)
-        overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         debugToggleButton = findViewById(R.id.debugToggleButton)
+        backendStatusText = findViewById(R.id.backendStatusText)
+        inputFpsText = findViewById(R.id.inputFpsText)
         modelNameText = findViewById(R.id.modelNameText)
         fpsText = findViewById(R.id.fpsText)
         avgFpsText = findViewById(R.id.avgFpsText)
         latencyText = findViewById(R.id.latencyText)
         avgLatencyText = findViewById(R.id.avgLatencyText)
+        stageBreakdownText = findViewById(R.id.stageBreakdownText)
+        targetInfoText = findViewById(R.id.targetInfoText)
+        decisionDebugText = findViewById(R.id.decisionDebugText)
+        tuningDebugText = findViewById(R.id.tuningDebugText)
+        statusTitleText = findViewById(R.id.statusTitleText)
+        statusDetailText = findViewById(R.id.statusDetailText)
+        confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
+        trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
         confidenceSlider = findViewById(R.id.confidenceSlider)
+        trafficConfidenceSlider = findViewById(R.id.trafficConfidenceSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
-
-
+        zoomSwitch = findViewById(R.id.swZoom2x)
+        rawDetectionSwitch = findViewById(R.id.swRawDetection)
+        trafficLogicSwitch = findViewById(R.id.swTrafficLogic)
+        highlightTargetSwitch = findViewById(R.id.swHighlightTarget)
+        statusBorder = findViewById(R.id.statusBorder)
+        feedbackManager = SignalFeedbackManager(this)
+        tuningDebugText.text = "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}"
+        Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
 
         debugContainer.visibility =
-            if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+            if (showDebugInfo) View.VISIBLE else View.GONE
 
         debugToggleButton.setOnClickListener {
             showDebugInfo = !showDebugInfo
             debugContainer.visibility =
-                if (showDebugInfo) android.view.View.VISIBLE else android.view.View.GONE
+                if (showDebugInfo) View.VISIBLE else View.GONE
         }
-
-        // Initialize Slider Values
-
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             generalObjThreshold = value
-            findViewById<android.widget.TextView>(R.id.confidenceSliderLabel).text =
-                String.format("General Confidence: %.2f", value)
+            confidenceSliderLabel.text = String.format("General Confidence: %.2f", value)
             updateDetectorThresholds()
         }
 
-        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).addOnChangeListener { _, value, _ ->
+        trafficConfidenceSlider.addOnChangeListener { _, value, _ ->
             trafficLightThreshold = value
-            findViewById<android.widget.TextView>(R.id.trafficConfidenceLabel).text =
-                String.format("Traffic Confidence: %.2f", value)
+            trafficConfidenceLabel.text = String.format("Traffic Confidence: %.2f", value)
             updateDetectorThresholds()
         }
 
-        // Initialize Slider Values (Trigger listeners)
         confidenceSlider.value = 0.5f
-        findViewById<com.google.android.material.slider.Slider>(R.id.trafficConfidenceSlider).value = 0.15f
+        trafficConfidenceSlider.value = 0.15f
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressGpuToggleCallback) {
+                return@setOnCheckedChangeListener
+            }
             initDetector(isChecked)
-            // Reset average stats when hardware changes
-            performanceTracker.clear()
-            avgFpsText.text = "Avg FPS: 0"
-            avgLatencyText.text = "Avg Latency: 0ms"
+            resetPerformanceStats()
         }
 
-        zoomSwitch = findViewById(R.id.swZoom2x)
         zoomSwitch.setOnCheckedChangeListener { _, isChecked ->
             val zoomRatio = if (isChecked) 2.0f else 1.0f
             cameraManager?.setZoom(zoomRatio)
@@ -157,13 +199,22 @@ class MainActivity : AppCompatActivity() {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        // Check GPU compatibility and set default
+        // Check GPU compatibility but still prefer probing GPU on float models.
         val compatList = CompatibilityList()
         isGpuSupported = compatList.isDelegateSupportedOnThisDevice
 
-        gpuSwitch.isChecked = isGpuSupported
-        // Initialize Detector with GPU if supported, otherwise CPU
-        initDetector(isGpuSupported)
+        availableModelFiles = discoverModelFiles()
+        InferenceModelProfile.recommend(availableModelFiles, isGpuSupported)?.let { recommendedProfile ->
+            currentModelName = recommendedProfile.fileName
+            currentModelProfile = recommendedProfile
+        }
+        configureGpuSwitch(
+            checked = currentModelProfile.recommendedUseGpu,
+            enabled = currentModelProfile.recommendedUseGpu
+        )
+        publishBackendStatus("Initializing…")
+        // Initialize detector with the recommended delegate for the selected model.
+        initDetector(gpuSwitch.isChecked)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -196,13 +247,49 @@ class MainActivity : AppCompatActivity() {
         detector?.specificConfidenceThresholds = specificMap
     }
 
+    private fun discoverModelFiles(): List<String> {
+        return try {
+            assets.list("")
+                ?.filter { it.endsWith(".tflite", ignoreCase = true) }
+                ?.sorted()
+                ?: emptyList()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error scanning model assets", e)
+            emptyList()
+        }
+    }
+
+    private fun configureGpuSwitch(checked: Boolean, enabled: Boolean) {
+        suppressGpuToggleCallback = true
+        gpuSwitch.isChecked = checked
+        gpuSwitch.isEnabled = enabled
+        gpuSwitch.text = when {
+            !currentModelProfile.recommendedUseGpu -> "Use GPU (INT8 uses CPU)"
+            isGpuSupported -> "Use GPU"
+            else -> "Use GPU (Experimental)"
+        }
+        suppressGpuToggleCallback = false
+    }
+
+    private fun applyModelSelection(selectedModel: String) {
+        currentModelName = selectedModel
+        currentModelProfile = InferenceModelProfile.fromFileName(selectedModel)
+        reusableRotatedBitmap = null
+
+        val shouldEnableGpu = currentModelProfile.recommendedUseGpu
+        configureGpuSwitch(
+            checked = shouldEnableGpu,
+            enabled = shouldEnableGpu
+        )
+
+        resetPerformanceStats()
+        initDetector(gpuSwitch.isChecked)
+    }
+
     private fun setupModelSpinner() {
         val spinner = findViewById<android.widget.Spinner>(R.id.modelSpinner)
         try {
-            // Scan assets for .tflite files
-            val assetManager = assets
-            val files = assetManager.list("")
-            val modelFiles = files?.filter { it.endsWith(".tflite") }?.sorted() ?: emptyList()
+            val modelFiles = availableModelFiles
 
             if (modelFiles.isNotEmpty()) {
                 val adapter = android.widget.ArrayAdapter(
@@ -229,24 +316,7 @@ class MainActivity : AppCompatActivity() {
                         ) {
                             val selectedModel = modelFiles[position]
                             if (selectedModel != currentModelName) {
-                                currentModelName = selectedModel
-                                
-                                // Reset logic: Update switch state availability based on hardware support
-                                runOnUiThread {
-                                    if (isGpuSupported) {
-                                        gpuSwitch.isEnabled = true
-                                        // Auto-turn ON GPU if supported
-                                        if (!gpuSwitch.isChecked) {
-                                            gpuSwitch.isChecked = true // Triggers listener -> initDetector(true)
-                                        } else {
-                                            // Already On, listener won't fire, so init manually
-                                            initDetector(true)
-                                        }
-                                    } else {
-                                        // GPU not supported by device
-                                        initDetector(false)
-                                    }
-                                }
+                                applyModelSelection(selectedModel)
                             }
                         }
 
@@ -258,20 +328,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateDebugInfo(inferenceTime: Long) {
-        latencyText.text = "Latency: ${inferenceTime}ms"
+    private fun updateDebugInfo(
+        inferenceTime: Long,
+        totalLatencyMs: Long,
+        stageDurationsMs: Map<String, Long>
+    ) {
+        latencyText.text = "Detect: ${inferenceTime}ms | Total: ${totalLatencyMs}ms"
         
         // Delegate calculation to Tracker
-        performanceTracker.update(inferenceTime)
+        performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        fpsText.text = performanceTracker.currentFpsStr
+        inputFpsText.text = inputRateTracker.rateStr
+        fpsText.text = "Detect ${performanceTracker.currentFpsStr}"
         avgFpsText.text = performanceTracker.avgFpsStr
         avgLatencyText.text = performanceTracker.avgLatencyStr
+        stageBreakdownText.text = performanceTracker.stageBreakdownStr
     }
 
     private fun initDetector(useGpu: Boolean) {
         cameraExecutor?.execute {
+            Log.e("VIA_GPU", "detector_init_start model=$currentModelName requestedGpu=$useGpu")
             val oldDetector = detector
             detector = null // Pause detection
 
@@ -301,7 +378,19 @@ class MainActivity : AppCompatActivity() {
                 updateDetectorThresholds()
 
                 runOnUiThread {
-                    modelNameText.text = "Model: $modelName"
+                    val backendStatus =
+                        "model=$modelName backend=${newDetector.runtimeBackendLabel} " +
+                            "requestedGpu=$useGpu compat=${newDetector.compatibilityReportedSupported} " +
+                            "analysis=${currentModelProfile.analysisResolution.width}x" +
+                            "${currentModelProfile.analysisResolution.height}"
+                    modelNameText.text = "Model: ${currentModelProfile.summary(newDetector.runtimeBackendLabel)}"
+                    Log.i("VIA_GPU", "detector_ready $backendStatus")
+                    Log.w("VIA_GPU", "detector_ready $backendStatus")
+                    publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
+                    maybeShowBackendToast("Inference backend: ${newDetector.runtimeBackendLabel}")
+                    if (cameraManager != null) {
+                        startCamera()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error initializing detector", e)
@@ -313,13 +402,23 @@ class MainActivity : AppCompatActivity() {
                     ).show()
 
                     if (useGpu) {
+                        Log.e(
+                            "VIA_GPU",
+                            "detector_init_failed requestedGpu=true model=$currentModelName; falling back to CPU",
+                            e
+                        )
+                        publishBackendStatus("Backend: CPU (GPU init failed)")
+                        maybeShowBackendToast("Inference backend: CPU")
                         Toast.makeText(
                             this,
                             "GPU init failed. Switching to CPU.",
                             Toast.LENGTH_SHORT
                         ).show()
-                        gpuSwitch.isChecked = false
-                        gpuSwitch.isEnabled = false
+                        configureGpuSwitch(
+                            checked = false,
+                            enabled = currentModelProfile.recommendedUseGpu
+                        )
+                        initDetector(false)
                     }
                 }
             }
@@ -327,7 +426,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCamera() {
-        cameraManager = CameraManager(this, this, viewFinder, cameraExecutor!!) { image ->
+        val resolution = currentModelProfile.analysisResolution
+        cameraManager = CameraManager(
+            this,
+            this,
+            viewFinder,
+            cameraExecutor!!,
+            android.util.Size(resolution.width, resolution.height)
+        ) { image ->
             processImage(image)
         }
         
@@ -351,105 +457,257 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun processImage(imageProxy: ImageProxy) {
-        if (detector == null) {
+        inputRateTracker.mark()
+        val activeDetector = detector
+        if (activeDetector == null) {
             imageProxy.close()
             return
         }
 
-        val bitmap = imageProxy.toBitmap()
-        
-        // Use ImageUtils for rotation
-        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val rotatedBitmap = ImageUtils.rotateBitmap(bitmap, rotationDegrees.toFloat())
+        val stageDurationsMs = linkedMapOf<String, Long>()
+        val frameStartNs = SystemClock.elapsedRealtimeNanos()
+        var imageClosed = false
 
-        val result = detector!!.detect(rotatedBitmap, confidenceThreshold)
+        try {
+            val copyStartNs = SystemClock.elapsedRealtimeNanos()
+            val bitmap = imageProxy.toBitmap()
+            val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+            imageProxy.close()
+            imageClosed = true
+            stageDurationsMs["copy"] = elapsedMillis(copyStartNs)
 
-        // Execute PostProcessor for logging (logic test)
-        // This will print logs but we don't use the return value for the overlay
-        var trafficState = PostProcessor.TrafficLightState.UNKNOWN
-
-        // Check switches (UI thread check not ideal here but safe enough if cached)
-        val showRawBoxes =
-            findViewById<android.widget.Switch>(R.id.swRawDetection)?.isChecked == true
-        val enableTrafficLogic =
-            findViewById<android.widget.Switch>(R.id.swTrafficLogic)?.isChecked == true
-        val enableHighlight =
-            findViewById<android.widget.Switch>(R.id.swHighlightTarget)?.isChecked == true
-
-        var targetScore = 0f
-        var targetCls = "None"
-
-        var targetBox: OverlayView.BoundingBox? = null
-        // Keep track of boxes to show. Default to raw result.
-        var boxesToShow = result.boxes
-
-        if (enableTrafficLogic) {
-            // Execute PostProcessor for logging and logic
-            val correctedBoxes = PostProcessor.applyColorCorrection(rotatedBitmap, result.boxes)
-            
-            // Use ObjectTracker to select target (with tracking)
-            val targetData = objectTracker.selectTarget(correctedBoxes)
-
-            targetBox = targetData?.first
-            targetScore = targetData?.second ?: 0f
-            if (targetBox != null) {
-                targetCls = targetBox.clsName
-                if (enableHighlight) {
-                    targetBox.isTarget = true // Highlight the target only if enabled
-                }
+            val rotateStartNs = SystemClock.elapsedRealtimeNanos()
+            val rotatedBitmap = ImageUtils.rotateBitmap(
+                bitmap = bitmap,
+                degrees = rotationDegrees.toFloat(),
+                reusableBitmap = reusableRotatedBitmap
+            )
+            if (rotatedBitmap !== bitmap) {
+                reusableRotatedBitmap = rotatedBitmap
             }
+            stageDurationsMs["rotate"] = elapsedMillis(rotateStartNs)
 
-            trafficState = PostProcessor.updateTrafficLightState(targetBox)
-            boxesToShow = correctedBoxes // Show processed boxes (with flags/color swaps)
-        }
+            val detectStartNs = SystemClock.elapsedRealtimeNanos()
+            val result = activeDetector.detect(rotatedBitmap, confidenceThreshold)
+            stageDurationsMs["detect"] = elapsedMillis(detectStartNs)
 
-        runOnUiThread {
-            overlay.setInputImageSize(rotatedBitmap.width, rotatedBitmap.height)
+            val enableTrafficLogic = trafficLogicSwitch.isChecked
+            val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
+            val analysisResult = signalAnalyzer.analyze(
+                bitmap = rotatedBitmap,
+                rawBoxes = result.boxes,
+                enableTrafficLogic = enableTrafficLogic,
+                enableHighlight = highlightTargetSwitch.isChecked
+            )
+            stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
 
-            // Logic for Overlay Visibility
-            // If showRawBoxes is ON, show boxesToShow (which is either raw or corrected based on logic switch)
-            // If showRawBoxes is OFF, show nothing.
-            if (showRawBoxes && showBBoxOverlay) { // showBBoxOverlay is controlled by eye icon
-                overlay.setResults(boxesToShow)
-            } else {
-                overlay.setResults(emptyList())
-            }
-            updateDebugInfo(result.inferenceTime)
+            runOnUiThread {
+                val uiStartNs = SystemClock.elapsedRealtimeNanos()
+                renderOverlay(rotatedBitmap, analysisResult, rawDetectionSwitch.isChecked)
+                updateTargetInfo(analysisResult, enableTrafficLogic)
+                updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
+                updateUserStatus(analysisResult, enableTrafficLogic)
+                updateStatusBorder(analysisResult.userGuidanceState, enableTrafficLogic)
+                logDecisionIfChanged(analysisResult, enableTrafficLogic)
 
-            // Update Target Info TextView
-            val targetText = findViewById<android.widget.TextView>(R.id.targetInfoText)
-            if (targetText != null) {
-                targetText.text = if (enableTrafficLogic) {
-                    val ratioText = if (targetBox != null && targetBox.debugRatio >= 0) {
-                        String.format(" (Ratio: %.2f)", targetBox.debugRatio)
-                    } else {
-                        ""
-                    }
-                    String.format("Target: %s (Score: %.2f)%s", targetCls, targetScore, ratioText)
+                if (enableTrafficLogic) {
+                    feedbackManager.onGuidanceStateChanged(analysisResult.userGuidanceState)
                 } else {
-                    "Logic Disabled"
+                    feedbackManager.clearState()
                 }
-            }
 
-            // Update Border UI
-            val statusBorder = findViewById<android.view.View>(R.id.statusBorder)
-            if (enableTrafficLogic) {
-                when (trafficState) {
-                    PostProcessor.TrafficLightState.RED -> statusBorder.setBackgroundResource(R.drawable.border_red)
-                    PostProcessor.TrafficLightState.GREEN -> statusBorder.setBackgroundResource(R.drawable.border_green)
-                    else -> statusBorder.setBackgroundResource(R.drawable.border_transparent)
-                }
-            } else {
-                statusBorder.setBackgroundResource(R.drawable.border_transparent)
+                stageDurationsMs["ui"] = elapsedMillis(uiStartNs)
+                updateDebugInfo(
+                    inferenceTime = result.inferenceTime,
+                    totalLatencyMs = elapsedMillis(frameStartNs),
+                    stageDurationsMs = stageDurationsMs
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error processing camera frame", e)
+        } finally {
+            if (!imageClosed) {
+                imageProxy.close()
             }
         }
-
-        imageProxy.close()
     }
+
+    private fun renderOverlay(
+        bitmap: Bitmap,
+        analysisResult: SignalAnalysisResult,
+        showRawBoxes: Boolean
+    ) {
+        overlay.setInputImageSize(bitmap.width, bitmap.height)
+
+        if (showRawBoxes && showBBoxOverlay) {
+            overlay.setResults(analysisResult.boxesToShow)
+        } else {
+            overlay.setResults(emptyList())
+        }
+    }
+
+    private fun updateTargetInfo(
+        analysisResult: SignalAnalysisResult,
+        enableTrafficLogic: Boolean
+    ) {
+        targetInfoText.text = if (enableTrafficLogic) {
+            val ratioText = if (analysisResult.targetBox != null && analysisResult.targetBox.debugRatio >= 0) {
+                String.format(" (Ratio: %.2f)", analysisResult.targetBox.debugRatio)
+            } else {
+                ""
+            }
+            val targetSummary = String.format(
+                "Target: %s (Score: %.2f)%s",
+                analysisResult.targetClassName,
+                analysisResult.targetScore,
+                ratioText
+            )
+            val riskSummary = if (analysisResult.hasBlockingRisk) {
+                " | Risk: ${analysisResult.blockingRiskLabels.joinToString(", ")}"
+            } else {
+                ""
+            }
+            targetSummary + riskSummary
+        } else {
+            "Logic Disabled"
+        }
+    }
+
+    private fun updateDecisionDebugInfo(
+        analysisResult: SignalAnalysisResult,
+        enableTrafficLogic: Boolean
+    ) {
+        decisionDebugText.text = if (enableTrafficLogic) {
+            "Decision: ${analysisResult.userGuidanceState} | Phase: ${analysisResult.guidancePhase} | Reason: ${analysisResult.guidanceBlockReason}"
+        } else {
+            "Decision: DISABLED"
+        }
+    }
+
+    private fun updateUserStatus(
+        analysisResult: SignalAnalysisResult,
+        enableTrafficLogic: Boolean
+    ) {
+        if (!enableTrafficLogic) {
+            statusTitleText.text = "분석 일시중지"
+            statusTitleText.setTextColor(Color.WHITE)
+            statusDetailText.text = "신호 인식이 일시중지되었습니다"
+            return
+        }
+
+        when (analysisResult.trafficState) {
+            TrafficLightState.RED -> {
+                statusTitleText.text = "멈추세요"
+                statusTitleText.setTextColor(Color.parseColor("#FF6B6B"))
+                statusDetailText.text = "빨간불"
+            }
+
+            TrafficLightState.GREEN -> {
+                when (analysisResult.userGuidanceState) {
+                    UserGuidanceState.GO -> {
+                        statusTitleText.text = "건너세요"
+                        statusTitleText.setTextColor(Color.parseColor("#51CF66"))
+                        statusDetailText.text = "초록 전환이 확인되었습니다"
+                    }
+
+                    UserGuidanceState.WAIT,
+                    UserGuidanceState.STOP -> {
+                        statusTitleText.text = "잠시 기다리세요"
+                        statusTitleText.setTextColor(Color.WHITE)
+                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
+                            "차량 또는 자전거를 확인했습니다"
+                        } else if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
+                            "다음 신호 전환을 기다리고 있습니다"
+                        } else {
+                            "처음 본 초록불은 안내하지 않습니다"
+                        }
+                    }
+                }
+            }
+
+            TrafficLightState.UNKNOWN -> {
+                statusTitleText.text = "잠시 기다리세요"
+                statusTitleText.setTextColor(Color.WHITE)
+                statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
+                    "주변 위험 요소를 확인 중입니다"
+                } else if (analysisResult.targetBox == null) {
+                    "신호등을 화면 중앙에 맞춰주세요"
+                } else {
+                    "신호 상태를 확인하고 있습니다"
+                }
+            }
+        }
+    }
+
+    private fun logDecisionIfChanged(
+        analysisResult: SignalAnalysisResult,
+        enableTrafficLogic: Boolean
+    ) {
+        val summary = if (!enableTrafficLogic) {
+            "logic_disabled"
+        } else {
+            "guidance=${analysisResult.userGuidanceState}," +
+                "phase=${analysisResult.guidancePhase}," +
+                "reason=${analysisResult.guidanceBlockReason}," +
+                "traffic=${analysisResult.trafficState}," +
+                "risk=${analysisResult.blockingRiskLabels.joinToString("|").ifBlank { "none" }}"
+        }
+
+        if (summary != lastLoggedDecisionSummary) {
+            lastLoggedDecisionSummary = summary
+            Log.i("VIA_GUIDANCE", summary)
+        }
+    }
+
+    private fun updateStatusBorder(
+        guidanceState: UserGuidanceState,
+        enableTrafficLogic: Boolean
+    ) {
+        if (!enableTrafficLogic) {
+            statusBorder.setBackgroundResource(R.drawable.border_transparent)
+            return
+        }
+
+        when (guidanceState) {
+            UserGuidanceState.STOP -> statusBorder.setBackgroundResource(R.drawable.border_red)
+            UserGuidanceState.GO -> statusBorder.setBackgroundResource(R.drawable.border_green)
+            UserGuidanceState.WAIT -> statusBorder.setBackgroundResource(R.drawable.border_transparent)
+        }
+    }
+
+    private fun resetPerformanceStats() {
+        performanceTracker.clear()
+        inputRateTracker.clear()
+        inputFpsText.text = "Input FPS: 0"
+        avgFpsText.text = "Avg FPS: 0"
+        avgLatencyText.text = "Avg Latency: 0ms"
+        fpsText.text = "Detect FPS: 0"
+        latencyText.text = "Detect: 0ms | Total: 0ms"
+        stageBreakdownText.text = "Stages: n/a"
+    }
+
+    private fun publishBackendStatus(statusText: String) {
+        backendStatusText.text = statusText
+    }
+
+    private fun maybeShowBackendToast(message: String) {
+        if (message == pendingBackendToast) {
+            return
+        }
+        pendingBackendToast = message
+        window.decorView.post {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun elapsedMillis(startTimeNs: Long): Long =
+        (SystemClock.elapsedRealtimeNanos() - startTimeNs) / 1_000_000L
 
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor?.shutdown()
         detector?.close()
+        feedbackManager.release()
+        signalAnalyzer.reset()
     }
 }

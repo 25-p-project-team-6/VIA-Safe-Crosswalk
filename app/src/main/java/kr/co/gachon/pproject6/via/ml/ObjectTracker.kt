@@ -67,6 +67,10 @@ class ObjectTracker {
         }
     }
 
+    fun reset() {
+        trackedTarget = null
+    }
+
     private fun calculateScore(box: OverlayView.BoundingBox): Float {
         // Center is (0.5, 0.5) in normalized coordinates
         val centerX = 0.5f

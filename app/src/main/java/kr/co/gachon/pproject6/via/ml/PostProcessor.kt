@@ -2,26 +2,12 @@ package kr.co.gachon.pproject6.via.ml
 
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.util.Log
 import kr.co.gachon.pproject6.via.ui.OverlayView
 
 object PostProcessor {
-    private const val TAG = "PostProcessor"
+    private val stateTracker = TrafficLightStateTracker()
+    private var scratchPixels = IntArray(0)
 
-    enum class TrafficLightState {
-        RED, GREEN, UNKNOWN
-    }
-
-
-    // State variables for robustness
-    private var lastKnownState: TrafficLightState = TrafficLightState.UNKNOWN
-    private var lastStateTimeTime: Long = 0
-    private var consecutiveCount = 0
-    private var candidateState: TrafficLightState = TrafficLightState.UNKNOWN
-
-    // Constants
-    private const val PERSISTENCE_DURATION_MS = 5000L // Keep state for 5 seconds even if lost
-    private const val TRIGGER_THRESHOLD = 3 // Need 3 consecutive frames to switch
     fun applyColorCorrection(
         bitmap: Bitmap,
         boxes: List<OverlayView.BoundingBox>
@@ -48,17 +34,29 @@ object PostProcessor {
                 val h = (rect.height() * bitmap.height).toInt().coerceIn(1, bitmap.height - y)
 
                 if (w > 0 && h > 0) {
-                    val pixels = IntArray(w * h)
+                    val pixelCount = w * h
+                    if (scratchPixels.size < pixelCount) {
+                        scratchPixels = IntArray(pixelCount)
+                    }
+                    val pixels = scratchPixels
                     bitmap.getPixels(pixels, 0, w, x, y, w, h)
 
                     val isCurrentGreen = clsName.equals("green", ignoreCase = true)
                     // Calculate ratio for current color
-                    val currentRatio = calculateColorRatio(pixels, isCurrentGreen)
+                    val currentRatio = calculateColorRatio(
+                        pixels = pixels,
+                        pixelCount = pixelCount,
+                        isGreen = isCurrentGreen
+                    )
                     debugRatio = currentRatio
 
                     if (currentRatio <= 0.05f) {
                         // Check other color
-                        val otherRatio = calculateColorRatio(pixels, !isCurrentGreen)
+                        val otherRatio = calculateColorRatio(
+                            pixels = pixels,
+                            pixelCount = pixelCount,
+                            isGreen = !isCurrentGreen
+                        )
 
                         if (otherRatio > 0.05f) {
                             // Swap!
@@ -82,15 +80,28 @@ object PostProcessor {
         return correctedBoxes
     }
 
-    private fun calculateColorRatio(pixels: IntArray, isGreen: Boolean): Float {
+    private fun calculateColorRatio(
+        pixels: IntArray,
+        pixelCount: Int,
+        isGreen: Boolean
+    ): Float {
         var count = 0
+        var sampledCount = 0
         val hsv = FloatArray(3)
+        val sampleStride = when {
+            pixelCount >= 16_384 -> 4
+            pixelCount >= 4_096 -> 2
+            else -> 1
+        }
 
-        for (color in pixels) {
+        var index = 0
+        while (index < pixelCount) {
+            val color = pixels[index]
             Color.colorToHSV(color, hsv)
             val h = hsv[0] // 0..360
             val s = hsv[1] // 0..1
             val v = hsv[2] // 0..1
+            sampledCount++
 
             // S, V thresholds: Green: S>25, V>40 | Red: S>50, V>50
 
@@ -103,15 +114,15 @@ object PostProcessor {
                     count++
                 }
             }
+            index += sampleStride
         }
 
-        return if (pixels.isNotEmpty()) count.toFloat() / pixels.size else 0f
+        return if (sampledCount > 0) count.toFloat() / sampledCount else 0f
     }
 
 
 
     fun updateTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
-        // Determine raw input state
         val currentState = when {
             targetBox == null -> TrafficLightState.UNKNOWN
             targetBox.clsName.equals("red", ignoreCase = true) -> TrafficLightState.RED
@@ -119,51 +130,11 @@ object PostProcessor {
             else -> TrafficLightState.UNKNOWN
         }
 
-        val currentTime = System.currentTimeMillis()
+        val isHighConfidence = targetBox != null && targetBox.score >= 0.5f
+        return stateTracker.update(currentState, isHighConfidence)
+    }
 
-        // 1. Consecutive Detection Logic (Debouncing)
-        if (currentState != TrafficLightState.UNKNOWN) {
-            if (currentState == candidateState) {
-                consecutiveCount++
-            } else {
-                candidateState = currentState
-                consecutiveCount = 1
-            }
-
-            // If we have enough consistent frames, update the "Real" state
-            // Fast-Track: If high confidence (>= 0.5), update immediately!
-            val isHighConfidence = targetBox != null && targetBox.score >= 0.5f
-
-            if (consecutiveCount >= TRIGGER_THRESHOLD || isHighConfidence) {
-                lastKnownState = currentState
-                lastStateTimeTime = currentTime
-                // Reset counter if we fast-tracked to keep logic clean? 
-                // Actually if fast-tracked, we can just let counter grow or set it to max.
-                if (isHighConfidence) consecutiveCount = TRIGGER_THRESHOLD
-            }
-        }
-
-        // 2. Persistence Logic (Handling Occlusion)
-        // If current detection is lost (UNKNOWN), check if we can persist the old state
-        return if (currentState == TrafficLightState.UNKNOWN) {
-            if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
-                // Keep showing the last known state (e.g. Red) for a while
-                lastKnownState
-            } else {
-                TrafficLightState.UNKNOWN
-            }
-        } else {
-            // If currently detecting something, return the robust (debounced) state
-            // Logic: We return lastKnownState which is only updated after N frames.
-            // This prevents single-frame flickers.
-
-            // Bug Fix: Only return lastKnownState if it is still valid (within persistence window).
-            // If it's too old, we should show nothing (UNKNOWN) while verifying the new input.
-            if (currentTime - lastStateTimeTime < PERSISTENCE_DURATION_MS) {
-                lastKnownState
-            } else {
-                TrafficLightState.UNKNOWN
-            }
-        }
+    fun resetState() {
+        stateTracker.reset()
     }
 }

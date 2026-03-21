@@ -39,6 +39,43 @@
         android:translationZ="5dp" />
 
     <LinearLayout
+        android:id="@+id/statusPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginBottom="132dp"
+        android:background="#AA000000"
+        android:elevation="15dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="16dp"
+        android:translationZ="15dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/statusTitleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="신호 상태 확인 중"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/statusDetailText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="카메라를 신호등 쪽으로 맞춰주세요"
+            android:textColor="#D9FFFFFF"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/debugContainer"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -47,16 +84,29 @@
         android:padding="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        android:elevation="20dp">
+        android:elevation="24dp"
+        android:translationZ="24dp">
+
+        <TextView
+            android:id="@+id/backendStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#99000000"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:text="Backend: unknown"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/modelNameText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Model: Loading..."
             android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:visibility="gone"/>
+            android:textSize="14sp" />
 
         <Spinner
             android:id="@+id/modelSpinner"
@@ -66,10 +116,18 @@
             android:layout_marginBottom="8dp"/>
 
         <TextView
+            android:id="@+id/inputFpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Input FPS: 0.0"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <TextView
             android:id="@+id/fpsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="FPS: 0.0"
+            android:text="Detect FPS: 0.0"
             android:textColor="#FFFFFF"
             android:textSize="14sp" />
 
@@ -98,6 +156,14 @@
             android:textSize="14sp" />
 
         <TextView
+            android:id="@+id/stageBreakdownText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Stages: n/a"
+            android:textColor="#B0FFFFFF"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/targetInfoText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -105,6 +171,24 @@
             android:textColor="#FFFF00"
             android:textSize="14sp"
             android:layout_marginTop="4dp"/>
+
+        <TextView
+            android:id="@+id/decisionDebugText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Decision: WAIT"
+            android:textColor="#80FFEA"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tuningDebugText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Tuning: default"
+            android:textColor="#B0FFFFFF"
+            android:textSize="12sp" />
 
         <Switch
             android:id="@+id/swRawDetection"

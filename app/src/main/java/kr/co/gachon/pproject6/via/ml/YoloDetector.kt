@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
+import android.util.Log
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
@@ -111,28 +112,67 @@ class YoloDetector(
     private val defaultIouThreshold: Float = 0.5f,
     private val specificIouThresholds: Map<String, Float> = emptyMap()
 ) {
+    companion object {
+        private const val TAG = "VIA_GPU"
+    }
 
     var specificConfidenceThresholds: Map<String, Float> = emptyMap()
 
-
     private var interpreter: Interpreter? = null
+    private var gpuDelegate: GpuDelegate? = null
     private var inputImageWidth = 0
     private var inputImageHeight = 0
     private var outputShape = intArrayOf()
+    private var outputRows = 0
+    private var outputCols = 0
+    private var outputIsTransposed = false
+    private var imageProcessor: ImageProcessor? = null
+    private var outputBuffer: TensorBuffer? = null
+    var runtimeBackendLabel: String = "CPU"
+        private set
+    var compatibilityReportedSupported: Boolean = false
+        private set
 
     fun setup() {
         val options = Interpreter.Options()
         if (useGpu) {
-            if (CompatibilityList().isDelegateSupportedOnThisDevice) {
-                options.addDelegate(GpuDelegate())
-            } else {
-                // Fallback to CPU if GPU not supported
+            compatibilityReportedSupported = CompatibilityList().isDelegateSupportedOnThisDevice
+            try {
+                gpuDelegate = if (compatibilityReportedSupported) {
+                    runtimeBackendLabel = "GPU"
+                    GpuDelegate()
+                } else {
+                    runtimeBackendLabel = "GPU (forced)"
+                    GpuDelegate()
+                }
+                options.addDelegate(gpuDelegate)
+            } catch (gpuError: Exception) {
+                runtimeBackendLabel = "CPU (GPU init failed)"
+                gpuDelegate?.close()
+                gpuDelegate = null
+                Log.w(
+                    TAG,
+                    "gpu_delegate_init_failed model=$modelPath requestedGpu=$useGpu compat=$compatibilityReportedSupported",
+                    gpuError
+                )
+                throw gpuError
             }
+        } else {
+            compatibilityReportedSupported = CompatibilityList().isDelegateSupportedOnThisDevice
+            runtimeBackendLabel = "CPU"
         }
         options.setNumThreads(4)
 
         val model = FileUtil.loadMappedFile(context, modelPath)
         interpreter = Interpreter(model, options)
+        Log.i(
+            TAG,
+            "setup model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu compat=$compatibilityReportedSupported threads=4"
+        )
+        Log.w(
+            TAG,
+            "setup model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu compat=$compatibilityReportedSupported threads=4"
+        )
 
         val inputShape = interpreter!!.getInputTensor(0).shape() // [1, 640, 640, 3]
         inputImageWidth = inputShape[1]
@@ -140,31 +180,34 @@ class YoloDetector(
 
         val outputTensor = interpreter!!.getOutputTensor(0)
         outputShape = outputTensor.shape() // [1, 84, 8400] usually
+        outputIsTransposed = outputShape[1] > outputShape[2]
+        outputRows = if (outputIsTransposed) outputShape[1] else outputShape[2]
+        outputCols = if (outputIsTransposed) outputShape[2] else outputShape[1]
+        imageProcessor = ImageProcessor.Builder()
+            .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
+            .add(NormalizeOp(0f, 255f))
+            .build()
+        outputBuffer = TensorBuffer.createFixedSize(outputShape, DataType.FLOAT32)
     }
 
     fun detect(bitmap: Bitmap, confidenceThreshold: Float): DetectionResult {
-        if (interpreter == null) return DetectionResult(emptyList(), 0)
+        val activeInterpreter = interpreter ?: return DetectionResult(emptyList(), 0)
+        val activeProcessor = imageProcessor ?: return DetectionResult(emptyList(), 0)
+        val activeOutputBuffer = outputBuffer ?: return DetectionResult(emptyList(), 0)
 
         val inferenceStartTime = SystemClock.uptimeMillis()
 
-        // Preprocess
-        val imageProcessor = ImageProcessor.Builder()
-            .add(ResizeOp(inputImageHeight, inputImageWidth, ResizeOp.ResizeMethod.BILINEAR))
-            .add(NormalizeOp(0f, 255f)) // Normalize to [0, 1]
-            .build()
-
         var tensorImage = TensorImage(DataType.FLOAT32)
         tensorImage.load(bitmap)
-        tensorImage = imageProcessor.process(tensorImage)
+        tensorImage = activeProcessor.process(tensorImage)
 
         // Run inference
-        val outputBuffer = TensorBuffer.createFixedSize(outputShape, DataType.FLOAT32)
-        interpreter!!.run(tensorImage.buffer, outputBuffer.buffer.rewind())
+        activeInterpreter.run(tensorImage.buffer, activeOutputBuffer.buffer.rewind())
 
         val inferenceTime = SystemClock.uptimeMillis() - inferenceStartTime
 
         // Post-process
-        val outputArray = outputBuffer.floatArray
+        val outputArray = activeOutputBuffer.floatArray
         val results = postProcess(outputArray, confidenceThreshold)
 
         // Apply strict NMS first to reduce boxes
@@ -176,27 +219,23 @@ class YoloDetector(
 
     private fun postProcess(output: FloatArray, threshold: Float): List<OverlayView.BoundingBox> {
         val boundingBoxes = mutableListOf<OverlayView.BoundingBox>()
-        val isTransposed = outputShape[1] > outputShape[2] // e.g. [1, 8400, 84]
-
-        val rows = if (isTransposed) outputShape[1] else outputShape[2]
-        val cols = if (isTransposed) outputShape[2] else outputShape[1]
 
         // Helper to access data handling both NCHW and NHWC formats
         fun get(row: Int, col: Int): Float {
-            return if (isTransposed) {
-                output[row * cols + col]
+            return if (outputIsTransposed) {
+                output[row * outputCols + col]
             } else {
-                output[col * rows + row]
+                output[col * outputRows + row]
             }
         }
 
-        for (i in 0 until rows) {
+        for (i in 0 until outputRows) {
             // Find max score class
             var maxScore = 0f
             var maxClassIndex = -1
 
             // Classes start at index 4
-            val numClasses = cols - 4
+            val numClasses = outputCols - 4
             for (c in 0 until numClasses) {
                 val score = get(i, 4 + c)
                 if (score > maxScore) {
@@ -287,6 +326,11 @@ class YoloDetector(
 
     fun close() {
         interpreter?.close()
+        interpreter = null
+        gpuDelegate?.close()
+        gpuDelegate = null
+        imageProcessor = null
+        outputBuffer = null
     }
 
     data class DetectionResult(
