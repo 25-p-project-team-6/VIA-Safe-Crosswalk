@@ -45,6 +45,8 @@ import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
 import kr.co.gachon.pproject6.via.util.RateTracker
 import org.tensorflow.lite.gpu.CompatibilityList
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewFinder: PreviewView
@@ -92,6 +94,7 @@ class MainActivity : AppCompatActivity() {
     private val showBBoxOverlay = true
 
     private var cameraExecutor: ExecutorService? = null
+    private var processingExecutor: ExecutorService? = null
 
     @Volatile
     private var detector: YoloDetector? = null
@@ -114,7 +117,9 @@ class MainActivity : AppCompatActivity() {
     
     // Performance Tracker
     private val performanceTracker = PerformanceTracker()
-    private val inputRateTracker = RateTracker(label = "Input FPS")
+    private val cameraRateTracker = RateTracker(label = "Camera FPS")
+    private val pendingFrame = AtomicReference<ImageProxy?>(null)
+    private val processingScheduled = AtomicBoolean(false)
 
     private val signalAnalyzer = SignalAnalyzer()
     private val guidanceStateStabilizer =
@@ -253,6 +258,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+        processingExecutor = Executors.newSingleThreadExecutor()
 
         // Check GPU compatibility, but still try GPU first for deployable GPU-friendly models.
         val compatList = CompatibilityList()
@@ -409,9 +415,9 @@ class MainActivity : AppCompatActivity() {
         performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        inputFpsText.text = inputRateTracker.rateStr
-        fpsText.text = "Detect ${performanceTracker.currentFpsStr}"
-        avgFpsText.text = performanceTracker.avgFpsStr
+        inputFpsText.text = cameraRateTracker.rateStr
+        fpsText.text = performanceTracker.currentFpsStr.replaceFirst("FPS", "Processed FPS")
+        avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
         stageBreakdownText.text = performanceTracker.stageBreakdownStr
     }
@@ -491,7 +497,7 @@ class MainActivity : AppCompatActivity() {
             cameraExecutor!!,
             android.util.Size(resolution.width, resolution.height)
         ) { image ->
-            processImage(image)
+            enqueueFrame(image)
         }
 
         runOnUiThread {
@@ -520,8 +526,38 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    private fun enqueueFrame(imageProxy: ImageProxy) {
+        cameraRateTracker.mark()
+        val previousFrame = pendingFrame.getAndSet(imageProxy)
+        previousFrame?.close()
+        scheduleFrameProcessing()
+    }
+
+    private fun scheduleFrameProcessing() {
+        val executor = processingExecutor ?: run {
+            pendingFrame.getAndSet(null)?.close()
+            return
+        }
+        if (!processingScheduled.compareAndSet(false, true)) {
+            return
+        }
+
+        executor.execute {
+            try {
+                while (true) {
+                    val nextFrame = pendingFrame.getAndSet(null) ?: break
+                    processImage(nextFrame)
+                }
+            } finally {
+                processingScheduled.set(false)
+                if (pendingFrame.get() != null) {
+                    scheduleFrameProcessing()
+                }
+            }
+        }
+    }
+
     private fun processImage(imageProxy: ImageProxy) {
-        inputRateTracker.mark()
         val activeDetector = detector
         if (activeDetector == null) {
             imageProxy.close()
@@ -761,11 +797,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetPerformanceStats() {
         performanceTracker.clear()
-        inputRateTracker.clear()
-        inputFpsText.text = "Input FPS: 0"
-        avgFpsText.text = "Avg FPS: 0"
+        cameraRateTracker.clear()
+        inputFpsText.text = "Camera FPS: 0"
+        avgFpsText.text = "Processed Avg FPS: 0"
         avgLatencyText.text = "Avg Latency: 0ms"
-        fpsText.text = "Detect FPS: 0"
+        fpsText.text = "Processed FPS: 0"
         latencyText.text = "Detect: 0ms | Total: 0ms"
         stageBreakdownText.text = "Stages: n/a"
     }
@@ -797,7 +833,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        pendingFrame.getAndSet(null)?.close()
         cameraExecutor?.shutdown()
+        processingExecutor?.shutdown()
         cameraManager?.stopCamera()
         detector?.close()
         feedbackManager.release()

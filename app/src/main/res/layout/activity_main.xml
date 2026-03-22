@@ -202,7 +202,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Input FPS: 0.0"
+                    android:text="Camera FPS: 0.0"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 
@@ -211,7 +211,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Detect FPS: 0.0"
+                    android:text="Processed FPS: 0.0"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 
@@ -220,7 +220,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="Avg FPS: 0.0"
+                    android:text="Processed Avg FPS: 0.0"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 
