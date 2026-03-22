@@ -80,7 +80,9 @@ class ConservativeWalkSignalPolicy(
                     }
 
                     val allowedGraceMs =
-                        if (crossingSupportSnapshot.supportsWalkContinuation) {
+                        if (crossingSupportSnapshot.isLookingDown) {
+                            config.walkAllowedUnknownGraceLookingDownMs
+                        } else if (crossingSupportSnapshot.supportsWalkContinuation) {
                             config.walkAllowedUnknownGraceWithContextMs
                         } else {
                             config.walkAllowedUnknownGraceMs
@@ -89,14 +91,18 @@ class ConservativeWalkSignalPolicy(
                     if (currentTime - walkUnknownStartedAt <= allowedGraceMs) {
                         GuidanceDecision(UserGuidanceState.GO, phase, GuidanceBlockReason.NO_SIGNAL)
                     } else {
-                        phase =
-                            if (config.resetToBaselineOnUnknownDuringWalk) {
-                                GuidancePhase.WAITING_FOR_RED_BASELINE
-                            } else {
-                                GuidancePhase.READY_FOR_GREEN_TRANSITION
-                            }
-                        walkUnknownStartedAt = Long.MIN_VALUE
-                        GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.NO_SIGNAL)
+                        if (crossingSupportSnapshot.supportsNextCrosswalkTransition) {
+                            phase =
+                                if (config.resetToBaselineOnUnknownDuringWalk) {
+                                    GuidancePhase.WAITING_FOR_RED_BASELINE
+                                } else {
+                                    GuidancePhase.READY_FOR_GREEN_TRANSITION
+                                }
+                            walkUnknownStartedAt = Long.MIN_VALUE
+                            GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.NO_SIGNAL)
+                        } else {
+                            GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.NO_SIGNAL)
+                        }
                     }
                 }
             }
@@ -136,5 +142,6 @@ data class ConservativeWalkSignalConfig(
     val blockGoWhenRiskDetected: Boolean = true,
     val preserveReadyBaselineMs: Long = 2_500L,
     val walkAllowedUnknownGraceMs: Long = 1_500L,
-    val walkAllowedUnknownGraceWithContextMs: Long = 3_500L
+    val walkAllowedUnknownGraceWithContextMs: Long = 3_500L,
+    val walkAllowedUnknownGraceLookingDownMs: Long = 4_500L
 )

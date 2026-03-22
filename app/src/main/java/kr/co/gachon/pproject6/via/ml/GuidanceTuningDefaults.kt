@@ -18,12 +18,15 @@ object GuidanceTuningDefaults {
         blockGoWhenRiskDetected = true,
         preserveReadyBaselineMs = 2_500L,
         walkAllowedUnknownGraceMs = 1_500L,
-        walkAllowedUnknownGraceWithContextMs = 3_500L
+        walkAllowedUnknownGraceWithContextMs = 3_500L,
+        walkAllowedUnknownGraceLookingDownMs = 4_500L
     )
 
     val crossingSupportConfig = CrossingSupportConfig(
         gyroMotionThresholdRadPerSec = 0.8f,
         motionHoldMs = 2_500L,
+        lookingDownTiltThresholdDegrees = 45f,
+        lookingDownHoldMs = 900L,
         locationSpeedThresholdMps = 0.7f,
         locationDistanceThresholdMeters = 2.0f,
         locationHoldMs = 4_000L,
@@ -73,8 +76,16 @@ object GuidanceTuningDefaults {
             append(", walk unknown ctx=")
             append(walkSignalConfig.walkAllowedUnknownGraceWithContextMs)
             append("ms")
+            append(", walk unknown down=")
+            append(walkSignalConfig.walkAllowedUnknownGraceLookingDownMs)
+            append("ms")
             append(", ctx motion=")
             append(crossingSupportConfig.motionHoldMs)
+            append("ms")
+            append(", ctx down=")
+            append(crossingSupportConfig.lookingDownTiltThresholdDegrees)
+            append("deg/")
+            append(crossingSupportConfig.lookingDownHoldMs)
             append("ms")
             append(", ctx gps=")
             append(crossingSupportConfig.locationHoldMs)

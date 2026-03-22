@@ -9,8 +9,7 @@ class SignalAnalyzer(
     private val walkSignalPolicy: ConservativeWalkSignalPolicy =
         ConservativeWalkSignalPolicy(GuidanceTuningDefaults.walkSignalConfig),
     private val riskObjectEvaluator: RiskObjectEvaluator =
-        RiskObjectEvaluator(GuidanceTuningDefaults.riskObjectConfig),
-    private val targetSessionTracker: SignalTargetSessionTracker = SignalTargetSessionTracker()
+        RiskObjectEvaluator(GuidanceTuningDefaults.riskObjectConfig)
 ) {
     fun analyze(
         bitmap: Bitmap,
@@ -44,24 +43,6 @@ class SignalAnalyzer(
             targetBox.isTarget = true
         }
 
-        val shouldResetForReacquiredTarget =
-            targetSessionTracker.onFrame(
-                targetBox?.let {
-                    NormalizedTargetBox(
-                        left = it.box.left,
-                        top = it.box.top,
-                        right = it.box.right,
-                        bottom = it.box.bottom
-                    )
-                }
-            )
-        if (shouldResetForReacquiredTarget) {
-            PostProcessor.resetState()
-            if (walkSignalPolicy.shouldResetOnTargetSessionChange(crossingSupportSnapshot)) {
-                walkSignalPolicy.reset()
-            }
-        }
-
         val trafficState = PostProcessor.updateTrafficLightState(targetBox)
         val blockingRisks = riskObjectEvaluator.findBlockingRisks(correctedBoxes)
         val guidanceDecision = walkSignalPolicy.update(
@@ -87,7 +68,6 @@ class SignalAnalyzer(
 
     fun reset() {
         objectTracker.reset()
-        targetSessionTracker.reset()
         PostProcessor.resetState()
         walkSignalPolicy.reset()
     }

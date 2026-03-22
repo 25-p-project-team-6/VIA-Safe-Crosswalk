@@ -57,7 +57,7 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
 
             UserGuidanceState.WAIT -> {
                 speak("잠시 기다리세요")
-                cancelVibration()
+                vibrate(longArrayOf(0, 140))
             }
         }
     }

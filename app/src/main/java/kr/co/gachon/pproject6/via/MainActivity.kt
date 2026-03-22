@@ -68,8 +68,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusDetailText: TextView
     private lateinit var confidenceSliderLabel: TextView
     private lateinit var trafficConfidenceLabel: TextView
+    private lateinit var downTiltLabel: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var trafficConfidenceSlider: Slider
+    private lateinit var downTiltSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var zoomSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var rawDetectionSwitch: androidx.appcompat.widget.SwitchCompat
@@ -189,8 +191,10 @@ class MainActivity : AppCompatActivity() {
         statusDetailText = findViewById(R.id.statusDetailText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
         trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
+        downTiltLabel = findViewById(R.id.downTiltLabel)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         trafficConfidenceSlider = findViewById(R.id.trafficConfidenceSlider)
+        downTiltSlider = findViewById(R.id.downTiltSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
         zoomSwitch = findViewById(R.id.swZoom2x)
         rawDetectionSwitch = findViewById(R.id.swRawDetection)
@@ -200,7 +204,7 @@ class MainActivity : AppCompatActivity() {
         feedbackManager = SignalFeedbackManager(this)
         crossingSupportManager = CrossingSupportManager(this, GuidanceTuningDefaults.crossingSupportConfig)
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
-        tuningDebugText.text = "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}"
+        updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
         modelNameText.text = "모델: ${currentModelProfile.displayNameWithSize()}"
 
@@ -241,8 +245,16 @@ class MainActivity : AppCompatActivity() {
             updateDetectorThresholds()
         }
 
+        downTiltSlider.addOnChangeListener { _, value, _ ->
+            crossingSupportManager.updateLookingDownThresholdDegrees(value)
+            downTiltLabel.text = String.format("Down Tilt: %.0f°", value)
+            updateTuningDebugText()
+        }
+
         confidenceSlider.value = 0.5f
         trafficConfidenceSlider.value = 0.15f
+        downTiltSlider.value = crossingSupportManager.currentLookingDownThresholdDegrees()
+        downTiltLabel.text = String.format("Down Tilt: %.0f°", downTiltSlider.value)
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressGpuToggleCallback) {
@@ -402,6 +414,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error setting up model spinner", e)
         }
+    }
+
+    private fun updateTuningDebugText() {
+        tuningDebugText.text =
+            "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}, down tilt=${String.format("%.0f", crossingSupportManager.currentLookingDownThresholdDegrees())}°"
     }
 
     private fun updateDebugInfo(
@@ -742,7 +759,11 @@ class MainActivity : AppCompatActivity() {
                 if (analysisResult.userGuidanceState == UserGuidanceState.GO) {
                     statusTitleText.text = "건너세요"
                     statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                    statusDetailText.text = "초록 신호를 다시 찾는 중입니다"
+                    statusDetailText.text = if (analysisResult.crossingSupportSnapshot.isLookingDown) {
+                        "휴대폰을 들어 신호등 쪽을 비춰주세요"
+                    } else {
+                        "초록 신호를 다시 찾는 중입니다"
+                    }
                 } else {
                     statusTitleText.text = "잠시 기다리세요"
                     statusTitleText.setTextColor(Color.WHITE)

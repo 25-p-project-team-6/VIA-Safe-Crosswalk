@@ -14,6 +14,8 @@ import android.location.LocationManager
 import android.os.Looper
 import androidx.core.content.ContextCompat
 import kr.co.gachon.pproject6.via.ml.UserGuidanceState
+import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.sqrt
 import java.util.Locale
 
@@ -26,11 +28,15 @@ class CrossingSupportManager(
     private val sensorManager =
         appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val gyroscope = sensorManager?.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val gravitySensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
     private val locationManager =
         appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
 
     private var started = false
     private var lastMotionAt: Long = Long.MIN_VALUE
+    private var lookingDownStartedAt: Long = Long.MIN_VALUE
+    private var lookingDownTiltThresholdDegrees = config.lookingDownTiltThresholdDegrees
+    private var currentTiltDegrees: Float = 0f
     private var lastLocationMovementAt: Long = Long.MIN_VALUE
     private var lastLocationSample: Location? = null
     private var crossingActive = false
@@ -53,6 +59,9 @@ class CrossingSupportManager(
         gyroscope?.let {
             sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
+        gravitySensor?.let {
+            sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+        }
         refreshLocationRegistration()
     }
 
@@ -64,6 +73,12 @@ class CrossingSupportManager(
         sensorManager?.unregisterListener(this)
         unregisterLocationUpdates()
     }
+
+    fun updateLookingDownThresholdDegrees(value: Float) {
+        lookingDownTiltThresholdDegrees = value
+    }
+
+    fun currentLookingDownThresholdDegrees(): Float = lookingDownTiltThresholdDegrees
 
     @SuppressLint("MissingPermission")
     fun refreshLocationRegistration() {
@@ -104,6 +119,9 @@ class CrossingSupportManager(
         val now = timeProvider()
         val hasRecentGyroMotion =
             lastMotionAt != Long.MIN_VALUE && now - lastMotionAt <= config.motionHoldMs
+        val isLookingDown =
+            lookingDownStartedAt != Long.MIN_VALUE &&
+                now - lookingDownStartedAt >= config.lookingDownHoldMs
         val hasRecentLocationMovement =
             lastLocationMovementAt != Long.MIN_VALUE &&
                 now - lastLocationMovementAt <= config.locationHoldMs
@@ -116,6 +134,8 @@ class CrossingSupportManager(
         return CrossingSupportSnapshot(
             isCrossingActive = crossingActive,
             hasRecentGyroMotion = hasRecentGyroMotion,
+            isLookingDown = isLookingDown,
+            currentTiltDegrees = currentTiltDegrees,
             hasRecentLocationMovement = hasRecentLocationMovement,
             distanceSinceCrossingStartMeters = distanceSinceCrossingStartMeters,
             crossingActiveDurationMs = crossingActiveDurationMs,
@@ -142,16 +162,28 @@ class CrossingSupportManager(
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        if (event.sensor.type != Sensor.TYPE_GYROSCOPE) {
-            return
-        }
-        val magnitude = sqrt(
-            event.values[0] * event.values[0] +
-                event.values[1] * event.values[1] +
-                event.values[2] * event.values[2]
-        )
-        if (magnitude >= config.gyroMotionThresholdRadPerSec) {
-            lastMotionAt = timeProvider()
+        when (event.sensor.type) {
+            Sensor.TYPE_GYROSCOPE -> {
+                val magnitude = sqrt(
+                    event.values[0] * event.values[0] +
+                        event.values[1] * event.values[1] +
+                        event.values[2] * event.values[2]
+                )
+                if (magnitude >= config.gyroMotionThresholdRadPerSec) {
+                    lastMotionAt = timeProvider()
+                }
+            }
+            Sensor.TYPE_GRAVITY -> {
+                val tiltDegrees = calculateTiltFromUprightDegrees(event.values[0], event.values[1], event.values[2])
+                currentTiltDegrees = tiltDegrees
+                if (tiltDegrees >= lookingDownTiltThresholdDegrees) {
+                    if (lookingDownStartedAt == Long.MIN_VALUE) {
+                        lookingDownStartedAt = timeProvider()
+                    }
+                } else {
+                    lookingDownStartedAt = Long.MIN_VALUE
+                }
+            }
         }
     }
 
@@ -219,9 +251,18 @@ class CrossingSupportManager(
     }
 }
 
+internal fun calculateTiltFromUprightDegrees(x: Float, y: Float, z: Float): Float {
+    if (y == 0f && z == 0f) {
+        return 0f
+    }
+    return Math.toDegrees(atan2(abs(z).toDouble(), abs(y).toDouble())).toFloat()
+}
+
 data class CrossingSupportConfig(
     val gyroMotionThresholdRadPerSec: Float = 0.8f,
     val motionHoldMs: Long = 2_500L,
+    val lookingDownTiltThresholdDegrees: Float = 45f,
+    val lookingDownHoldMs: Long = 900L,
     val locationSpeedThresholdMps: Float = 0.7f,
     val locationDistanceThresholdMeters: Float = 2.0f,
     val locationHoldMs: Long = 4_000L,
@@ -235,6 +276,8 @@ data class CrossingSupportConfig(
 data class CrossingSupportSnapshot(
     val isCrossingActive: Boolean = false,
     val hasRecentGyroMotion: Boolean = false,
+    val isLookingDown: Boolean = false,
+    val currentTiltDegrees: Float = 0f,
     val hasRecentLocationMovement: Boolean = false,
     val distanceSinceCrossingStartMeters: Float = 0f,
     val crossingActiveDurationMs: Long = 0L,
@@ -242,7 +285,7 @@ data class CrossingSupportSnapshot(
     val nextCrosswalkMinActiveMs: Long = 6_000L
 ) {
     val supportsWalkContinuation: Boolean
-        get() = hasRecentGyroMotion || hasRecentLocationMovement
+        get() = hasRecentGyroMotion || hasRecentLocationMovement || isLookingDown
 
     val supportsNextCrosswalkTransition: Boolean
         get() = isCrossingActive &&
@@ -251,6 +294,6 @@ data class CrossingSupportSnapshot(
             crossingActiveDurationMs >= nextCrosswalkMinActiveMs
 
     fun toDebugSummary(): String {
-        return "motion=$hasRecentGyroMotion, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, next=$supportsNextCrosswalkTransition, dist=${String.format(Locale.US, "%.1f", distanceSinceCrossingStartMeters)}"
+        return "motion=$hasRecentGyroMotion, down=$isLookingDown, tilt=${String.format(Locale.US, "%.0f", currentTiltDegrees)}, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, next=$supportsNextCrosswalkTransition, dist=${String.format(Locale.US, "%.1f", distanceSinceCrossingStartMeters)}"
     }
 }
