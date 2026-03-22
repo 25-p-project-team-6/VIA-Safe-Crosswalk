@@ -112,8 +112,13 @@ class ConservativeWalkSignalPolicy(
     fun shouldResetOnTargetSessionChange(
         crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
     ): Boolean {
-        if (phase == GuidancePhase.WALK_ALLOWED && crossingSupportSnapshot.supportsWalkContinuation) {
-            return false
+        if (phase == GuidancePhase.WALK_ALLOWED) {
+            if (crossingSupportSnapshot.supportsNextCrosswalkTransition) {
+                return true
+            }
+            if (crossingSupportSnapshot.supportsWalkContinuation) {
+                return false
+            }
         }
 
         if (phase != GuidancePhase.READY_FOR_GREEN_TRANSITION) {

@@ -18,6 +18,7 @@ class GuidanceTuningDefaultsTest {
         assertTrue(summary.contains("walk unknown ctx=3500ms"))
         assertTrue(summary.contains("ctx motion=2500ms"))
         assertTrue(summary.contains("ctx gps=4000ms"))
+        assertTrue(summary.contains("ctx next=8.0m/6000ms"))
         assertTrue(summary.contains("risk score≥0.35"))
         assertTrue(summary.contains("band=0.20..0.80"))
         assertTrue(summary.contains("wait=8000ms"))

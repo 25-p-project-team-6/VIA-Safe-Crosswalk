@@ -13,7 +13,9 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kotlin.math.sqrt
+import java.util.Locale
 
 class CrossingSupportManager(
     context: Context,
@@ -31,6 +33,10 @@ class CrossingSupportManager(
     private var lastMotionAt: Long = Long.MIN_VALUE
     private var lastLocationMovementAt: Long = Long.MIN_VALUE
     private var lastLocationSample: Location? = null
+    private var crossingActive = false
+    private var crossingStartedAt: Long = Long.MIN_VALUE
+    private var distanceSinceCrossingStartMeters: Float = 0f
+    private var lastCrossingLocation: Location? = null
     private var gpsRegistered = false
     private var networkRegistered = false
 
@@ -101,10 +107,38 @@ class CrossingSupportManager(
         val hasRecentLocationMovement =
             lastLocationMovementAt != Long.MIN_VALUE &&
                 now - lastLocationMovementAt <= config.locationHoldMs
+        val crossingActiveDurationMs =
+            if (crossingActive && crossingStartedAt != Long.MIN_VALUE) {
+                now - crossingStartedAt
+            } else {
+                0L
+            }
         return CrossingSupportSnapshot(
+            isCrossingActive = crossingActive,
             hasRecentGyroMotion = hasRecentGyroMotion,
-            hasRecentLocationMovement = hasRecentLocationMovement
+            hasRecentLocationMovement = hasRecentLocationMovement,
+            distanceSinceCrossingStartMeters = distanceSinceCrossingStartMeters,
+            crossingActiveDurationMs = crossingActiveDurationMs,
+            nextCrosswalkDistanceThresholdMeters = config.nextCrosswalkDistanceThresholdMeters,
+            nextCrosswalkMinActiveMs = config.nextCrosswalkMinActiveMs
         )
+    }
+
+    fun onGuidanceStateChanged(state: UserGuidanceState) {
+        val now = timeProvider()
+        if (state == UserGuidanceState.GO) {
+            if (!crossingActive) {
+                crossingActive = true
+                crossingStartedAt = now
+                distanceSinceCrossingStartMeters = 0f
+                lastCrossingLocation = lastLocationSample
+            }
+        } else if (crossingActive) {
+            crossingActive = false
+            crossingStartedAt = Long.MIN_VALUE
+            distanceSinceCrossingStartMeters = 0f
+            lastCrossingLocation = null
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -141,6 +175,17 @@ class CrossingSupportManager(
             distanceMeters >= config.locationDistanceThresholdMeters
         ) {
             lastLocationMovementAt = now
+        }
+
+        if (crossingActive) {
+            val lastCrossing = lastCrossingLocation
+            if (lastCrossing != null) {
+                val segmentDistance = lastCrossing.distanceTo(location)
+                if (segmentDistance in config.crossingDistanceSegmentRangeMeters) {
+                    distanceSinceCrossingStartMeters += segmentDistance
+                }
+            }
+            lastCrossingLocation = location
         }
 
         lastLocationSample = location
@@ -180,18 +225,32 @@ data class CrossingSupportConfig(
     val locationSpeedThresholdMps: Float = 0.7f,
     val locationDistanceThresholdMeters: Float = 2.0f,
     val locationHoldMs: Long = 4_000L,
+    val nextCrosswalkDistanceThresholdMeters: Float = 8.0f,
+    val nextCrosswalkMinActiveMs: Long = 6_000L,
+    val crossingDistanceSegmentRangeMeters: ClosedFloatingPointRange<Float> = 0.5f..15.0f,
     val locationMinUpdateIntervalMs: Long = 1_000L,
     val locationMinDistanceMeters: Float = 0.5f
 )
 
 data class CrossingSupportSnapshot(
+    val isCrossingActive: Boolean = false,
     val hasRecentGyroMotion: Boolean = false,
-    val hasRecentLocationMovement: Boolean = false
+    val hasRecentLocationMovement: Boolean = false,
+    val distanceSinceCrossingStartMeters: Float = 0f,
+    val crossingActiveDurationMs: Long = 0L,
+    val nextCrosswalkDistanceThresholdMeters: Float = 8.0f,
+    val nextCrosswalkMinActiveMs: Long = 6_000L
 ) {
     val supportsWalkContinuation: Boolean
         get() = hasRecentGyroMotion || hasRecentLocationMovement
 
+    val supportsNextCrosswalkTransition: Boolean
+        get() = isCrossingActive &&
+            hasRecentLocationMovement &&
+            distanceSinceCrossingStartMeters >= nextCrosswalkDistanceThresholdMeters &&
+            crossingActiveDurationMs >= nextCrosswalkMinActiveMs
+
     fun toDebugSummary(): String {
-        return "motion=$hasRecentGyroMotion, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation"
+        return "motion=$hasRecentGyroMotion, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, next=$supportsNextCrosswalkTransition, dist=${String.format(Locale.US, "%.1f", distanceSinceCrossingStartMeters)}"
     }
 }

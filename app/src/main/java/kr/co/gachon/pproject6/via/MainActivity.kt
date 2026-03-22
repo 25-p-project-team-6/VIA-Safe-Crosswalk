@@ -614,6 +614,7 @@ class MainActivity : AppCompatActivity() {
                 updateUserStatus(analysisResult, enableTrafficLogic)
                 updateStatusBorder(analysisResult.userGuidanceState, enableTrafficLogic)
                 logDecisionIfChanged(analysisResult, enableTrafficLogic)
+                crossingSupportManager.onGuidanceStateChanged(analysisResult.userGuidanceState)
 
                 if (enableTrafficLogic) {
                     feedbackManager.onGuidanceStateChanged(analysisResult.userGuidanceState)
