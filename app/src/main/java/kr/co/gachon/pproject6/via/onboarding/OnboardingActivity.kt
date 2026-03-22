@@ -85,11 +85,13 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
             val cameraGranted =
                 result[Manifest.permission.CAMERA] ?: hasCameraPermission()
-            if (cameraGranted) {
+            val locationGranted =
+                result[Manifest.permission.ACCESS_FINE_LOCATION] ?: hasLocationPermission()
+            if (cameraGranted && locationGranted) {
                 startCalibration()
             } else {
                 showPermissionStep(
-                    detailOverride = "카메라 권한은 필수이고, 위치 권한은 횡단 연속성 개선에 사용됩니다. 권한 허용을 다시 눌러 주세요."
+                    detailOverride = "카메라와 위치 권한이 모두 필요합니다. 다시 허용해 주세요."
                 )
             }
         }
@@ -196,9 +198,9 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         progressBar.visibility = View.GONE
         progressText.visibility = View.GONE
         stepLabelText.text = "2 / 3 · 권한 허용"
-        titleText.text = "카메라와 위치 권한을 확인합니다"
-        bodyText.text = "카메라는 필수이고, 위치는 횡단 연속성 개선에 사용됩니다."
-        detailText.text = detailOverride ?: "허용 버튼을 누르면 다음 단계로 진행합니다. 위치는 선택적으로 허용해도 됩니다."
+        titleText.text = "권한이 필요합니다"
+        bodyText.text = "카메라와 위치 권한을 허용해 주세요."
+        detailText.text = detailOverride ?: "허용 버튼을 누르면 다음 단계로 진행합니다."
         actionButton.isEnabled = true
         actionButton.text = "권한 허용"
         secondaryButton.visibility = View.VISIBLE
@@ -467,7 +469,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Step.INTRO ->
                 "처음 설정을 시작합니다. 앱 설정 절차를 진행합니다. 다음 버튼을 눌러 진행해 주세요."
             Step.PERMISSION ->
-                "카메라 권한은 필수이고 위치 권한은 횡단 연속성 개선에 사용됩니다. 허용 버튼을 눌러 진행해 주세요."
+                "카메라와 위치 권한을 허용해 주세요. 허용 버튼을 눌러 진행해 주세요."
             Step.CALIBRATING ->
                 "설정을 확인하는 중입니다. 잠시만 기다려 주세요."
             Step.RESULT ->
