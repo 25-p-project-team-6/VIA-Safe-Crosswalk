@@ -25,6 +25,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.context.CrossingSupportManager
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
 import kr.co.gachon.pproject6.via.ml.GuidanceStateStabilizer
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
@@ -118,6 +119,7 @@ class MainActivity : AppCompatActivity() {
     private val signalAnalyzer = SignalAnalyzer()
     private val guidanceStateStabilizer =
         GuidanceStateStabilizer(GuidanceTuningDefaults.guidanceStabilizerConfig)
+    private lateinit var crossingSupportManager: CrossingSupportManager
     private lateinit var feedbackManager: SignalFeedbackManager
 
     private val requestPermissionLauncher =
@@ -128,6 +130,11 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Camera permission required", Toast.LENGTH_LONG).show()
                 finish()
             }
+        }
+
+    private val requestLocationPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            crossingSupportManager.refreshLocationRegistration()
         }
 
     // traffic lights fine-tuned model label
@@ -191,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         highlightTargetSwitch = findViewById(R.id.swHighlightTarget)
         statusBorder = findViewById(R.id.statusBorder)
         feedbackManager = SignalFeedbackManager(this)
+        crossingSupportManager = CrossingSupportManager(this, GuidanceTuningDefaults.crossingSupportConfig)
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
         tuningDebugText.text = "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}"
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
@@ -282,6 +290,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupModelSpinner()
+        requestLocationPermissionsIfNeeded()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        crossingSupportManager.start()
+    }
+
+    override fun onPause() {
+        crossingSupportManager.stop()
+        super.onPause()
     }
 
     private fun updateDetectorThresholds() {
@@ -383,6 +402,30 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error setting up model spinner", e)
         }
+    }
+
+    private fun requestLocationPermissionsIfNeeded() {
+        val hasFine =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        if (hasFine || hasCoarse) {
+            crossingSupportManager.refreshLocationRegistration()
+            return
+        }
+
+        requestLocationPermissionsLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
     }
 
     private fun updateDebugInfo(
@@ -543,12 +586,14 @@ class MainActivity : AppCompatActivity() {
             stageDurationsMs["detect"] = elapsedMillis(detectStartNs)
 
             val enableTrafficLogic = trafficLogicSwitch.isChecked
+            val crossingSupportSnapshot = crossingSupportManager.snapshot()
             val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
             val rawAnalysisResult = signalAnalyzer.analyze(
                 bitmap = rotatedBitmap,
                 rawBoxes = result.boxes,
                 enableTrafficLogic = enableTrafficLogic,
-                enableHighlight = highlightTargetSwitch.isChecked
+                enableHighlight = highlightTargetSwitch.isChecked,
+                crossingSupportSnapshot = crossingSupportSnapshot
             )
             val analysisResult =
                 if (enableTrafficLogic) {
@@ -638,7 +683,8 @@ class MainActivity : AppCompatActivity() {
         enableTrafficLogic: Boolean
     ) {
         decisionDebugText.text = if (enableTrafficLogic) {
-            "Decision: ${analysisResult.userGuidanceState} | Phase: ${analysisResult.guidancePhase} | Reason: ${analysisResult.guidanceBlockReason}"
+            "Decision: ${analysisResult.userGuidanceState} | Phase: ${analysisResult.guidancePhase} | Reason: ${analysisResult.guidanceBlockReason}\n" +
+                "Context: ${analysisResult.crossingSupportSnapshot.toDebugSummary()}"
         } else {
             "Decision: DISABLED"
         }
@@ -716,6 +762,7 @@ class MainActivity : AppCompatActivity() {
                 "phase=${analysisResult.guidancePhase}," +
                 "reason=${analysisResult.guidanceBlockReason}," +
                 "traffic=${analysisResult.trafficState}," +
+                "context=${analysisResult.crossingSupportSnapshot.toDebugSummary()}," +
                 "risk=${analysisResult.blockingRiskLabels.joinToString("|").ifBlank { "none" }}"
         }
 
@@ -783,6 +830,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager?.stopCamera()
         detector?.close()
         feedbackManager.release()
+        crossingSupportManager.stop()
         guidanceStateStabilizer.reset()
         signalAnalyzer.reset()
     }

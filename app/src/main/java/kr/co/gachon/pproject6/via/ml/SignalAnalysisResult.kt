@@ -1,5 +1,6 @@
 package kr.co.gachon.pproject6.via.ml
 
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.ui.OverlayView
 
 data class SignalAnalysisResult(
@@ -11,6 +12,7 @@ data class SignalAnalysisResult(
     val userGuidanceState: UserGuidanceState,
     val guidancePhase: GuidancePhase,
     val guidanceBlockReason: GuidanceBlockReason,
+    val crossingSupportSnapshot: CrossingSupportSnapshot,
     val hasBlockingRisk: Boolean,
     val blockingRiskLabels: List<String>
 )

@@ -1,5 +1,6 @@
 package kr.co.gachon.pproject6.via.ml
 
+import kr.co.gachon.pproject6.via.context.CrossingSupportConfig
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackTimingConfig
 
 object GuidanceTuningDefaults {
@@ -16,7 +17,18 @@ object GuidanceTuningDefaults {
         resetToBaselineOnUnknownDuringWalk = true,
         blockGoWhenRiskDetected = true,
         preserveReadyBaselineMs = 2_500L,
-        walkAllowedUnknownGraceMs = 1_500L
+        walkAllowedUnknownGraceMs = 1_500L,
+        walkAllowedUnknownGraceWithContextMs = 3_500L
+    )
+
+    val crossingSupportConfig = CrossingSupportConfig(
+        gyroMotionThresholdRadPerSec = 0.8f,
+        motionHoldMs = 2_500L,
+        locationSpeedThresholdMps = 0.7f,
+        locationDistanceThresholdMeters = 2.0f,
+        locationHoldMs = 4_000L,
+        locationMinUpdateIntervalMs = 1_000L,
+        locationMinDistanceMeters = 0.5f
     )
 
     val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
@@ -57,6 +69,15 @@ object GuidanceTuningDefaults {
             append("ms")
             append(", walk unknown=")
             append(walkSignalConfig.walkAllowedUnknownGraceMs)
+            append("ms")
+            append(", walk unknown ctx=")
+            append(walkSignalConfig.walkAllowedUnknownGraceWithContextMs)
+            append("ms")
+            append(", ctx motion=")
+            append(crossingSupportConfig.motionHoldMs)
+            append("ms")
+            append(", ctx gps=")
+            append(crossingSupportConfig.locationHoldMs)
             append("ms")
             append(", ")
             append("risk score≥")

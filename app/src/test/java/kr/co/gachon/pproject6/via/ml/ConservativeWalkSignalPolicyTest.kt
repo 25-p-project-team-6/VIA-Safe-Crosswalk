@@ -1,5 +1,6 @@
 package kr.co.gachon.pproject6.via.ml
 
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -133,5 +134,48 @@ class ConservativeWalkSignalPolicyTest {
 
         currentTime += 200L
         assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+    }
+
+    @Test
+    fun crossingSupportExtendsUnknownGraceDuringWalk() {
+        var currentTime = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
+        val support = CrossingSupportSnapshot(hasRecentGyroMotion = true)
+
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+
+        currentTime += 2_000L
+        assertEquals(
+            UserGuidanceState.GO,
+            policy.update(
+                TrafficLightState.UNKNOWN,
+                false,
+                crossingSupportSnapshot = support
+            ).state
+        )
+
+        currentTime += 2_000L
+        assertEquals(
+            UserGuidanceState.WAIT,
+            policy.update(
+                TrafficLightState.UNKNOWN,
+                false,
+                crossingSupportSnapshot = CrossingSupportSnapshot()
+            ).state
+        )
+    }
+
+    @Test
+    fun crossingSupportCanDeferTargetSessionResetWhileWalking() {
+        val policy = ConservativeWalkSignalPolicy()
+
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+        assertFalse(
+            policy.shouldResetOnTargetSessionChange(
+                CrossingSupportSnapshot(hasRecentLocationMovement = true)
+            )
+        )
     }
 }

@@ -1,5 +1,7 @@
 package kr.co.gachon.pproject6.via.ml
 
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
+
 class ConservativeWalkSignalPolicy(
     private val config: ConservativeWalkSignalConfig = ConservativeWalkSignalConfig(),
     private val timeProvider: () -> Long = System::currentTimeMillis
@@ -10,7 +12,8 @@ class ConservativeWalkSignalPolicy(
 
     fun update(
         state: TrafficLightState,
-        hasBlockingRisk: Boolean
+        hasBlockingRisk: Boolean,
+        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
     ): GuidanceDecision {
         val currentTime = timeProvider()
         return when (phase) {
@@ -76,7 +79,14 @@ class ConservativeWalkSignalPolicy(
                         walkUnknownStartedAt = currentTime
                     }
 
-                    if (currentTime - walkUnknownStartedAt <= config.walkAllowedUnknownGraceMs) {
+                    val allowedGraceMs =
+                        if (crossingSupportSnapshot.supportsWalkContinuation) {
+                            config.walkAllowedUnknownGraceWithContextMs
+                        } else {
+                            config.walkAllowedUnknownGraceMs
+                        }
+
+                    if (currentTime - walkUnknownStartedAt <= allowedGraceMs) {
                         GuidanceDecision(UserGuidanceState.GO, phase, GuidanceBlockReason.NO_SIGNAL)
                     } else {
                         phase =
@@ -99,7 +109,13 @@ class ConservativeWalkSignalPolicy(
         walkUnknownStartedAt = Long.MIN_VALUE
     }
 
-    fun shouldResetOnTargetSessionChange(): Boolean {
+    fun shouldResetOnTargetSessionChange(
+        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
+    ): Boolean {
+        if (phase == GuidancePhase.WALK_ALLOWED && crossingSupportSnapshot.supportsWalkContinuation) {
+            return false
+        }
+
         if (phase != GuidancePhase.READY_FOR_GREEN_TRANSITION) {
             return true
         }
@@ -114,5 +130,6 @@ data class ConservativeWalkSignalConfig(
     val resetToBaselineOnUnknownDuringWalk: Boolean = true,
     val blockGoWhenRiskDetected: Boolean = true,
     val preserveReadyBaselineMs: Long = 2_500L,
-    val walkAllowedUnknownGraceMs: Long = 1_500L
+    val walkAllowedUnknownGraceMs: Long = 1_500L,
+    val walkAllowedUnknownGraceWithContextMs: Long = 3_500L
 )

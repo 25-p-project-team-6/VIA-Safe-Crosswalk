@@ -1,6 +1,7 @@
 package kr.co.gachon.pproject6.via.ml
 
 import android.graphics.Bitmap
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.ui.OverlayView
 
 class SignalAnalyzer(
@@ -15,7 +16,8 @@ class SignalAnalyzer(
         bitmap: Bitmap,
         rawBoxes: List<OverlayView.BoundingBox>,
         enableTrafficLogic: Boolean,
-        enableHighlight: Boolean
+        enableHighlight: Boolean,
+        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
     ): SignalAnalysisResult {
         if (!enableTrafficLogic) {
             reset()
@@ -28,6 +30,7 @@ class SignalAnalyzer(
                 userGuidanceState = UserGuidanceState.WAIT,
                 guidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE,
                 guidanceBlockReason = GuidanceBlockReason.NO_SIGNAL,
+                crossingSupportSnapshot = crossingSupportSnapshot,
                 hasBlockingRisk = false,
                 blockingRiskLabels = emptyList()
             )
@@ -54,7 +57,7 @@ class SignalAnalyzer(
             )
         if (shouldResetForReacquiredTarget) {
             PostProcessor.resetState()
-            if (walkSignalPolicy.shouldResetOnTargetSessionChange()) {
+            if (walkSignalPolicy.shouldResetOnTargetSessionChange(crossingSupportSnapshot)) {
                 walkSignalPolicy.reset()
             }
         }
@@ -63,7 +66,8 @@ class SignalAnalyzer(
         val blockingRisks = riskObjectEvaluator.findBlockingRisks(correctedBoxes)
         val guidanceDecision = walkSignalPolicy.update(
             state = trafficState,
-            hasBlockingRisk = blockingRisks.isNotEmpty()
+            hasBlockingRisk = blockingRisks.isNotEmpty(),
+            crossingSupportSnapshot = crossingSupportSnapshot
         )
 
         return SignalAnalysisResult(
@@ -75,6 +79,7 @@ class SignalAnalyzer(
             userGuidanceState = guidanceDecision.state,
             guidancePhase = guidanceDecision.phase,
             guidanceBlockReason = guidanceDecision.blockReason,
+            crossingSupportSnapshot = crossingSupportSnapshot,
             hasBlockingRisk = blockingRisks.isNotEmpty(),
             blockingRiskLabels = blockingRisks.map { it.clsName }.distinct().sorted()
         )
