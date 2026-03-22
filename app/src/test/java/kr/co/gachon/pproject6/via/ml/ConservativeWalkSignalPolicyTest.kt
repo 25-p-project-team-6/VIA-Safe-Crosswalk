@@ -34,10 +34,13 @@ class ConservativeWalkSignalPolicyTest {
 
     @Test
     fun unknownAfterGoResetsToRequireNewRedBaseline() {
-        val policy = ConservativeWalkSignalPolicy()
+        var currentTime = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
 
         assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
         assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.UNKNOWN, false).state)
+        currentTime += 1_501L
         assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.UNKNOWN, false).state)
         assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.GREEN, false).state)
         assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
@@ -115,5 +118,20 @@ class ConservativeWalkSignalPolicyTest {
 
         currentTime += 2_501L
         assertTrue(policy.shouldResetOnTargetSessionChange())
+    }
+
+    @Test
+    fun briefUnknownDuringWalkKeepsGoState() {
+        var currentTime = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
+
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+
+        currentTime += 1_000L
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.UNKNOWN, false).state)
+
+        currentTime += 200L
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
     }
 }

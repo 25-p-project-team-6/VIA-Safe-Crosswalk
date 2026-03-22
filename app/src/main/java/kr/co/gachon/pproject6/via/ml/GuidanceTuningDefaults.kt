@@ -15,7 +15,8 @@ object GuidanceTuningDefaults {
         requireRedBaselineBeforeGo = true,
         resetToBaselineOnUnknownDuringWalk = true,
         blockGoWhenRiskDetected = true,
-        preserveReadyBaselineMs = 2_500L
+        preserveReadyBaselineMs = 2_500L,
+        walkAllowedUnknownGraceMs = 1_500L
     )
 
     val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
@@ -53,6 +54,9 @@ object GuidanceTuningDefaults {
             append(guidanceStabilizerConfig.waitConfirmFrames)
             append(", ready hold=")
             append(walkSignalConfig.preserveReadyBaselineMs)
+            append("ms")
+            append(", walk unknown=")
+            append(walkSignalConfig.walkAllowedUnknownGraceMs)
             append("ms")
             append(", ")
             append("risk score≥")

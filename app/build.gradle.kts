@@ -1,3 +1,4 @@
+import com.android.build.gradle.tasks.GenerateBuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -64,4 +65,8 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+tasks.withType<GenerateBuildConfig>().configureEach {
+    doNotTrackState("Gradle output snapshotting is unstable for generated BuildConfig files in this workspace")
 }

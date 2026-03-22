@@ -686,14 +686,20 @@ class MainActivity : AppCompatActivity() {
             }
 
             TrafficLightState.UNKNOWN -> {
-                statusTitleText.text = "잠시 기다리세요"
-                statusTitleText.setTextColor(Color.WHITE)
-                statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
-                    "주변 위험 요소를 확인 중입니다"
-                } else if (analysisResult.targetBox == null) {
-                    "신호등을 화면 중앙에 맞춰주세요"
+                if (analysisResult.userGuidanceState == UserGuidanceState.GO) {
+                    statusTitleText.text = "건너세요"
+                    statusTitleText.setTextColor(Color.parseColor("#51CF66"))
+                    statusDetailText.text = "초록 신호를 다시 찾는 중입니다"
                 } else {
-                    "신호 상태를 확인하고 있습니다"
+                    statusTitleText.text = "잠시 기다리세요"
+                    statusTitleText.setTextColor(Color.WHITE)
+                    statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
+                        "주변 위험 요소를 확인 중입니다"
+                    } else if (analysisResult.targetBox == null) {
+                        "신호등을 화면 중앙에 맞춰주세요"
+                    } else {
+                        "신호 상태를 확인하고 있습니다"
+                    }
                 }
             }
         }

@@ -14,6 +14,7 @@ class GuidanceTuningDefaultsTest {
         assertTrue(summary.contains("go/stop frames=2"))
         assertTrue(summary.contains("wait frames=3"))
         assertTrue(summary.contains("ready hold=2500ms"))
+        assertTrue(summary.contains("walk unknown=1500ms"))
         assertTrue(summary.contains("risk score≥0.35"))
         assertTrue(summary.contains("band=0.20..0.80"))
         assertTrue(summary.contains("wait=8000ms"))

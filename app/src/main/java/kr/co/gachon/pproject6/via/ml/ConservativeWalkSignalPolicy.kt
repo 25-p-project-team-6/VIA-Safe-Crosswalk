@@ -6,6 +6,7 @@ class ConservativeWalkSignalPolicy(
 ) {
     private var phase: GuidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE
     private var lastRedBaselineAt: Long = Long.MIN_VALUE
+    private var walkUnknownStartedAt: Long = Long.MIN_VALUE
 
     fun update(
         state: TrafficLightState,
@@ -17,6 +18,7 @@ class ConservativeWalkSignalPolicy(
                 TrafficLightState.RED -> {
                     phase = GuidancePhase.READY_FOR_GREEN_TRANSITION
                     lastRedBaselineAt = currentTime
+                    walkUnknownStartedAt = Long.MIN_VALUE
                     GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
                 }
 
@@ -26,6 +28,7 @@ class ConservativeWalkSignalPolicy(
                     GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.BLOCKING_RISK)
                 } else {
                     phase = GuidancePhase.WALK_ALLOWED
+                    walkUnknownStartedAt = Long.MIN_VALUE
                     GuidanceDecision(UserGuidanceState.GO, phase, GuidanceBlockReason.NONE)
                 }
 
@@ -35,6 +38,7 @@ class ConservativeWalkSignalPolicy(
             GuidancePhase.READY_FOR_GREEN_TRANSITION -> when (state) {
                 TrafficLightState.RED -> {
                     lastRedBaselineAt = currentTime
+                    walkUnknownStartedAt = Long.MIN_VALUE
                     GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
                 }
                 TrafficLightState.GREEN -> {
@@ -42,6 +46,7 @@ class ConservativeWalkSignalPolicy(
                         GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.BLOCKING_RISK)
                     } else {
                         phase = GuidancePhase.WALK_ALLOWED
+                        walkUnknownStartedAt = Long.MIN_VALUE
                         GuidanceDecision(UserGuidanceState.GO, phase, GuidanceBlockReason.NONE)
                     }
                 }
@@ -51,6 +56,7 @@ class ConservativeWalkSignalPolicy(
 
             GuidancePhase.WALK_ALLOWED -> when (state) {
                 TrafficLightState.GREEN -> {
+                    walkUnknownStartedAt = Long.MIN_VALUE
                     if (config.blockGoWhenRiskDetected && hasBlockingRisk) {
                         GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.BLOCKING_RISK)
                     } else {
@@ -61,17 +67,27 @@ class ConservativeWalkSignalPolicy(
                 TrafficLightState.RED -> {
                     phase = GuidancePhase.READY_FOR_GREEN_TRANSITION
                     lastRedBaselineAt = currentTime
+                    walkUnknownStartedAt = Long.MIN_VALUE
                     GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
                 }
 
                 TrafficLightState.UNKNOWN -> {
-                    phase =
-                        if (config.resetToBaselineOnUnknownDuringWalk) {
-                            GuidancePhase.WAITING_FOR_RED_BASELINE
-                        } else {
-                            GuidancePhase.READY_FOR_GREEN_TRANSITION
-                        }
-                    GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.NO_SIGNAL)
+                    if (walkUnknownStartedAt == Long.MIN_VALUE) {
+                        walkUnknownStartedAt = currentTime
+                    }
+
+                    if (currentTime - walkUnknownStartedAt <= config.walkAllowedUnknownGraceMs) {
+                        GuidanceDecision(UserGuidanceState.GO, phase, GuidanceBlockReason.NO_SIGNAL)
+                    } else {
+                        phase =
+                            if (config.resetToBaselineOnUnknownDuringWalk) {
+                                GuidancePhase.WAITING_FOR_RED_BASELINE
+                            } else {
+                                GuidancePhase.READY_FOR_GREEN_TRANSITION
+                            }
+                        walkUnknownStartedAt = Long.MIN_VALUE
+                        GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.NO_SIGNAL)
+                    }
                 }
             }
         }
@@ -80,6 +96,7 @@ class ConservativeWalkSignalPolicy(
     fun reset() {
         phase = GuidancePhase.WAITING_FOR_RED_BASELINE
         lastRedBaselineAt = Long.MIN_VALUE
+        walkUnknownStartedAt = Long.MIN_VALUE
     }
 
     fun shouldResetOnTargetSessionChange(): Boolean {
@@ -96,5 +113,6 @@ data class ConservativeWalkSignalConfig(
     val requireRedBaselineBeforeGo: Boolean = true,
     val resetToBaselineOnUnknownDuringWalk: Boolean = true,
     val blockGoWhenRiskDetected: Boolean = true,
-    val preserveReadyBaselineMs: Long = 2_500L
+    val preserveReadyBaselineMs: Long = 2_500L,
+    val walkAllowedUnknownGraceMs: Long = 1_500L
 )
