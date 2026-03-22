@@ -7,10 +7,11 @@ plugins {
 val externalBuildRoot =
     providers.gradleProperty("omxBuildRoot")
         .orElse(providers.environmentVariable("OMX_BUILD_ROOT"))
-        .orElse(providers.provider { "${System.getProperty("java.io.tmpdir")}VIA-gradle-build" })
 
 allprojects {
-    layout.buildDirectory.set(
-        java.io.File(externalBuildRoot.get(), project.name)
-    )
+    externalBuildRoot.orNull?.let { buildRoot ->
+        layout.buildDirectory.set(
+            java.io.File(buildRoot, project.name)
+        )
+    }
 }
