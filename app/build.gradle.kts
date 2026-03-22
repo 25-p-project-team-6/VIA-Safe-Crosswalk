@@ -2,7 +2,6 @@ import com.android.build.gradle.tasks.GenerateBuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     alias(libs.plugins.android.application)
@@ -70,8 +69,4 @@ dependencies {
 
 tasks.withType<GenerateBuildConfig>().configureEach {
     doNotTrackState("Gradle output snapshotting is unstable for generated BuildConfig files in this workspace")
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-    doNotTrackState("Gradle output snapshotting is unstable for Kotlin compile outputs in this workspace")
 }
