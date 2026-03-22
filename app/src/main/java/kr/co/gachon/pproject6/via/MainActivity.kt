@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
+import kr.co.gachon.pproject6.via.ml.GuidanceStateStabilizer
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.PostProcessor
@@ -34,6 +35,8 @@ import kr.co.gachon.pproject6.via.ml.SignalAnalyzer
 import kr.co.gachon.pproject6.via.ml.TrafficLightState
 import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.ml.toGuidanceSnapshot
+import kr.co.gachon.pproject6.via.ml.withGuidanceSnapshot
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
@@ -105,6 +108,7 @@ class MainActivity : AppCompatActivity() {
     private var currentModelName = "best_float16_640.tflite" // Practical default for current device targets
     private var currentModelProfile = InferenceModelProfile.fromFileName(currentModelName)
     private var availableModelFiles: List<String> = emptyList()
+    private var initialBackendPreference: String? = null
     private var reusableRotatedBitmap: Bitmap? = null
     
     // Performance Tracker
@@ -112,6 +116,8 @@ class MainActivity : AppCompatActivity() {
     private val inputRateTracker = RateTracker(label = "Input FPS")
 
     private val signalAnalyzer = SignalAnalyzer()
+    private val guidanceStateStabilizer =
+        GuidanceStateStabilizer(GuidanceTuningDefaults.guidanceStabilizerConfig)
     private lateinit var feedbackManager: SignalFeedbackManager
 
     private val requestPermissionLauncher =
@@ -141,6 +147,7 @@ class MainActivity : AppCompatActivity() {
             currentModelName = savedModel
             currentModelProfile = InferenceModelProfile.fromFileName(savedModel)
         }
+        initialBackendPreference = preferences.selectedBackendLabel
 
         setContentView(R.layout.activity_main)
 
@@ -256,7 +263,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val shouldUseSavedBackend =
-            preferences.selectedBackendLabel?.contains("GPU") == true &&
+            initialBackendPreference?.contains("GPU") == true &&
                 currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
             checked = shouldUseSavedBackend || currentModelProfile.recommendedUseGpu,
@@ -324,7 +331,6 @@ class MainActivity : AppCompatActivity() {
         currentModelName = selectedModel
         currentModelProfile = InferenceModelProfile.fromFileName(selectedModel)
         reusableRotatedBitmap = null
-        preferences.selectedModelName = selectedModel
 
         val shouldEnableGpu = currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
@@ -437,8 +443,6 @@ class MainActivity : AppCompatActivity() {
                         "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
-                    preferences.selectedModelName = modelName
-                    preferences.selectedBackendLabel = newDetector.runtimeBackendLabel
                     if (cameraManager != null) {
                         startCamera()
                     }
@@ -540,12 +544,21 @@ class MainActivity : AppCompatActivity() {
 
             val enableTrafficLogic = trafficLogicSwitch.isChecked
             val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
-            val analysisResult = signalAnalyzer.analyze(
+            val rawAnalysisResult = signalAnalyzer.analyze(
                 bitmap = rotatedBitmap,
                 rawBoxes = result.boxes,
                 enableTrafficLogic = enableTrafficLogic,
                 enableHighlight = highlightTargetSwitch.isChecked
             )
+            val analysisResult =
+                if (enableTrafficLogic) {
+                    rawAnalysisResult.withGuidanceSnapshot(
+                        guidanceStateStabilizer.stabilize(rawAnalysisResult.toGuidanceSnapshot())
+                    )
+                } else {
+                    guidanceStateStabilizer.reset()
+                    rawAnalysisResult
+                }
             stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
 
             runOnUiThread {
@@ -764,6 +777,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager?.stopCamera()
         detector?.close()
         feedbackManager.release()
+        guidanceStateStabilizer.reset()
         signalAnalyzer.reset()
     }
 }

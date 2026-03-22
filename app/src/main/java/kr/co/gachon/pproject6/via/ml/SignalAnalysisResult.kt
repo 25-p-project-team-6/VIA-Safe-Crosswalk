@@ -14,3 +14,21 @@ data class SignalAnalysisResult(
     val hasBlockingRisk: Boolean,
     val blockingRiskLabels: List<String>
 )
+
+fun SignalAnalysisResult.toGuidanceSnapshot(): GuidanceSnapshot {
+    return GuidanceSnapshot(
+        trafficState = trafficState,
+        userGuidanceState = userGuidanceState,
+        guidancePhase = guidancePhase,
+        guidanceBlockReason = guidanceBlockReason
+    )
+}
+
+fun SignalAnalysisResult.withGuidanceSnapshot(snapshot: GuidanceSnapshot): SignalAnalysisResult {
+    return copy(
+        trafficState = snapshot.trafficState,
+        userGuidanceState = snapshot.userGuidanceState,
+        guidancePhase = snapshot.guidancePhase,
+        guidanceBlockReason = snapshot.guidanceBlockReason
+    )
+}

@@ -1,14 +1,13 @@
 package kr.co.gachon.pproject6.via.ml
 
 class TrafficLightStateTracker(
-    private val persistenceDurationMs: Long = 5000L,
-    private val triggerThreshold: Int = 3,
+    private val config: TrafficLightStateTrackingConfig = TrafficLightStateTrackingConfig(),
     private val timeProvider: () -> Long = System::currentTimeMillis
 ) {
     private var acceptedState: TrafficLightState = TrafficLightState.UNKNOWN
     private var lastEvidenceTime: Long = Long.MIN_VALUE
     private var candidateState: TrafficLightState = TrafficLightState.UNKNOWN
-    private var consecutiveCount = 0
+    private var candidateStateSince: Long = Long.MIN_VALUE
 
     fun update(
         currentState: TrafficLightState,
@@ -28,22 +27,34 @@ class TrafficLightStateTracker(
 
         if (currentState == acceptedState) {
             lastEvidenceTime = currentTime
-            candidateState = currentState
-            consecutiveCount = triggerThreshold
+            clearCandidate()
             return acceptedState
         }
 
-        if (currentState == candidateState) {
-            consecutiveCount++
-        } else {
+        if (currentState != candidateState) {
             candidateState = currentState
-            consecutiveCount = 1
+            candidateStateSince = currentTime
+        } else {
+            candidateStateSince = minOf(candidateStateSince, currentTime)
         }
 
-        if (isHighConfidence || consecutiveCount >= triggerThreshold) {
+        val isReadyByFastTrack = config.allowHighConfidenceImmediateCommit && isHighConfidence
+        val requiredDurationMs =
+            if (acceptedState == TrafficLightState.UNKNOWN) {
+                config.confirmDurationMs
+            } else {
+                config.switchConfirmDurationMs
+            }
+        val candidateObservedMs =
+            if (candidateStateSince == Long.MIN_VALUE) {
+                0L
+            } else {
+                currentTime - candidateStateSince
+            }
+        if (isReadyByFastTrack || candidateObservedMs >= requiredDurationMs) {
             acceptedState = currentState
             lastEvidenceTime = currentTime
-            consecutiveCount = maxOf(consecutiveCount, triggerThreshold)
+            clearCandidate()
             return acceptedState
         }
 
@@ -58,7 +69,15 @@ class TrafficLightStateTracker(
     private fun isAcceptedFresh(currentTime: Long): Boolean {
         return acceptedState != TrafficLightState.UNKNOWN &&
             lastEvidenceTime != Long.MIN_VALUE &&
-            currentTime - lastEvidenceTime < persistenceDurationMs
+            currentTime - lastEvidenceTime < persistenceDurationFor(acceptedState)
+    }
+
+    private fun persistenceDurationFor(state: TrafficLightState): Long {
+        return when (state) {
+            TrafficLightState.RED -> config.redPersistenceDurationMs
+            TrafficLightState.GREEN -> config.greenPersistenceDurationMs
+            TrafficLightState.UNKNOWN -> 0L
+        }
     }
 
     private fun clearAcceptedState() {
@@ -68,6 +87,16 @@ class TrafficLightStateTracker(
 
     private fun clearCandidate() {
         candidateState = TrafficLightState.UNKNOWN
-        consecutiveCount = 0
+        candidateStateSince = Long.MIN_VALUE
     }
 }
+
+data class TrafficLightStateTrackingConfig(
+    val confirmDurationMs: Long = 250L,
+    val switchConfirmDurationMs: Long = 400L,
+    // Red can stay sticky longer for stop stability, but green should expire fast so
+    // the next intersection requires a fresh red baseline after the previous signal is lost.
+    val redPersistenceDurationMs: Long = 5_000L,
+    val greenPersistenceDurationMs: Long = 2_500L,
+    val allowHighConfidenceImmediateCommit: Boolean = false
+)

@@ -5,7 +5,7 @@ import android.graphics.Color
 import kr.co.gachon.pproject6.via.ui.OverlayView
 
 object PostProcessor {
-    private val stateTracker = TrafficLightStateTracker()
+    private val stateTracker = TrafficLightStateTracker(GuidanceTuningDefaults.signalStateTrackingConfig)
     private var scratchPixels = IntArray(0)
 
     fun applyColorCorrection(

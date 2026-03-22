@@ -1,6 +1,8 @@
 package kr.co.gachon.pproject6.via.ml
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConservativeWalkSignalPolicyTest {
@@ -80,5 +82,38 @@ class ConservativeWalkSignalPolicyTest {
         val decision = policy.update(TrafficLightState.GREEN, false)
         assertEquals(UserGuidanceState.GO, decision.state)
         assertEquals(GuidancePhase.WALK_ALLOWED, decision.phase)
+    }
+
+    @Test
+    fun targetSessionChangeDoesNotDiscardConfirmedRedBaseline() {
+        var currentTime = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
+
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
+        assertFalse(policy.shouldResetOnTargetSessionChange())
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+    }
+
+    @Test
+    fun targetSessionChangeResetsBeforeRedBaselineOrAfterWalkAllowed() {
+        val waitingPolicy = ConservativeWalkSignalPolicy()
+        assertTrue(waitingPolicy.shouldResetOnTargetSessionChange())
+
+        val walkingPolicy = ConservativeWalkSignalPolicy()
+        assertEquals(UserGuidanceState.STOP, walkingPolicy.update(TrafficLightState.RED, false).state)
+        assertEquals(UserGuidanceState.GO, walkingPolicy.update(TrafficLightState.GREEN, false).state)
+        assertTrue(walkingPolicy.shouldResetOnTargetSessionChange())
+    }
+
+    @Test
+    fun staleRedBaselineEventuallyResetsOnTargetSessionChange() {
+        var currentTime = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
+
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
+        assertFalse(policy.shouldResetOnTargetSessionChange())
+
+        currentTime += 2_501L
+        assertTrue(policy.shouldResetOnTargetSessionChange())
     }
 }

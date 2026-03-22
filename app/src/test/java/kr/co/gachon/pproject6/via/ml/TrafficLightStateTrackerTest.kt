@@ -5,10 +5,27 @@ import org.junit.Test
 
 class TrafficLightStateTrackerTest {
     @Test
-    fun lowConfidenceSignalRequiresThreeConsecutiveFrames() {
+    fun lowConfidenceSignalRequiresMinimumObservationTime() {
         var currentTime = 1_000L
         val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
 
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.RED, false))
+    }
+
+    @Test
+    fun lowConfidenceSignalDoesNotCommitBeforeRequiredTime() {
+        var currentTime = 1_000L
+        val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
+
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 100
         assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
 
         currentTime += 100
@@ -19,25 +36,54 @@ class TrafficLightStateTrackerTest {
     }
 
     @Test
-    fun highConfidenceSignalFastTracksAndPersistsUntilTimeout() {
+    fun highConfidenceSignalStillRequiresConfiguredTimeByDefault() {
         var currentTime = 10_000L
         val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
 
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, true))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, true))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, true))
+    }
+
+    @Test
+    fun highConfidenceFastTrackCanStillBeEnabledExplicitly() {
+        var currentTime = 10_000L
+        val tracker = TrafficLightStateTracker(
+            config = TrafficLightStateTrackingConfig(allowHighConfidenceImmediateCommit = true),
+            timeProvider = { currentTime }
+        )
+
         assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, true))
 
-        currentTime += 1_000
+        currentTime += 2_499
         assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.UNKNOWN, false))
 
-        currentTime += 5_100
+        currentTime += 2
         assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.UNKNOWN, false))
     }
 
     @Test
-    fun oppositeStateRequiresRepeatedEvidenceBeforeSwitching() {
+    fun oppositeStateRequiresSustainedObservationTimeBeforeSwitching() {
         var currentTime = 1_000L
         val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
 
-        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.RED, true))
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 100
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
+
+        currentTime += 100
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
 
         currentTime += 100
         assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
@@ -50,16 +96,60 @@ class TrafficLightStateTrackerTest {
     }
 
     @Test
-    fun acceptedStateClearsAfterTimeoutWithoutEvidence() {
+    fun briefOppositeColorNoiseDoesNotFlipAcceptedState() {
         var currentTime = 1_000L
         val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
 
-        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, true))
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, false))
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, false))
+        currentTime += 125
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))
+
+        repeat(3) {
+            currentTime += 100
+            assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.RED, false))
+        }
+
+        currentTime += 100
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))
+    }
+
+    @Test
+    fun acceptedRedStateClearsAfterTimeoutWithoutEvidence() {
+        var currentTime = 1_000L
+        val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
+
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.RED, false))
+
+        currentTime += 125
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.RED, false))
 
         currentTime += 4_999L
-        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.UNKNOWN, false))
+        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.UNKNOWN, false))
 
         currentTime += 2L
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.UNKNOWN, false))
+    }
+
+    @Test
+    fun acceptedGreenStateSurvivesBriefUnknownGap() {
+        var currentTime = 1_000L
+        val tracker = TrafficLightStateTracker(timeProvider = { currentTime })
+
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, false))
+        currentTime += 125
+        assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.GREEN, false))
+        currentTime += 125
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))
+
+        currentTime += 2_000L
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.UNKNOWN, false))
+
+        currentTime += 501L
         assertEquals(TrafficLightState.UNKNOWN, tracker.update(TrafficLightState.UNKNOWN, false))
     }
 }

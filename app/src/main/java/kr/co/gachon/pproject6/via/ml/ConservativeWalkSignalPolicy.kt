@@ -1,18 +1,22 @@
 package kr.co.gachon.pproject6.via.ml
 
 class ConservativeWalkSignalPolicy(
-    private val config: ConservativeWalkSignalConfig = ConservativeWalkSignalConfig()
+    private val config: ConservativeWalkSignalConfig = ConservativeWalkSignalConfig(),
+    private val timeProvider: () -> Long = System::currentTimeMillis
 ) {
     private var phase: GuidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE
+    private var lastRedBaselineAt: Long = Long.MIN_VALUE
 
     fun update(
         state: TrafficLightState,
         hasBlockingRisk: Boolean
     ): GuidanceDecision {
+        val currentTime = timeProvider()
         return when (phase) {
             GuidancePhase.WAITING_FOR_RED_BASELINE -> when (state) {
                 TrafficLightState.RED -> {
                     phase = GuidancePhase.READY_FOR_GREEN_TRANSITION
+                    lastRedBaselineAt = currentTime
                     GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
                 }
 
@@ -29,7 +33,10 @@ class ConservativeWalkSignalPolicy(
             }
 
             GuidancePhase.READY_FOR_GREEN_TRANSITION -> when (state) {
-                TrafficLightState.RED -> GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
+                TrafficLightState.RED -> {
+                    lastRedBaselineAt = currentTime
+                    GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
+                }
                 TrafficLightState.GREEN -> {
                     if (config.blockGoWhenRiskDetected && hasBlockingRisk) {
                         GuidanceDecision(UserGuidanceState.WAIT, phase, GuidanceBlockReason.BLOCKING_RISK)
@@ -53,6 +60,7 @@ class ConservativeWalkSignalPolicy(
 
                 TrafficLightState.RED -> {
                     phase = GuidancePhase.READY_FOR_GREEN_TRANSITION
+                    lastRedBaselineAt = currentTime
                     GuidanceDecision(UserGuidanceState.STOP, phase, GuidanceBlockReason.NONE)
                 }
 
@@ -71,11 +79,22 @@ class ConservativeWalkSignalPolicy(
 
     fun reset() {
         phase = GuidancePhase.WAITING_FOR_RED_BASELINE
+        lastRedBaselineAt = Long.MIN_VALUE
+    }
+
+    fun shouldResetOnTargetSessionChange(): Boolean {
+        if (phase != GuidancePhase.READY_FOR_GREEN_TRANSITION) {
+            return true
+        }
+
+        return lastRedBaselineAt == Long.MIN_VALUE ||
+            timeProvider() - lastRedBaselineAt > config.preserveReadyBaselineMs
     }
 }
 
 data class ConservativeWalkSignalConfig(
     val requireRedBaselineBeforeGo: Boolean = true,
     val resetToBaselineOnUnknownDuringWalk: Boolean = true,
-    val blockGoWhenRiskDetected: Boolean = true
+    val blockGoWhenRiskDetected: Boolean = true,
+    val preserveReadyBaselineMs: Long = 2_500L
 )

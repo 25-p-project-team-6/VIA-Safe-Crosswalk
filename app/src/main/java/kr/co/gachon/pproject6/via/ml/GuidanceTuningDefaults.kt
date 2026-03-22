@@ -3,10 +3,24 @@ package kr.co.gachon.pproject6.via.ml
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackTimingConfig
 
 object GuidanceTuningDefaults {
+    val signalStateTrackingConfig = TrafficLightStateTrackingConfig(
+        confirmDurationMs = 250L,
+        switchConfirmDurationMs = 400L,
+        redPersistenceDurationMs = 5_000L,
+        greenPersistenceDurationMs = 2_500L,
+        allowHighConfidenceImmediateCommit = false
+    )
+
     val walkSignalConfig = ConservativeWalkSignalConfig(
         requireRedBaselineBeforeGo = true,
         resetToBaselineOnUnknownDuringWalk = true,
-        blockGoWhenRiskDetected = true
+        blockGoWhenRiskDetected = true,
+        preserveReadyBaselineMs = 2_500L
+    )
+
+    val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
+        actionConfirmFrames = 2,
+        waitConfirmFrames = 3
     )
 
     val riskObjectConfig = RiskObjectConfig(
@@ -24,6 +38,23 @@ object GuidanceTuningDefaults {
 
     fun toDebugSummary(): String {
         return buildString {
+            append("signal hold=")
+            append(signalStateTrackingConfig.confirmDurationMs)
+            append("ms")
+            append(", switch hold=")
+            append(signalStateTrackingConfig.switchConfirmDurationMs)
+            append("ms")
+            append(", green keep=")
+            append(signalStateTrackingConfig.greenPersistenceDurationMs)
+            append("ms")
+            append(", go/stop frames=")
+            append(guidanceStabilizerConfig.actionConfirmFrames)
+            append(", wait frames=")
+            append(guidanceStabilizerConfig.waitConfirmFrames)
+            append(", ready hold=")
+            append(walkSignalConfig.preserveReadyBaselineMs)
+            append("ms")
+            append(", ")
             append("risk score≥")
             append("%.2f".format(riskObjectConfig.minScore))
             append(", bottom≥")
