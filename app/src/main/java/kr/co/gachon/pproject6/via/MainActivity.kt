@@ -132,11 +132,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    private val requestLocationPermissionsLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            crossingSupportManager.refreshLocationRegistration()
-        }
-
     // traffic lights fine-tuned model label
     private val finetunedLabels =
         listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red")
@@ -290,7 +285,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupModelSpinner()
-        requestLocationPermissionsIfNeeded()
     }
 
     override fun onResume() {
@@ -402,30 +396,6 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e("MainActivity", "Error setting up model spinner", e)
         }
-    }
-
-    private fun requestLocationPermissionsIfNeeded() {
-        val hasFine =
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        val hasCoarse =
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        if (hasFine || hasCoarse) {
-            crossingSupportManager.refreshLocationRegistration()
-            return
-        }
-
-        requestLocationPermissionsLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            )
-        )
     }
 
     private fun updateDebugInfo(
