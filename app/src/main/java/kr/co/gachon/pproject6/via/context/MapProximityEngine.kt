@@ -3,7 +3,8 @@ package kr.co.gachon.pproject6.via.context
 class MapProximityEngine(
     private val maxAcceptedAccuracyMeters: Float = 25f,
     private val consecutiveFixesRequired: Int = 2,
-    private val headingTieDistanceMeters: Float = 10f
+    private val headingTieDistanceMeters: Float = 10f,
+    private val switchDistanceAdvantageMeters: Float = 8f
 ) {
     private var activeMatchId: String? = null
     private var pendingCandidateId: String? = null
@@ -35,14 +36,34 @@ class MapProximityEngine(
 
         val activeCandidate =
             activeMatchId?.let { activeId -> candidates.firstOrNull { it.feature.id == activeId } }
-        if (activeCandidate != null && activeCandidate.distanceMeters <= activeCandidate.feature.exitRadiusMeters) {
+        val entryCandidates = candidates.filter { it.distanceMeters <= it.feature.triggerRadiusMeters }
+        val selectedCandidate =
+            if (entryCandidates.isEmpty()) {
+                null
+            } else {
+                selectCandidate(entryCandidates, headingDegrees)
+            }
+        val retainedActiveCandidate =
+            activeCandidate?.takeIf { it.distanceMeters <= it.feature.exitRadiusMeters }
+
+        if (retainedActiveCandidate != null) {
+            if (selectedCandidate != null && shouldSwitchActiveMatch(retainedActiveCandidate, selectedCandidate)) {
+                lastSnapshot =
+                    promoteCandidate(
+                        candidate = selectedCandidate,
+                        datasetVersion = datasetVersion,
+                        usedRemoteData = usedRemoteData,
+                        fallbackSnapshot = retainedActiveCandidate.toSnapshot(datasetVersion, usedRemoteData)
+                    )
+                return lastSnapshot
+            }
+
             clearPending()
-            lastSnapshot = activeCandidate.toSnapshot(datasetVersion, usedRemoteData)
+            lastSnapshot = retainedActiveCandidate.toSnapshot(datasetVersion, usedRemoteData)
             return lastSnapshot
         }
         clearActive()
 
-        val entryCandidates = candidates.filter { it.distanceMeters <= it.feature.triggerRadiusMeters }
         if (entryCandidates.isEmpty()) {
             clearPending()
             lastSnapshot =
@@ -53,26 +74,17 @@ class MapProximityEngine(
             return lastSnapshot
         }
 
-        val selectedCandidate = selectCandidate(entryCandidates, headingDegrees)
-        if (selectedCandidate.feature.id == pendingCandidateId) {
-            pendingCandidateCount += 1
-        } else {
-            pendingCandidateId = selectedCandidate.feature.id
-            pendingCandidateCount = 1
-        }
-
-        if (pendingCandidateCount < consecutiveFixesRequired) {
-            lastSnapshot =
-                MapProximitySnapshot(
-                    datasetVersion = datasetVersion ?: lastSnapshot.datasetVersion,
-                    usedRemoteData = usedRemoteData
-                )
-            return lastSnapshot
-        }
-
-        activeMatchId = selectedCandidate.feature.id
-        clearPending()
-        lastSnapshot = selectedCandidate.toSnapshot(datasetVersion, usedRemoteData)
+        lastSnapshot =
+            promoteCandidate(
+                candidate = selectedCandidate!!,
+                datasetVersion = datasetVersion,
+                usedRemoteData = usedRemoteData,
+                fallbackSnapshot =
+                    MapProximitySnapshot(
+                        datasetVersion = datasetVersion ?: lastSnapshot.datasetVersion,
+                        usedRemoteData = usedRemoteData
+                    )
+            )
         return lastSnapshot
     }
 
@@ -110,6 +122,42 @@ class MapProximityEngine(
         return feature.approachBearings.minOfOrNull {
             angularDifferenceDegrees(it, headingDegrees)
         }
+    }
+
+    private fun shouldSwitchActiveMatch(
+        activeCandidate: MapCandidate,
+        selectedCandidate: MapCandidate
+    ): Boolean {
+        if (selectedCandidate.feature.id == activeCandidate.feature.id) {
+            return false
+        }
+        if (selectedCandidate.distanceMeters + switchDistanceAdvantageMeters <= activeCandidate.distanceMeters) {
+            return true
+        }
+        return activeCandidate.distanceMeters > activeCandidate.feature.triggerRadiusMeters &&
+            selectedCandidate.distanceMeters <= selectedCandidate.feature.triggerRadiusMeters
+    }
+
+    private fun promoteCandidate(
+        candidate: MapCandidate,
+        datasetVersion: String?,
+        usedRemoteData: Boolean,
+        fallbackSnapshot: MapProximitySnapshot
+    ): MapProximitySnapshot {
+        if (candidate.feature.id == pendingCandidateId) {
+            pendingCandidateCount += 1
+        } else {
+            pendingCandidateId = candidate.feature.id
+            pendingCandidateCount = 1
+        }
+
+        if (pendingCandidateCount < consecutiveFixesRequired) {
+            return fallbackSnapshot.withDatasetMetadata(datasetVersion, usedRemoteData)
+        }
+
+        activeMatchId = candidate.feature.id
+        clearPending()
+        return candidate.toSnapshot(datasetVersion, usedRemoteData)
     }
 
     private fun clearPending() {

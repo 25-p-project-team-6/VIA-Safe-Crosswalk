@@ -38,6 +38,42 @@ class MapProximityEngineTest {
     }
 
     @Test
+    fun switchesToCloserCandidateBeforeOldExitRadiusAfterTwoConsistentFixes() {
+        val engine = MapProximityEngine()
+        val first = crosswalkFeature(id = "crosswalk-a", latitude = 37.45000, longitude = 127.12800)
+        val second = crosswalkFeature(id = "crosswalk-b", latitude = 37.45018, longitude = 127.12800)
+        val initialPoint = GeoPoint(latitude = 37.45003, longitude = 127.12800)
+        val movedPoint = GeoPoint(latitude = 37.45015, longitude = 127.12800)
+
+        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+
+        val firstSwitchAttempt = engine.update(movedPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+        val confirmedSwitch = engine.update(movedPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+
+        assertEquals("crosswalk-a", firstSwitchAttempt.matchedFeatureId)
+        assertEquals("crosswalk-b", confirmedSwitch.matchedFeatureId)
+    }
+
+    @Test
+    fun doesNotSwitchInsideDenseClusterForSmallDistanceDifference() {
+        val engine = MapProximityEngine()
+        val first = crosswalkFeature(id = "crosswalk-a", latitude = 37.45000, longitude = 127.12800)
+        val second = crosswalkFeature(id = "crosswalk-b", latitude = 37.45008, longitude = 127.12800)
+        val initialPoint = GeoPoint(latitude = 37.45001, longitude = 127.12800)
+        val slightlyCloserToSecond = GeoPoint(latitude = 37.45005, longitude = 127.12800)
+
+        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
+
+        val afterMove = engine.update(slightlyCloserToSecond, 4f, null, listOf(first, second), "bundled-v1", false)
+        val secondAfterMove = engine.update(slightlyCloserToSecond, 4f, null, listOf(first, second), "bundled-v1", false)
+
+        assertEquals("crosswalk-a", afterMove.matchedFeatureId)
+        assertEquals("crosswalk-a", secondAfterMove.matchedFeatureId)
+    }
+
+    @Test
     fun poorAccuracyDoesNotCreateNewMatch() {
         val engine = MapProximityEngine()
         val feature = crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280)
