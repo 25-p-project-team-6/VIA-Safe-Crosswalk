@@ -25,6 +25,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kr.co.gachon.pproject6.via.context.GeoPoint
+import kr.co.gachon.pproject6.via.context.MapProximityManager
 import kr.co.gachon.pproject6.via.context.MapTileStore
 import kr.co.gachon.pproject6.via.context.haversineDistanceMeters
 import kr.co.gachon.pproject6.via.map.KineticGuestSession
@@ -57,6 +58,7 @@ class DebugMapActivity : AppCompatActivity() {
     private lateinit var sessionManager: KineticGuestSessionManager
     private lateinit var locationManager: LocationManager
     private lateinit var osmFetcher: OsmNearbyCrossingFetcher
+    private lateinit var mapProximityManager: MapProximityManager
     private val tileRefreshInFlight = AtomicBoolean(false)
     private var activeSession: KineticGuestSession? = null
     private var currentMarkerInjected = false
@@ -80,6 +82,7 @@ class DebugMapActivity : AppCompatActivity() {
         sessionManager = KineticGuestSessionManager.from(this)
         locationManager = getSystemService(LocationManager::class.java)
         osmFetcher = OsmNearbyCrossingFetcher(this)
+        mapProximityManager = MapProximityManager(this)
         mapState = DebugMapState.fromIntent(intent, this)
 
         title = "지도 디버그"
@@ -97,7 +100,22 @@ class DebugMapActivity : AppCompatActivity() {
             recenterMapOnCurrentLocation()
         }
 
-        loadMap(forceRefresh = false)
+        val cachedSession = sessionManager.peekValidSession()
+        if (cachedSession != null) {
+            activeSession = cachedSession
+            summaryTextView.text = mapState.toHeaderSummaryText()
+            nearbyTextView.text = mapState.toNearbySummaryText()
+            webView.loadDataWithBaseURL(
+                "file:///android_asset/",
+                mapState.toLeafletHtml(cachedSession),
+                "text/html",
+                "utf-8",
+                null
+            )
+            loadDebugDataForCurrentLocation(mapState.currentPoint())
+        } else {
+            loadMap(forceRefresh = false)
+        }
     }
 
     override fun onResume() {
@@ -223,20 +241,12 @@ class DebugMapActivity : AppCompatActivity() {
         }
         thread(start = true, isDaemon = true, name = "kinetic-map-load") {
             runCatching {
-                val session = sessionManager.getValidSession(forceRefresh = forceRefresh)
-                val osmCrossings =
-                    osmFetcher.fetchNearby(
-                        point = GeoPoint(mapState.base.currentLat, mapState.base.currentLon),
-                        radiusMeters = OSM_RADIUS_METERS,
-                        limit = OSM_LIMIT
-                    )
-                session to osmCrossings
+                sessionManager.getValidSession(forceRefresh = forceRefresh)
             }
-                .onSuccess { (session, osmCrossings) ->
+                .onSuccess { session ->
                     runOnUiThread {
                         activeSession = session
                         tileRefreshInFlight.set(false)
-                        mapState = mapState.withOsmCrossings(osmCrossings)
                         currentMarkerInjected = false
                         summaryTextView.text = mapState.toHeaderSummaryText()
                         nearbyTextView.text = mapState.toNearbySummaryText()
@@ -247,6 +257,7 @@ class DebugMapActivity : AppCompatActivity() {
                             "utf-8",
                             null
                         )
+                        loadDebugDataForCurrentLocation(mapState.currentPoint())
                     }
                 }
                 .onFailure { error ->
@@ -271,17 +282,19 @@ class DebugMapActivity : AppCompatActivity() {
     private fun handleLiveLocation(
         location: Location
     ) {
+        mapProximityManager.onLocation(location, headingDegrees = null)
+        val matchedSnapshot = mapProximityManager.snapshot()
         val updatedBase =
             mapState.base.copy(
                 currentLat = location.latitude,
                 currentLon = location.longitude,
                 currentAccMeters = if (location.hasAccuracy()) location.accuracy else mapState.base.currentAccMeters,
-                matchedKind = null,
-                matchedId = null,
-                matchedLat = null,
-                matchedLon = null,
-                matchedDistMeters = null,
-                isNearKnownFeature = false
+                matchedKind = matchedSnapshot.matchedKind?.wireName,
+                matchedId = matchedSnapshot.matchedFeatureId,
+                matchedLat = matchedSnapshot.matchedLatitude,
+                matchedLon = matchedSnapshot.matchedLongitude,
+                matchedDistMeters = matchedSnapshot.distanceMeters,
+                isNearKnownFeature = matchedSnapshot.isNearKnownFeature
             )
         mapState = mapState.copy(base = updatedBase)
         summaryTextView.text = mapState.toHeaderSummaryText()
@@ -566,6 +579,7 @@ private data class DebugMapState(
 ) {
     fun currentBundleRadiusMeters(): Int = BUNDLED_LOAD_RADIUS_METERS
     fun currentOsmRadiusMeters(): Int = OSM_RADIUS_METERS
+    fun currentPoint(): GeoPoint = GeoPoint(base.currentLat, base.currentLon)
 
     fun toHeaderSummaryText(): String {
         val bundledNearest =

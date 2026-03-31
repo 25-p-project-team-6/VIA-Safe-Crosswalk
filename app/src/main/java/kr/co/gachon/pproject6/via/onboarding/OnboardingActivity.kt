@@ -28,6 +28,7 @@ import kr.co.gachon.pproject6.via.BuildConfig
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import org.tensorflow.lite.gpu.CompatibilityList
 import java.util.Locale
@@ -550,6 +551,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         reusableRotatedBitmap = null
         cameraExecutor?.shutdownNow()
         cameraExecutor = null
+        KineticGuestSessionManager.from(this).prefetchIfNeeded()
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }

@@ -940,10 +940,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateGpsDebugMapButtonState() {
+        val currentSnapshot = currentCrossingSupportSnapshot()
         val hasLocationPermission = hasAnyLocationPermission()
         val hasMatch =
-            latestCrossingSupportSnapshot.mapProximitySnapshot.matchedLatitude != null &&
-                latestCrossingSupportSnapshot.mapProximitySnapshot.matchedLongitude != null
+            currentSnapshot.mapProximitySnapshot.matchedLatitude != null &&
+                currentSnapshot.mapProximitySnapshot.matchedLongitude != null
         openGpsDebugMapButton.isEnabled = hasLocationPermission
         openGpsDebugMapButton.text =
             if (hasLocationPermission) {
@@ -958,17 +959,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openGpsDebugMap() {
+        val currentSnapshot = currentCrossingSupportSnapshot()
         val fallbackLocation = bestAvailableLocation()
-        val lat = latestCrossingSupportSnapshot.currentLocationLatitude ?: fallbackLocation?.latitude
-        val lon = latestCrossingSupportSnapshot.currentLocationLongitude ?: fallbackLocation?.longitude
-        val mapSnapshot = latestCrossingSupportSnapshot.mapProximitySnapshot
+        val lat = currentSnapshot.currentLocationLatitude ?: fallbackLocation?.latitude
+        val lon = currentSnapshot.currentLocationLongitude ?: fallbackLocation?.longitude
+        val mapSnapshot = currentSnapshot.mapProximitySnapshot
         startActivity(
             DebugMapActivity.newIntent(
                 activity = this,
                 currentLat = lat ?: Double.NaN,
                 currentLon = lon ?: Double.NaN,
                 currentAccMeters =
-                    latestCrossingSupportSnapshot.currentLocationAccuracyMeters
+                    currentSnapshot.currentLocationAccuracyMeters
                         ?: if (fallbackLocation?.hasAccuracy() == true) fallbackLocation.accuracy else null,
                 matchedLat = mapSnapshot.matchedLatitude,
                 matchedLon = mapSnapshot.matchedLongitude,
@@ -979,6 +981,14 @@ class MainActivity : AppCompatActivity() {
                 isNearKnownFeature = mapSnapshot.isNearKnownFeature
             )
         )
+    }
+
+    private fun currentCrossingSupportSnapshot(): CrossingSupportSnapshot {
+        return if (::crossingSupportManager.isInitialized) {
+            crossingSupportManager.snapshot()
+        } else {
+            latestCrossingSupportSnapshot
+        }
     }
 
     private fun clearMapCaches() {

@@ -85,6 +85,16 @@ class KineticGuestSessionManager private constructor(
     }
 
     @Synchronized
+    fun peekValidSession(): KineticGuestSession? {
+        val current = activeSession ?: return null
+        return if (current.isExpiredSoon(timeProvider())) {
+            null
+        } else {
+            current
+        }
+    }
+
+    @Synchronized
     fun invalidateSession() {
         activeSession = null
     }
