@@ -3,8 +3,7 @@ package kr.co.gachon.pproject6.via.context
 class MapProximityEngine(
     private val maxAcceptedAccuracyMeters: Float = 25f,
     private val consecutiveFixesRequired: Int = 2,
-    private val headingTieDistanceMeters: Float = 10f,
-    private val switchDistanceAdvantageMeters: Float = 35f
+    private val headingTieDistanceMeters: Float = 10f
 ) {
     private var activeMatchId: String? = null
     private var pendingCandidateId: String? = null
@@ -51,8 +50,7 @@ class MapProximityEngine(
                 selectedCandidate != null &&
                     shouldSwitchActiveMatch(
                         activeCandidate = retainedActiveCandidate,
-                        selectedCandidate = selectedCandidate,
-                        accuracyMeters = accuracyMeters
+                        selectedCandidate = selectedCandidate
                     )
             ) {
                 lastSnapshot =
@@ -133,14 +131,12 @@ class MapProximityEngine(
 
     private fun shouldSwitchActiveMatch(
         activeCandidate: MapCandidate,
-        selectedCandidate: MapCandidate,
-        accuracyMeters: Float?
+        selectedCandidate: MapCandidate
     ): Boolean {
         if (selectedCandidate.feature.id == activeCandidate.feature.id) {
             return false
         }
-        val requiredAdvantageMeters = switchDistanceAdvantageMeters + (accuracyMeters ?: 0f).coerceAtLeast(0f)
-        return selectedCandidate.distanceMeters + requiredAdvantageMeters <= activeCandidate.distanceMeters
+        return selectedCandidate.distanceMeters < activeCandidate.distanceMeters
     }
 
     private fun promoteCandidate(
