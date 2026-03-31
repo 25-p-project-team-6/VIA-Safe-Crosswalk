@@ -108,6 +108,7 @@ class CrossingSupportManager(
 
         val manager = locationManager ?: return
         val looper = Looper.getMainLooper()
+        seedLastKnownLocation(manager)
 
         if (manager.isProviderEnabledSafe(LocationManager.GPS_PROVIDER)) {
             manager.requestLocationUpdates(
@@ -128,6 +129,30 @@ class CrossingSupportManager(
                 looper
             )
             networkRegistered = true
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun seedLastKnownLocation(
+        manager: LocationManager
+    ) {
+        val candidates =
+            buildList {
+                if (manager.isProviderEnabledSafe(LocationManager.GPS_PROVIDER)) {
+                    manager.getLastKnownLocationSafe(LocationManager.GPS_PROVIDER)?.let { add(it) }
+                }
+                if (manager.isProviderEnabledSafe(LocationManager.NETWORK_PROVIDER)) {
+                    manager.getLastKnownLocationSafe(LocationManager.NETWORK_PROVIDER)?.let { add(it) }
+                }
+            }
+        val best =
+            candidates.minWithOrNull(
+                compareBy<Location> {
+                    if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE
+                }.thenByDescending { it.time }
+            )
+        if (best != null) {
+            handleLocation(best)
         }
     }
 
@@ -301,6 +326,11 @@ class CrossingSupportManager(
 
     private fun LocationManager.isProviderEnabledSafe(provider: String): Boolean {
         return runCatching { isProviderEnabled(provider) }.getOrDefault(false)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun LocationManager.getLastKnownLocationSafe(provider: String): Location? {
+        return runCatching { getLastKnownLocation(provider) }.getOrNull()
     }
 }
 

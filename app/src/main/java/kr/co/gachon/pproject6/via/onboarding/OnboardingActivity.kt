@@ -542,15 +542,27 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         (value * resources.displayMetrics.density).toInt()
 
     private fun launchMain() {
+        activeRun?.finished = true
+        cameraManager?.stopCamera()
+        cameraManager = null
+        calibrationDetector?.close()
+        calibrationDetector = null
+        reusableRotatedBitmap = null
+        cameraExecutor?.shutdownNow()
+        cameraExecutor = null
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        activeRun?.finished = true
         cameraManager?.stopCamera()
+        cameraManager = null
         calibrationDetector?.close()
+        calibrationDetector = null
         cameraExecutor?.shutdown()
+        cameraExecutor = null
         if (::tts.isInitialized) {
             tts.stop()
             tts.shutdown()

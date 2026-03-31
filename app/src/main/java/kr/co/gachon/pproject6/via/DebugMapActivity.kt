@@ -23,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kr.co.gachon.pproject6.via.context.GeoPoint
 import kr.co.gachon.pproject6.via.context.MapTileStore
 import kr.co.gachon.pproject6.via.context.haversineDistanceMeters
@@ -31,8 +32,11 @@ import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.map.OsmNearbyCrossing
 import kr.co.gachon.pproject6.via.map.OsmNearbyCrossingFetcher
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -43,6 +47,7 @@ class DebugMapActivity : AppCompatActivity() {
     private lateinit var nearbyTextView: TextView
     private lateinit var webView: WebView
     private lateinit var externalMapButton: MaterialButton
+    private lateinit var recenterMapButton: FloatingActionButton
     private lateinit var mapState: DebugMapState
     private lateinit var sessionManager: KineticGuestSessionManager
     private lateinit var locationManager: LocationManager
@@ -64,6 +69,7 @@ class DebugMapActivity : AppCompatActivity() {
         nearbyTextView = findViewById(R.id.debugMapNearbyText)
         webView = findViewById(R.id.debugMapWebView)
         externalMapButton = findViewById(R.id.openExternalMapButton)
+        recenterMapButton = findViewById(R.id.recenterMapButton)
 
         sessionManager = KineticGuestSessionManager.from(this)
         locationManager = getSystemService(LocationManager::class.java)
@@ -79,6 +85,9 @@ class DebugMapActivity : AppCompatActivity() {
 
         externalMapButton.setOnClickListener {
             openExternalMap(mapState)
+        }
+        recenterMapButton.setOnClickListener {
+            recenterMapOnCurrentLocation()
         }
 
         loadMap(forceRefresh = false)
@@ -128,6 +137,7 @@ class DebugMapActivity : AppCompatActivity() {
         if (!hasLocationPermission()) {
             return
         }
+        seedLastKnownLocation()
         runCatching {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
@@ -149,6 +159,32 @@ class DebugMapActivity : AppCompatActivity() {
                     Looper.getMainLooper()
                 )
             }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun seedLastKnownLocation() {
+        val candidates =
+            buildList {
+                runCatching {
+                    if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                        locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { add(it) }
+                    }
+                }
+                runCatching {
+                    if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                        locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let { add(it) }
+                    }
+                }
+            }
+        val best =
+            candidates.minWithOrNull(
+                compareBy<Location> {
+                    if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE
+                }.thenByDescending { it.time }
+            )
+        if (best != null) {
+            handleLiveLocation(best)
         }
     }
 
@@ -276,15 +312,8 @@ class DebugMapActivity : AppCompatActivity() {
                 mapState = refreshedState
                 summaryTextView.text = mapState.toHeaderSummaryText()
                 nearbyTextView.text = mapState.toNearbySummaryText()
-                activeSession?.let { session ->
-                    currentMarkerInjected = false
-                    webView.loadDataWithBaseURL(
-                        "file:///android_asset/",
-                        mapState.toLeafletHtml(session),
-                        "text/html",
-                        "utf-8",
-                        null
-                    )
+                if (activeSession != null && currentMarkerInjected) {
+                    pushMapDataUpdate()
                 }
             }
         }
@@ -323,6 +352,24 @@ class DebugMapActivity : AppCompatActivity() {
         }
     }
 
+    private fun pushMapDataUpdate() {
+        if (!currentMarkerInjected) {
+            return
+        }
+        webView.evaluateJavascript(mapState.toLeafletUpdateScript(), null)
+    }
+
+    private fun recenterMapOnCurrentLocation() {
+        if (!currentMarkerInjected) {
+            Toast.makeText(this, "지도를 아직 불러오는 중입니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+        webView.evaluateJavascript(
+            "window.recenterToCurrentLocation && window.recenterToCurrentLocation();",
+            null
+        )
+    }
+
     private fun openExternalMap(state: DebugMapState) {
         val candidates = state.toExternalMapIntents()
         for (intent in candidates) {
@@ -355,6 +402,7 @@ class DebugMapActivity : AppCompatActivity() {
                 mapState.base.currentLon,
                 mapState.currentBundleRadiusMeters()
             )
+            pushMapDataUpdate()
         }
 
         override fun shouldInterceptRequest(
@@ -370,6 +418,11 @@ class DebugMapActivity : AppCompatActivity() {
         }
 
         private fun fetchTileResponse(url: String): WebResourceResponse {
+            val cached = this@DebugMapActivity.readCachedTile(url)
+            if (cached != null) {
+                return cached
+            }
+
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 7_500
@@ -388,13 +441,21 @@ class DebugMapActivity : AppCompatActivity() {
                 when (statusCode) {
                     HttpURLConnection.HTTP_OK -> {
                         val mimeType = connection.contentType?.substringBefore(";") ?: "image/png"
+                        val bytes = connection.inputStream.use { it.readBytes() }
+                        this@DebugMapActivity.writeCachedTile(
+                            url = url,
+                            payload = bytes,
+                            mimeType = mimeType,
+                            encoding = connection.contentEncoding ?: "binary",
+                            expiryEpochMs = parseExpiryEpochMs(connection)
+                        )
                         WebResourceResponse(
                             mimeType,
                             connection.contentEncoding ?: "binary",
                             statusCode ?: HttpURLConnection.HTTP_OK,
                             connection.responseMessage ?: "OK",
                             connection.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(",") },
-                            connection.inputStream
+                            ByteArrayInputStream(bytes)
                         )
                     }
 
@@ -497,6 +558,7 @@ private data class DebugMapState(
     val osmCrossings: List<OsmNearbyCrossing> = emptyList()
 ) {
     fun currentBundleRadiusMeters(): Int = 700
+    fun currentOsmRadiusMeters(): Int = 250
 
     fun toHeaderSummaryText(): String {
         val bundledNearest =
@@ -559,80 +621,20 @@ private data class DebugMapState(
         }
     }
 
+    fun toLeafletUpdateScript(): String {
+        return """
+            window.updateDebugMapData && window.updateDebugMapData({
+              current: { lat: ${base.currentLat}, lon: ${base.currentLon} },
+              bundled: ${bundledFeaturesJs()},
+              osm: ${osmFeaturesJs()},
+              matched: ${matchedFeatureJs()},
+              osmRadius: ${currentOsmRadiusMeters()},
+              bundledRadius: ${currentBundleRadiusMeters()}
+            });
+        """.trimIndent()
+    }
+
     fun toLeafletHtml(session: KineticGuestSession): String {
-        val allLatitudes =
-            buildList {
-                add(base.currentLat)
-                base.matchedLat?.let { add(it) }
-                addAll(nearbyFeatures.map { it.lat })
-                addAll(osmCrossings.map { it.lat })
-            }
-        val allLongitudes =
-            buildList {
-                add(base.currentLon)
-                base.matchedLon?.let { add(it) }
-                addAll(nearbyFeatures.map { it.lon })
-                addAll(osmCrossings.map { it.lon })
-            }
-        val boundsScript =
-            if (allLatitudes.size > 1) {
-                val minLat = allLatitudes.minOrNull() ?: base.currentLat
-                val maxLat = allLatitudes.maxOrNull() ?: base.currentLat
-                val minLon = allLongitudes.minOrNull() ?: base.currentLon
-                val maxLon = allLongitudes.maxOrNull() ?: base.currentLon
-                "map.fitBounds([[${minLat}, ${minLon}], [${maxLat}, ${maxLon}]], {padding:[40,40]});"
-            } else {
-                "map.setView([${base.currentLat}, ${base.currentLon}], 18);"
-            }
-
-        val nearbyMarkers = nearbyFeatures.joinToString("\n") { nearby ->
-            val stroke =
-                when {
-                    nearby.kind.contains("ped_signal", ignoreCase = true) -> "#ff7043"
-                    else -> "#ffb300"
-                }
-            val fill =
-                when {
-                    nearby.kind.contains("ped_signal", ignoreCase = true) -> "#ffab91"
-                    else -> "#ffca28"
-                }
-            """
-            L.circleMarker([${nearby.lat}, ${nearby.lon}], {radius: 7, color: '$stroke', fillColor: '$fill', fillOpacity: 0.9, weight: 2})
-              .addTo(map)
-              .bindPopup(${jsString("${nearby.kind} · ${String.format(Locale.US, "%.1f", nearby.distanceMeters)}m\n${nearby.id}")});
-            """.trimIndent()
-        }
-        val osmMarkers = osmCrossings.joinToString("\n") { crossing ->
-            val stroke = if (crossing.signalControlled) "#ef5350" else "#ab47bc"
-            val fill = if (crossing.signalControlled) "#ef9a9a" else "#ce93d8"
-            val polyline =
-                if (crossing.geometry.size >= 2) {
-                    val geometryJs = crossing.geometry.joinToString(prefix = "[", postfix = "]") {
-                        "[${it.latitude}, ${it.longitude}]"
-                    }
-                    "L.polyline($geometryJs, {color: '$stroke', weight: 4, opacity: 0.9}).addTo(map);"
-                } else {
-                    ""
-                }
-            """
-            $polyline
-            L.circleMarker([${crossing.lat}, ${crossing.lon}], {radius: 6, color: '$stroke', fillColor: '$fill', fillOpacity: 0.92, weight: 2})
-              .addTo(map)
-              .bindPopup(${jsString("${crossing.kind} · ${String.format(Locale.US, "%.1f", crossing.distanceMeters)}m\n${crossing.id}")});
-            """.trimIndent()
-        }
-        val matchedMarker =
-            if (base.matchedLat != null && base.matchedLon != null) {
-                """
-                L.circleMarker([${base.matchedLat}, ${base.matchedLon}], {radius: 9, color: '#4caf50', fillColor: '#66bb6a', fillOpacity: 0.95, weight: 3})
-                  .addTo(map)
-                  .bindPopup(${jsString("${base.matchedKind ?: "match"}\n${base.matchedId ?: ""}")});
-                L.polyline([[${base.currentLat}, ${base.currentLon}], [${base.matchedLat}, ${base.matchedLon}]], {color: '#4caf50', weight: 4, dashArray: '8 6'}).addTo(map);
-                """.trimIndent()
-            } else {
-                ""
-            }
-
         return """
             <!doctype html>
             <html lang="ko">
@@ -656,6 +658,9 @@ private data class DebugMapState(
                   tileSize: ${session.tileSize},
                   attribution: '© OpenStreetMap contributors / kinetic.moe'
                 }).addTo(map);
+                let currentLocation = { lat: ${base.currentLat}, lon: ${base.currentLon} };
+                let currentOsmRadius = ${currentOsmRadiusMeters()};
+                let currentBundledRadius = ${currentBundleRadiusMeters()};
                 let currentMarker = L.circleMarker([${base.currentLat}, ${base.currentLon}], {
                   radius: 9,
                   color: '#2196f3',
@@ -677,17 +682,153 @@ private data class DebugMapState(
                   dashArray: '6 6',
                   fillOpacity: 0.0
                 }).addTo(map);
+                let bundledFeatures = ${bundledFeaturesJs()};
+                let osmFeatures = ${osmFeaturesJs()};
+                let matchedFeature = ${matchedFeatureJs()};
+                const bundledLayers = [];
+                const osmLayers = [];
+                let matchedMarker = null;
+                let matchedLine = null;
+                function distanceMeters(lat1, lon1, lat2, lon2) {
+                  const R = 6371000;
+                  const toRad = (v) => v * Math.PI / 180;
+                  const dLat = toRad(lat2 - lat1);
+                  const dLon = toRad(lon2 - lon1);
+                  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+                  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+                }
+                function ensureBundledLayers() {
+                  if (bundledLayers.length > 0) return;
+                  bundledFeatures.forEach((feature) => {
+                    const marker = L.circleMarker([feature.lat, feature.lon], {radius: 7, color: feature.stroke, fillColor: feature.fill, fillOpacity: 0.9, weight: 2})
+                      .bindPopup(feature.popup);
+                    bundledLayers.push({ feature, layer: marker, visible: false });
+                  });
+                }
+                function clearBundledLayers() {
+                  while (bundledLayers.length > 0) {
+                    const entry = bundledLayers.pop();
+                    if (entry.visible) {
+                      map.removeLayer(entry.layer);
+                    }
+                  }
+                }
+                function ensureOsmLayers() {
+                  if (osmLayers.length > 0) return;
+                  osmFeatures.forEach((feature) => {
+                    const group = L.layerGroup();
+                    if (feature.geometry && feature.geometry.length >= 2) {
+                      L.polyline(feature.geometry, {color: feature.stroke, weight: 4, opacity: 0.9}).addTo(group);
+                    }
+                    L.circleMarker([feature.lat, feature.lon], {radius: 6, color: feature.stroke, fillColor: feature.fill, fillOpacity: 0.92, weight: 2})
+                      .bindPopup(feature.popup)
+                      .addTo(group);
+                    osmLayers.push({ feature, layer: group, visible: false });
+                  });
+                }
+                function clearOsmLayers() {
+                  while (osmLayers.length > 0) {
+                    const entry = osmLayers.pop();
+                    if (entry.visible) {
+                      map.removeLayer(entry.layer);
+                    }
+                  }
+                }
+                function syncMatchedFeature() {
+                  if (matchedMarker) {
+                    map.removeLayer(matchedMarker);
+                    matchedMarker = null;
+                  }
+                  if (matchedLine) {
+                    map.removeLayer(matchedLine);
+                    matchedLine = null;
+                  }
+                  if (!matchedFeature || matchedFeature.lat == null || matchedFeature.lon == null) {
+                    return;
+                  }
+                  matchedMarker = L.circleMarker([matchedFeature.lat, matchedFeature.lon], {
+                    radius: 9,
+                    color: '#4caf50',
+                    fillColor: '#66bb6a',
+                    fillOpacity: 0.95,
+                    weight: 3
+                  }).addTo(map).bindPopup(matchedFeature.popup);
+                  matchedLine = L.polyline(
+                    [[currentLocation.lat, currentLocation.lon], [matchedFeature.lat, matchedFeature.lon]],
+                    { color: '#4caf50', weight: 4, dashArray: '8 6' }
+                  ).addTo(map);
+                }
+                function syncLayerVisibility(lat, lon, bundledRadius, osmRadius) {
+                  ensureBundledLayers();
+                  ensureOsmLayers();
+                  bundledLayers.forEach((entry) => {
+                    const shouldShow = distanceMeters(lat, lon, entry.feature.lat, entry.feature.lon) <= bundledRadius;
+                    if (shouldShow && !entry.visible) {
+                      entry.layer.addTo(map);
+                      entry.visible = true;
+                    } else if (!shouldShow && entry.visible) {
+                      map.removeLayer(entry.layer);
+                      entry.visible = false;
+                    }
+                  });
+                  osmLayers.forEach((entry) => {
+                    const shouldShow = distanceMeters(lat, lon, entry.feature.lat, entry.feature.lon) <= osmRadius;
+                    if (shouldShow && !entry.visible) {
+                      entry.layer.addTo(map);
+                      entry.visible = true;
+                    } else if (!shouldShow && entry.visible) {
+                      map.removeLayer(entry.layer);
+                      entry.visible = false;
+                    }
+                  });
+                }
+                function replaceNearbyData(nextBundledFeatures, nextOsmFeatures) {
+                  bundledFeatures = nextBundledFeatures || [];
+                  osmFeatures = nextOsmFeatures || [];
+                  clearBundledLayers();
+                  clearOsmLayers();
+                  syncLayerVisibility(currentLocation.lat, currentLocation.lon, currentBundledRadius, currentOsmRadius);
+                }
                 window.updateCurrentLocation = function(lat, lon, osmRadius, bundledRadius) {
+                  currentLocation = { lat, lon };
+                  currentOsmRadius = osmRadius;
+                  currentBundledRadius = bundledRadius;
                   currentMarker.setLatLng([lat, lon]);
                   osmRadiusCircle.setLatLng([lat, lon]);
                   osmRadiusCircle.setRadius(osmRadius);
                   bundledRadiusCircle.setLatLng([lat, lon]);
                   bundledRadiusCircle.setRadius(bundledRadius);
+                  if (matchedLine && matchedFeature) {
+                    matchedLine.setLatLngs([[lat, lon], [matchedFeature.lat, matchedFeature.lon]]);
+                  }
+                  syncLayerVisibility(lat, lon, bundledRadius, osmRadius);
                 };
-                ${matchedMarker}
-                ${nearbyMarkers}
-                ${osmMarkers}
-                ${boundsScript}
+                window.updateDebugMapData = function(payload) {
+                  if (!payload) return;
+                  if (payload.current) {
+                    window.updateCurrentLocation(
+                      payload.current.lat,
+                      payload.current.lon,
+                      payload.osmRadius || currentOsmRadius,
+                      payload.bundledRadius || currentBundledRadius
+                    );
+                  }
+                  if (payload.bundled || payload.osm) {
+                    replaceNearbyData(payload.bundled || [], payload.osm || []);
+                  }
+                  if (Object.prototype.hasOwnProperty.call(payload, 'matched')) {
+                    matchedFeature = payload.matched;
+                    syncMatchedFeature();
+                  }
+                };
+                window.recenterToCurrentLocation = function() {
+                  map.setView([currentLocation.lat, currentLocation.lon], map.getZoom(), { animate: true });
+                };
+                map.setView([${base.currentLat}, ${base.currentLon}], 16);
+                syncMatchedFeature();
+                syncLayerVisibility(${base.currentLat}, ${base.currentLon}, ${currentBundleRadiusMeters()}, ${currentOsmRadiusMeters()});
               </script>
             </body>
             </html>
@@ -738,7 +879,7 @@ private data class DebugMapState(
             intent: Intent,
             activity: AppCompatActivity
         ): DebugMapState {
-            val base = DebugMapActivity.readIntent(intent)
+            val base = resolveInitialBaseState(activity, DebugMapActivity.readIntent(intent))
             val currentPoint = GeoPoint(base.currentLat, base.currentLon)
             val nearbyFeatures =
                 runCatching { loadBundledNearbyFeatures(activity, currentPoint, 700) }.getOrDefault(emptyList())
@@ -772,6 +913,66 @@ private data class DebugMapState(
             osmCrossings = osmNearby
         )
     }
+
+    private fun bundledFeaturesJs(): String =
+        nearbyFeatures.joinToString(prefix = "[", postfix = "]") { nearby ->
+            val stroke =
+                when {
+                    nearby.kind.contains("ped_signal", ignoreCase = true) -> "#ff7043"
+                    else -> "#ffb300"
+                }
+            val fill =
+                when {
+                    nearby.kind.contains("ped_signal", ignoreCase = true) -> "#ffab91"
+                    else -> "#ffca28"
+                }
+            """
+            {
+              lat: ${nearby.lat},
+              lon: ${nearby.lon},
+              stroke: '$stroke',
+              fill: '$fill',
+              popup: ${jsString("${nearby.kind} · ${String.format(Locale.US, "%.1f", nearby.distanceMeters)}m\n${nearby.id}")}
+            }
+            """.trimIndent()
+        }
+
+    private fun osmFeaturesJs(): String =
+        osmCrossings.joinToString(prefix = "[", postfix = "]") { crossing ->
+            val stroke = if (crossing.signalControlled) "#ef5350" else "#ab47bc"
+            val fill = if (crossing.signalControlled) "#ef9a9a" else "#ce93d8"
+            val geometryJs =
+                if (crossing.geometry.size >= 2) {
+                    crossing.geometry.joinToString(prefix = "[", postfix = "]") {
+                        "[${it.latitude}, ${it.longitude}]"
+                    }
+                } else {
+                    "[]"
+                }
+            """
+            {
+              lat: ${crossing.lat},
+              lon: ${crossing.lon},
+              stroke: '$stroke',
+              fill: '$fill',
+              popup: ${jsString("${crossing.kind} · ${String.format(Locale.US, "%.1f", crossing.distanceMeters)}m\n${crossing.id}")},
+              geometry: $geometryJs
+            }
+            """.trimIndent()
+        }
+
+    private fun matchedFeatureJs(): String =
+        if (base.matchedLat != null && base.matchedLon != null) {
+            """
+            {
+              lat: ${base.matchedLat},
+              lon: ${base.matchedLon},
+              popup: ${jsString("${base.matchedKind ?: "match"}\n${base.matchedId ?: ""}")}
+            }
+            """.trimIndent()
+        } else {
+            "null"
+        }
 }
 
 private data class NearbyFeature(
@@ -792,18 +993,65 @@ private fun loadBundledNearbyFeatures(
     return loadResult.features
         .distinctBy { it.id }
         .map {
+            val distanceMeters = haversineDistanceMeters(currentPoint, it.point)
             NearbyFeature(
                 id = it.id,
                 kind = it.kind.wireName,
                 lat = it.point.latitude,
                 lon = it.point.longitude,
-                distanceMeters = haversineDistanceMeters(currentPoint, it.point)
+                distanceMeters = distanceMeters
             )
         }
+        .filter { it.distanceMeters <= radiusMeters.toFloat() }
         .sortedBy { it.distanceMeters }
 }
 
 private fun formatCoord(value: Double): String = String.format(Locale.US, "%.6f", value)
+
+private fun resolveInitialBaseState(
+    activity: AppCompatActivity,
+    base: BaseMapDebugState
+): BaseMapDebugState {
+    if (!base.currentLat.isNaN() && !base.currentLon.isNaN()) {
+        return base
+    }
+    val fallback = bestAvailableLocation(activity) ?: return base
+    return base.copy(
+        currentLat = fallback.latitude,
+        currentLon = fallback.longitude,
+        currentAccMeters = if (fallback.hasAccuracy()) fallback.accuracy else base.currentAccMeters
+    )
+}
+
+private fun bestAvailableLocation(activity: AppCompatActivity): Location? {
+    val hasFine =
+        ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+    val hasCoarse =
+        ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+    if (!hasFine && !hasCoarse) {
+        return null
+    }
+    val locationManager = activity.getSystemService(LocationManager::class.java)
+    val candidates =
+        buildList {
+            runCatching {
+                if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
+                    locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { add(it) }
+                }
+            }
+            runCatching {
+                if (locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                    locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let { add(it) }
+                }
+            }
+        }
+    return candidates.minWithOrNull(
+        compareBy<Location> { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE }
+            .thenByDescending { it.time }
+    )
+}
 
 private fun escapeHtml(value: String): String =
     value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -838,6 +1086,76 @@ private fun blankTileResponse(): WebResourceResponse {
         mapOf("Cache-Control" to "no-store"),
         ByteArrayInputStream(TRANSPARENT_PNG_1X1)
     )
+}
+
+private fun DebugMapActivity.readCachedTile(url: String): WebResourceResponse? {
+    val baseFile = tileCacheFile(url)
+    val metaFile = File(baseFile.parentFile, "${baseFile.name}.meta")
+    if (!baseFile.exists() || !metaFile.exists()) {
+        return null
+    }
+    return runCatching {
+        val meta = metaFile.readText(StandardCharsets.UTF_8).split("\n")
+        val expiryEpochMs = meta.getOrNull(0)?.toLongOrNull() ?: 0L
+        val mimeType = meta.getOrNull(1)?.ifBlank { "image/png" } ?: "image/png"
+        val encoding = meta.getOrNull(2)?.ifBlank { "binary" } ?: "binary"
+        if (expiryEpochMs in 1 until System.currentTimeMillis()) {
+            baseFile.delete()
+            metaFile.delete()
+            return null
+        }
+        val bytes = baseFile.readBytes()
+        WebResourceResponse(
+            mimeType,
+            encoding,
+            200,
+            "OK",
+            mapOf("Cache-Control" to "private"),
+            ByteArrayInputStream(bytes)
+        )
+    }.getOrNull()
+}
+
+private fun DebugMapActivity.writeCachedTile(
+    url: String,
+    payload: ByteArray,
+    mimeType: String,
+    encoding: String,
+    expiryEpochMs: Long
+) {
+    runCatching {
+        val baseFile = tileCacheFile(url)
+        val metaFile = File(baseFile.parentFile, "${baseFile.name}.meta")
+        baseFile.parentFile?.mkdirs()
+        baseFile.writeBytes(payload)
+        metaFile.writeText(
+            listOf(expiryEpochMs.toString(), mimeType, encoding).joinToString("\n"),
+            StandardCharsets.UTF_8
+        )
+    }
+}
+
+private fun parseExpiryEpochMs(connection: HttpURLConnection): Long {
+    val cacheControl = connection.getHeaderField("Cache-Control").orEmpty()
+    val maxAge =
+        Regex("""max-age=(\d+)""")
+            .find(cacheControl)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toLongOrNull()
+    return if (maxAge != null) {
+        System.currentTimeMillis() + maxAge * 1000L
+    } else {
+        System.currentTimeMillis() + 10 * 60 * 1000L
+    }
+}
+
+private fun DebugMapActivity.tileCacheFile(url: String): File {
+    val hash =
+        MessageDigest.getInstance("SHA-256")
+            .digest(url.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    return File(cacheDir, "via-debug-tile-cache").resolve("$hash.bin")
 }
 
 private val TRANSPARENT_PNG_1X1 = byteArrayOf(

@@ -1,11 +1,14 @@
 package kr.co.gachon.pproject6.via
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
+import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -57,6 +60,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : AppCompatActivity() {
+    private companion object {
+        private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
+        private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
+    }
+
     private lateinit var viewFinder: PreviewView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
@@ -97,10 +105,16 @@ class MainActivity : AppCompatActivity() {
     private var suppressGpuToggleCallback = false
     private var suppressZoomToggleCallback = false
     private lateinit var preferences: AppPreferences
+    private val locationManager by lazy {
+        getSystemService(LocationManager::class.java)
+    }
     private var latestCrossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
 
     private var cameraManager: CameraManager? = null
     private var hasStartedCamera = false
+    private var cameraRecoveryAttempts = 0
+    @Volatile
+    private var lastCameraFrameAtElapsedMs = 0L
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private var showDebugInfo = false
@@ -355,10 +369,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         crossingSupportManager.start()
+        latestCrossingSupportSnapshot = crossingSupportManager.snapshot()
+        updateGpsDebugMapButtonState()
     }
 
     override fun onPause() {
         guidanceRuntimeResetter.resetForPause()
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
         crossingSupportManager.stop()
         super.onPause()
     }
@@ -567,9 +584,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startCamera() {
+    private fun startCamera(isRecoveryRestart: Boolean = false) {
         cameraManager?.stopCamera()
         hasStartedCamera = true
+        if (!isRecoveryRestart) {
+            cameraRecoveryAttempts = 0
+        }
+        lastCameraFrameAtElapsedMs = 0L
         val resolution = currentModelProfile.analysisResolution
         cameraManager = CameraManager(
             this,
@@ -605,6 +626,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        scheduleCameraColdStartRecovery()
     }
 
     private fun applySelectedZoom() {
@@ -613,11 +635,41 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun enqueueFrame(imageProxy: ImageProxy) {
+        lastCameraFrameAtElapsedMs = SystemClock.elapsedRealtime()
         cameraRateTracker.mark()
         val previousFrame = pendingFrame.getAndSet(imageProxy)
         previousFrame?.close()
         scheduleFrameProcessing()
     }
+
+    private fun scheduleCameraColdStartRecovery() {
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        viewFinder.postDelayed(cameraColdStartRecoveryRunnable, CAMERA_COLD_START_TIMEOUT_MS)
+    }
+
+    private val cameraColdStartRecoveryRunnable =
+        Runnable {
+            if (!hasStartedCamera) {
+                return@Runnable
+            }
+            if (cameraRecoveryAttempts >= MAX_CAMERA_COLD_START_RECOVERIES) {
+                return@Runnable
+            }
+            val lastFrameAt = lastCameraFrameAtElapsedMs
+            val stalled =
+                lastFrameAt == 0L ||
+                    (SystemClock.elapsedRealtime() - lastFrameAt) >= CAMERA_COLD_START_TIMEOUT_MS
+            if (!stalled) {
+                return@Runnable
+            }
+            cameraRecoveryAttempts += 1
+            Log.w(
+                "MainActivity",
+                "No camera frames detected after startup, restarting preview (attempt=$cameraRecoveryAttempts)"
+            )
+            publishBackendStatus("카메라 초기화 재시도 중…")
+            startCamera(isRecoveryRestart = true)
+        }
 
     private fun scheduleFrameProcessing() {
         val executor = processingExecutor ?: run {
@@ -882,40 +934,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateGpsDebugMapButtonState() {
-        val hasFix =
-            latestCrossingSupportSnapshot.currentLocationLatitude != null &&
-                latestCrossingSupportSnapshot.currentLocationLongitude != null
+        val hasLocationPermission = hasAnyLocationPermission()
         val hasMatch =
             latestCrossingSupportSnapshot.mapProximitySnapshot.matchedLatitude != null &&
                 latestCrossingSupportSnapshot.mapProximitySnapshot.matchedLongitude != null
-        openGpsDebugMapButton.isEnabled = hasFix
+        openGpsDebugMapButton.isEnabled = hasLocationPermission
         openGpsDebugMapButton.text =
-            if (hasFix) {
+            if (hasLocationPermission) {
                 if (hasMatch) {
                     "GPS + 매칭 지도 보기"
                 } else {
                     "현재 GPS를 지도에서 보기"
                 }
             } else {
-                "GPS 고정 대기 중"
+                "위치 권한 필요"
             }
     }
 
     private fun openGpsDebugMap() {
-        val lat = latestCrossingSupportSnapshot.currentLocationLatitude
-        val lon = latestCrossingSupportSnapshot.currentLocationLongitude
-        if (lat == null || lon == null) {
-            Toast.makeText(this, "아직 GPS 좌표가 없습니다", Toast.LENGTH_SHORT).show()
-            return
-        }
-
+        val fallbackLocation = bestAvailableLocation()
+        val lat = latestCrossingSupportSnapshot.currentLocationLatitude ?: fallbackLocation?.latitude
+        val lon = latestCrossingSupportSnapshot.currentLocationLongitude ?: fallbackLocation?.longitude
         val mapSnapshot = latestCrossingSupportSnapshot.mapProximitySnapshot
         startActivity(
             DebugMapActivity.newIntent(
                 activity = this,
-                currentLat = lat,
-                currentLon = lon,
-                currentAccMeters = latestCrossingSupportSnapshot.currentLocationAccuracyMeters,
+                currentLat = lat ?: Double.NaN,
+                currentLon = lon ?: Double.NaN,
+                currentAccMeters =
+                    latestCrossingSupportSnapshot.currentLocationAccuracyMeters
+                        ?: if (fallbackLocation?.hasAccuracy() == true) fallbackLocation.accuracy else null,
                 matchedLat = mapSnapshot.matchedLatitude,
                 matchedLon = mapSnapshot.matchedLongitude,
                 matchedKind = mapSnapshot.matchedKind?.wireName,
@@ -925,6 +973,41 @@ class MainActivity : AppCompatActivity() {
                 isNearKnownFeature = mapSnapshot.isNearKnownFeature
             )
         )
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bestAvailableLocation(): Location? {
+        if (!hasAnyLocationPermission()) {
+            return null
+        }
+
+        val candidates =
+            buildList {
+                runCatching {
+                    if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
+                        locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { add(it) }
+                    }
+                }
+                runCatching {
+                    if (locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                        locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let { add(it) }
+                    }
+                }
+            }
+        return candidates.minWithOrNull(
+            compareBy<Location> { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE }
+                .thenByDescending { it.time }
+        )
+    }
+
+    private fun hasAnyLocationPermission(): Boolean {
+        val hasFine =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        val hasCoarse =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        return hasFine || hasCoarse
     }
 
     private fun updateUserStatus(
@@ -1078,6 +1161,9 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         hasStartedCamera = false
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        cameraRecoveryAttempts = 0
+        lastCameraFrameAtElapsedMs = 0L
         pendingFrame.getAndSet(null)?.close()
         cameraExecutor?.shutdown()
         processingExecutor?.shutdown()

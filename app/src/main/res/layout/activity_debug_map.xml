@@ -47,11 +47,29 @@
         android:textSize="15sp"
         app:cornerRadius="18dp" />
 
-    <WebView
-        android:id="@+id/debugMapWebView"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="12dp"
-        android:layout_weight="1" />
+        android:layout_weight="1">
+
+        <WebView
+            android:id="@+id/debugMapWebView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/recenterMapButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:contentDescription="내 위치로 다시 이동"
+            android:src="@android:drawable/ic_menu_mylocation"
+            app:backgroundTint="@color/via_surface"
+            app:borderWidth="0dp"
+            app:elevation="8dp"
+            app:tint="@color/via_on_surface" />
+    </FrameLayout>
 
 </LinearLayout>
