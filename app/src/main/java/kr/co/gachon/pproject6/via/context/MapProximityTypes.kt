@@ -26,6 +26,12 @@ enum class MapFeatureKind(val wireName: String) {
     }
 }
 
+enum class MapFeatureSource(val wireName: String) {
+    BUNDLED("bundled"),
+    OSM("osm"),
+    HYBRID("hybrid");
+}
+
 data class MapFeatureRecord(
     val id: String,
     val kind: MapFeatureKind,
@@ -34,13 +40,15 @@ data class MapFeatureRecord(
     val exitRadiusMeters: Float = 55f,
     val approachBearings: List<Float> = emptyList(),
     val regionTileId: String,
-    val datasetVersion: String
+    val datasetVersion: String,
+    val source: MapFeatureSource = MapFeatureSource.BUNDLED
 )
 
 data class MapProximitySnapshot(
     val isNearKnownFeature: Boolean = false,
     val matchedFeatureId: String? = null,
     val matchedKind: MapFeatureKind? = null,
+    val matchedSource: MapFeatureSource? = null,
     val matchedLatitude: Double? = null,
     val matchedLongitude: Double? = null,
     val distanceMeters: Float? = null,
@@ -55,6 +63,8 @@ data class MapProximitySnapshot(
             append(isNearKnownFeature)
             append(", mapKind=")
             append(matchedKind?.wireName ?: "none")
+            append(", mapSource=")
+            append(matchedSource?.wireName ?: "none")
             append(", mapDist=")
             append(distanceSummary)
             append(", mapId=")

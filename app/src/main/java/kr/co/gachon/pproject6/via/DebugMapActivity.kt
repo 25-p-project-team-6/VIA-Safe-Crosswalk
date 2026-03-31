@@ -290,6 +290,7 @@ class DebugMapActivity : AppCompatActivity() {
                 currentLon = location.longitude,
                 currentAccMeters = if (location.hasAccuracy()) location.accuracy else mapState.base.currentAccMeters,
                 matchedKind = matchedSnapshot.matchedKind?.wireName,
+                matchedSource = matchedSnapshot.matchedSource?.wireName,
                 matchedId = matchedSnapshot.matchedFeatureId,
                 matchedLat = matchedSnapshot.matchedLatitude,
                 matchedLon = matchedSnapshot.matchedLongitude,
@@ -504,6 +505,7 @@ class DebugMapActivity : AppCompatActivity() {
         private const val EXTRA_MATCHED_LAT = "matched_lat"
         private const val EXTRA_MATCHED_LON = "matched_lon"
         private const val EXTRA_MATCHED_KIND = "matched_kind"
+        private const val EXTRA_MATCHED_SOURCE = "matched_source"
         private const val EXTRA_MATCHED_ID = "matched_id"
         private const val EXTRA_MATCHED_DIST = "matched_dist"
         private const val EXTRA_MAP_VERSION = "map_version"
@@ -517,6 +519,7 @@ class DebugMapActivity : AppCompatActivity() {
             matchedLat: Double?,
             matchedLon: Double?,
             matchedKind: String?,
+            matchedSource: String?,
             matchedId: String?,
             matchedDistMeters: Float?,
             mapVersion: String?,
@@ -529,6 +532,7 @@ class DebugMapActivity : AppCompatActivity() {
                 matchedLat?.let { putExtra(EXTRA_MATCHED_LAT, it) }
                 matchedLon?.let { putExtra(EXTRA_MATCHED_LON, it) }
                 putExtra(EXTRA_MATCHED_KIND, matchedKind)
+                putExtra(EXTRA_MATCHED_SOURCE, matchedSource)
                 putExtra(EXTRA_MATCHED_ID, matchedId)
                 matchedDistMeters?.let { putExtra(EXTRA_MATCHED_DIST, it) }
                 putExtra(EXTRA_MAP_VERSION, mapVersion)
@@ -549,6 +553,7 @@ class DebugMapActivity : AppCompatActivity() {
                 matchedLon =
                     intent.extras?.takeIf { it.containsKey(EXTRA_MATCHED_LON) }?.getDouble(EXTRA_MATCHED_LON),
                 matchedKind = intent.getStringExtra(EXTRA_MATCHED_KIND),
+                matchedSource = intent.getStringExtra(EXTRA_MATCHED_SOURCE),
                 matchedId = intent.getStringExtra(EXTRA_MATCHED_ID),
                 matchedDistMeters =
                     intent.extras?.takeIf { it.containsKey(EXTRA_MATCHED_DIST) }?.getFloat(EXTRA_MATCHED_DIST),
@@ -566,6 +571,7 @@ internal data class BaseMapDebugState(
     val matchedLat: Double?,
     val matchedLon: Double?,
     val matchedKind: String?,
+    val matchedSource: String?,
     val matchedId: String?,
     val matchedDistMeters: Float?,
     val mapVersion: String?,
@@ -588,7 +594,7 @@ private data class DebugMapState(
             osmCrossings.minByOrNull { it.distanceMeters }?.distanceMeters
         val matchedSummary =
             if (base.matchedKind != null && base.matchedDistMeters != null) {
-                "${base.matchedKind} · ${String.format(Locale.US, "%.1f m", base.matchedDistMeters)}"
+                "${base.matchedKind}/${base.matchedSource ?: "unknown"} · ${String.format(Locale.US, "%.1f m", base.matchedDistMeters)}"
             } else {
                 "none"
             }

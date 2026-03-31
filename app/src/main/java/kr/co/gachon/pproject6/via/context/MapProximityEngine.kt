@@ -183,6 +183,7 @@ class MapProximityEngine(
                 isNearKnownFeature = true,
                 matchedFeatureId = feature.id,
                 matchedKind = feature.kind,
+                matchedSource = feature.source,
                 matchedLatitude = feature.point.latitude,
                 matchedLongitude = feature.point.longitude,
                 distanceMeters = distanceMeters,

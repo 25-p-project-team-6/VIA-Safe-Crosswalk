@@ -128,21 +128,70 @@ class MapProximityEngineTest {
         assertEquals("crosswalk-ew", snapshot.matchedFeatureId)
     }
 
+    @Test
+    fun osmOnlyFeatureCanBecomeMatched() {
+        val engine = MapProximityEngine()
+        val feature =
+            crosswalkFeature(
+                id = "node:123",
+                latitude = 37.4500,
+                longitude = 127.1280,
+                source = MapFeatureSource.OSM
+            )
+        val point = GeoPoint(latitude = 37.45005, longitude = 127.1280)
+
+        engine.update(point, 5f, null, listOf(feature), "osm-live", false)
+        val snapshot = engine.update(point, 5f, null, listOf(feature), "osm-live", false)
+
+        assertTrue(snapshot.isNearKnownFeature)
+        assertEquals(MapFeatureSource.OSM, snapshot.matchedSource)
+        assertEquals("node:123", snapshot.matchedFeatureId)
+    }
+
+    @Test
+    fun overlappingBundledAndOsmFeaturesMergeIntoSingleHybridCandidate() {
+        val bundled =
+            crosswalkFeature(
+                id = "crosswalk-a",
+                latitude = 37.45000,
+                longitude = 127.12800,
+                source = MapFeatureSource.BUNDLED
+            )
+        val osm =
+            crosswalkFeature(
+                id = "node:999",
+                latitude = 37.45001,
+                longitude = 127.12800,
+                kind = MapFeatureKind.PED_SIGNAL,
+                source = MapFeatureSource.OSM
+            )
+
+        val merged = mergeProximityFeatures(listOf(bundled), listOf(osm))
+
+        assertEquals(1, merged.size)
+        assertEquals("crosswalk-a", merged.first().id)
+        assertEquals(MapFeatureKind.PED_SIGNAL, merged.first().kind)
+        assertEquals(MapFeatureSource.HYBRID, merged.first().source)
+    }
+
     private fun crosswalkFeature(
         id: String,
         latitude: Double,
         longitude: Double,
-        approachBearings: List<Float> = emptyList()
+        approachBearings: List<Float> = emptyList(),
+        kind: MapFeatureKind = MapFeatureKind.CROSSWALK,
+        source: MapFeatureSource = MapFeatureSource.BUNDLED
     ): MapFeatureRecord {
         return MapFeatureRecord(
             id = id,
-            kind = MapFeatureKind.CROSSWALK,
+            kind = kind,
             point = GeoPoint(latitude = latitude, longitude = longitude),
             triggerRadiusMeters = 35f,
             exitRadiusMeters = 55f,
             approachBearings = approachBearings,
             regionTileId = MapTileGrid.tileIdFor(latitude, longitude),
-            datasetVersion = "bundled-v1"
+            datasetVersion = "bundled-v1",
+            source = source
         )
     }
 }

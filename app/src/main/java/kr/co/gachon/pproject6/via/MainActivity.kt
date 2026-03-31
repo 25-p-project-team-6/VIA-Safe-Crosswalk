@@ -918,7 +918,7 @@ class MainActivity : AppCompatActivity() {
                     "GPSFix  : lat=${context.currentLocationLatitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | lon=${context.currentLocationLongitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | acc=${context.currentLocationAccuracyMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}"
                 )
                 append(
-                    "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, id=${shortMapId(map.matchedFeatureId)}, ver=${map.datasetVersion ?: "none"}"
+                    "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, id=${shortMapId(map.matchedFeatureId)}, ver=${map.datasetVersion ?: "none"}"
                 )
             }
         } else {
@@ -975,6 +975,7 @@ class MainActivity : AppCompatActivity() {
                 matchedLat = mapSnapshot.matchedLatitude,
                 matchedLon = mapSnapshot.matchedLongitude,
                 matchedKind = mapSnapshot.matchedKind?.wireName,
+                matchedSource = mapSnapshot.matchedSource?.wireName,
                 matchedId = mapSnapshot.matchedFeatureId,
                 matchedDistMeters = mapSnapshot.distanceMeters,
                 mapVersion = mapSnapshot.datasetVersion,

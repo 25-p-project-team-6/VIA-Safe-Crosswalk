@@ -71,6 +71,7 @@ class CrossingSupportSnapshotTest {
                 isNearKnownFeature = true,
                 matchedFeatureId = "crosswalk-a",
                 matchedKind = MapFeatureKind.CROSSWALK,
+                matchedSource = MapFeatureSource.BUNDLED,
                 distanceMeters = 12.5f,
                 datasetVersion = "bundled-v1"
             )
@@ -79,6 +80,7 @@ class CrossingSupportSnapshotTest {
         val summary = snapshot.toDebugSummary()
         assertTrue(summary.contains("mapNear=true"))
         assertTrue(summary.contains("mapKind=crosswalk"))
+        assertTrue(summary.contains("mapSource=bundled"))
         assertTrue(summary.contains("mapId=crosswalk-a"))
         assertTrue(summary.contains("mapVer=bundled-v1"))
     }
