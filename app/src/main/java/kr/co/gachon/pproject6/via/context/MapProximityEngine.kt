@@ -4,7 +4,7 @@ class MapProximityEngine(
     private val maxAcceptedAccuracyMeters: Float = 25f,
     private val consecutiveFixesRequired: Int = 2,
     private val headingTieDistanceMeters: Float = 10f,
-    private val switchDistanceAdvantageMeters: Float = 8f
+    private val switchDistanceAdvantageMeters: Float = 35f
 ) {
     private var activeMatchId: String? = null
     private var pendingCandidateId: String? = null
@@ -47,7 +47,14 @@ class MapProximityEngine(
             activeCandidate?.takeIf { it.distanceMeters <= it.feature.exitRadiusMeters }
 
         if (retainedActiveCandidate != null) {
-            if (selectedCandidate != null && shouldSwitchActiveMatch(retainedActiveCandidate, selectedCandidate)) {
+            if (
+                selectedCandidate != null &&
+                    shouldSwitchActiveMatch(
+                        activeCandidate = retainedActiveCandidate,
+                        selectedCandidate = selectedCandidate,
+                        accuracyMeters = accuracyMeters
+                    )
+            ) {
                 lastSnapshot =
                     promoteCandidate(
                         candidate = selectedCandidate,
@@ -126,16 +133,14 @@ class MapProximityEngine(
 
     private fun shouldSwitchActiveMatch(
         activeCandidate: MapCandidate,
-        selectedCandidate: MapCandidate
+        selectedCandidate: MapCandidate,
+        accuracyMeters: Float?
     ): Boolean {
         if (selectedCandidate.feature.id == activeCandidate.feature.id) {
             return false
         }
-        if (selectedCandidate.distanceMeters + switchDistanceAdvantageMeters <= activeCandidate.distanceMeters) {
-            return true
-        }
-        return activeCandidate.distanceMeters > activeCandidate.feature.triggerRadiusMeters &&
-            selectedCandidate.distanceMeters <= selectedCandidate.feature.triggerRadiusMeters
+        val requiredAdvantageMeters = switchDistanceAdvantageMeters + (accuracyMeters ?: 0f).coerceAtLeast(0f)
+        return selectedCandidate.distanceMeters + requiredAdvantageMeters <= activeCandidate.distanceMeters
     }
 
     private fun promoteCandidate(
