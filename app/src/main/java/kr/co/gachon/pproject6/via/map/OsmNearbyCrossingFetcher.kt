@@ -1,5 +1,6 @@
 package kr.co.gachon.pproject6.via.map
 
+import android.content.Context
 import android.util.Log
 import kr.co.gachon.pproject6.via.context.GeoPoint
 import kr.co.gachon.pproject6.via.context.SimpleJsonParser
@@ -9,6 +10,7 @@ import kr.co.gachon.pproject6.via.context.jsonDoubleOrNull
 import kr.co.gachon.pproject6.via.context.jsonObjectOrNull
 import kr.co.gachon.pproject6.via.context.jsonStringOrNull
 import java.io.BufferedWriter
+import java.io.File
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -26,13 +28,18 @@ data class OsmNearbyCrossing(
 )
 
 class OsmNearbyCrossingFetcher(
+    context: Context? = null,
     private val endpointUrl: String = "https://overpass-api.de/api/interpreter"
 ) {
+    private val appContext = context?.applicationContext
+
     fun fetchNearby(
         point: GeoPoint,
         radiusMeters: Int = 400,
         limit: Int = 12
     ): List<OsmNearbyCrossing> {
+        val cacheKey = buildCacheKey(point, radiusMeters, limit)
+        readCached(cacheKey, point, maxAgeMs = FRESH_CACHE_MS)?.let { return it }
         val query =
             """
             [out:json][timeout:12];
@@ -86,12 +93,103 @@ class OsmNearbyCrossingFetcher(
             parseOverpassCrossings(body, point)
                 .sortedBy { it.distanceMeters }
                 .take(limit)
+                .also { writeCache(cacheKey, it) }
         } catch (error: Exception) {
             Log.w("OsmNearby", "Overpass fetch failed", error)
-            emptyList()
+            readCached(cacheKey, point, maxAgeMs = STALE_CACHE_MS).orEmpty()
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun buildCacheKey(
+        point: GeoPoint,
+        radiusMeters: Int,
+        limit: Int
+    ): String {
+        val latBucket = kotlin.math.round(point.latitude * 2000.0) / 2000.0
+        val lonBucket = kotlin.math.round(point.longitude * 2000.0) / 2000.0
+        return String.format(Locale.US, "r%04d_l%03d_%.4f_%.4f", radiusMeters, limit, latBucket, lonBucket)
+    }
+
+    private fun readCached(
+        cacheKey: String,
+        currentPoint: GeoPoint,
+        maxAgeMs: Long
+    ): List<OsmNearbyCrossing>? {
+        val cacheFile = cacheFile(cacheKey) ?: return null
+        if (!cacheFile.exists()) {
+            return null
+        }
+        return runCatching {
+            val lines = cacheFile.readLines(StandardCharsets.UTF_8)
+            val timestamp = lines.firstOrNull()?.toLongOrNull() ?: return null
+            if (System.currentTimeMillis() - timestamp > maxAgeMs) {
+                return null
+            }
+            val json = lines.drop(1).joinToString("\n")
+            val root = SimpleJsonParser.parseObject(json)
+            root["items"].jsonArrayOrEmpty().mapNotNull { value ->
+                val item = value.jsonObjectOrNull() ?: return@mapNotNull null
+                val id = item["id"].jsonStringOrNull() ?: return@mapNotNull null
+                val lat = item["lat"].jsonDoubleOrNull() ?: return@mapNotNull null
+                val lon = item["lon"].jsonDoubleOrNull() ?: return@mapNotNull null
+                val kind = item["kind"].jsonStringOrNull() ?: "osm_crossing"
+                val distance = haversineDistanceMeters(currentPoint, GeoPoint(lat, lon))
+                val signalControlled = (item["signalControlled"] as? Boolean) ?: false
+                val geometry =
+                    item["geometry"].jsonArrayOrEmpty().mapNotNull { geoValue ->
+                        val geo = geoValue.jsonObjectOrNull() ?: return@mapNotNull null
+                        val geoLat = geo["lat"].jsonDoubleOrNull() ?: return@mapNotNull null
+                        val geoLon = geo["lon"].jsonDoubleOrNull() ?: return@mapNotNull null
+                        GeoPoint(geoLat, geoLon)
+                    }
+                OsmNearbyCrossing(
+                    id = id,
+                    lat = lat,
+                    lon = lon,
+                    kind = kind,
+                    distanceMeters = distance,
+                    signalControlled = signalControlled,
+                    geometry = geometry
+                )
+            }
+        }.getOrNull()
+    }
+
+    private fun writeCache(
+        cacheKey: String,
+        items: List<OsmNearbyCrossing>
+    ) {
+        val cacheFile = cacheFile(cacheKey) ?: return
+        runCatching {
+            cacheFile.parentFile?.mkdirs()
+            val jsonItems =
+                items.joinToString(prefix = "[", postfix = "]") { item ->
+                    val geometry =
+                        item.geometry.joinToString(prefix = "[", postfix = "]") { point ->
+                            """{"lat":${point.latitude},"lon":${point.longitude}}"""
+                        }
+                    """{"id":${jsonString(item.id)},"lat":${item.lat},"lon":${item.lon},"kind":${jsonString(item.kind)},"distanceMeters":${item.distanceMeters},"signalControlled":${item.signalControlled},"geometry":$geometry}"""
+                }
+            cacheFile.writeText(
+                buildString {
+                    appendLine(System.currentTimeMillis().toString())
+                    append("""{"items":$jsonItems}""")
+                },
+                StandardCharsets.UTF_8
+            )
+        }
+    }
+
+    private fun cacheFile(cacheKey: String): File? {
+        val context = appContext ?: return null
+        return MapDebugCacheManager.osmCacheDir(context).resolve("$cacheKey.json")
+    }
+
+    companion object {
+        private const val FRESH_CACHE_MS = 2 * 60 * 1000L
+        private const val STALE_CACHE_MS = 20 * 60 * 1000L
     }
 }
 
@@ -178,4 +276,21 @@ private fun parseGeometryPoints(
 
 private fun urlEncode(value: String): String {
     return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8.name())
+}
+
+private fun jsonString(value: String): String {
+    return buildString {
+        append('"')
+        value.forEach { ch ->
+            when (ch) {
+                '\\' -> append("\\\\")
+                '"' -> append("\\\"")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> append(ch)
+            }
+        }
+        append('"')
+    }
 }

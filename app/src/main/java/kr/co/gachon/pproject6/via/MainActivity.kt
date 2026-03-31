@@ -48,6 +48,7 @@ import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.ml.toGuidanceSnapshot
 import kr.co.gachon.pproject6.via.ml.withGuidanceSnapshot
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
+import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
@@ -78,6 +79,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buildInfoText: TextView
     private lateinit var resetAppButton: MaterialButton
     private lateinit var openGpsDebugMapButton: MaterialButton
+    private lateinit var clearMapCacheButton: MaterialButton
     private lateinit var targetInfoText: TextView
     private lateinit var decisionDebugText: TextView
     private lateinit var tuningDebugText: TextView
@@ -225,6 +227,7 @@ class MainActivity : AppCompatActivity() {
         backendStatusText = findViewById(R.id.backendStatusText)
         resetAppButton = findViewById(R.id.resetAppButton)
         openGpsDebugMapButton = findViewById(R.id.openGpsDebugMapButton)
+        clearMapCacheButton = findViewById(R.id.clearMapCacheButton)
         inputFpsText = findViewById(R.id.inputFpsText)
         modelNameText = findViewById(R.id.modelNameText)
         buildInfoText = findViewById(R.id.buildInfoText)
@@ -283,6 +286,9 @@ class MainActivity : AppCompatActivity() {
         }
         openGpsDebugMapButton.setOnClickListener {
             openGpsDebugMap()
+        }
+        clearMapCacheButton.setOnClickListener {
+            clearMapCaches()
         }
         updateGpsDebugMapButtonState()
 
@@ -973,6 +979,16 @@ class MainActivity : AppCompatActivity() {
                 isNearKnownFeature = mapSnapshot.isNearKnownFeature
             )
         )
+    }
+
+    private fun clearMapCaches() {
+        val deletedEntries = MapDebugCacheManager.clearAll(this)
+        KineticGuestSessionManager.from(this).invalidateSession()
+        Toast.makeText(
+            this,
+            "지도 캐시 초기화 완료 (${deletedEntries}개 삭제)",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     @SuppressLint("MissingPermission")

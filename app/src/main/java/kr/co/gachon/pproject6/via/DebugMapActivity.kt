@@ -29,6 +29,7 @@ import kr.co.gachon.pproject6.via.context.MapTileStore
 import kr.co.gachon.pproject6.via.context.haversineDistanceMeters
 import kr.co.gachon.pproject6.via.map.KineticGuestSession
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
+import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.map.OsmNearbyCrossing
 import kr.co.gachon.pproject6.via.map.OsmNearbyCrossingFetcher
 import java.io.ByteArrayInputStream
@@ -41,6 +42,10 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
+private const val OSM_RADIUS_METERS = 400
+private const val OSM_LIMIT = 100
+private const val BUNDLED_LOAD_RADIUS_METERS = 700
+
 class DebugMapActivity : AppCompatActivity() {
     private lateinit var rootView: View
     private lateinit var summaryTextView: TextView
@@ -51,6 +56,7 @@ class DebugMapActivity : AppCompatActivity() {
     private lateinit var mapState: DebugMapState
     private lateinit var sessionManager: KineticGuestSessionManager
     private lateinit var locationManager: LocationManager
+    private lateinit var osmFetcher: OsmNearbyCrossingFetcher
     private val tileRefreshInFlight = AtomicBoolean(false)
     private var activeSession: KineticGuestSession? = null
     private var currentMarkerInjected = false
@@ -73,6 +79,7 @@ class DebugMapActivity : AppCompatActivity() {
 
         sessionManager = KineticGuestSessionManager.from(this)
         locationManager = getSystemService(LocationManager::class.java)
+        osmFetcher = OsmNearbyCrossingFetcher(this)
         mapState = DebugMapState.fromIntent(intent, this)
 
         title = "지도 디버그"
@@ -218,10 +225,10 @@ class DebugMapActivity : AppCompatActivity() {
             runCatching {
                 val session = sessionManager.getValidSession(forceRefresh = forceRefresh)
                 val osmCrossings =
-                    OsmNearbyCrossingFetcher().fetchNearby(
+                    osmFetcher.fetchNearby(
                         point = GeoPoint(mapState.base.currentLat, mapState.base.currentLon),
-                        radiusMeters = 250,
-                        limit = 100
+                        radiusMeters = OSM_RADIUS_METERS,
+                        limit = OSM_LIMIT
                     )
                 session to osmCrossings
             }
@@ -298,10 +305,10 @@ class DebugMapActivity : AppCompatActivity() {
         thread(start = true, isDaemon = true, name = "debug-map-data-refresh") {
             val bundledNearby = loadBundledNearby(currentPoint)
             val osmNearby =
-                OsmNearbyCrossingFetcher().fetchNearby(
+                osmFetcher.fetchNearby(
                     point = currentPoint,
-                    radiusMeters = 250,
-                    limit = 100
+                    radiusMeters = OSM_RADIUS_METERS,
+                    limit = OSM_LIMIT
                 )
             val refreshedState =
                 mapState.withCurrentLocation(currentPoint).withNearbyData(
@@ -324,7 +331,7 @@ class DebugMapActivity : AppCompatActivity() {
     ): List<NearbyFeature> {
         return runCatching {
             val store = MapTileStore(this)
-            val loadResult = store.loadWithinRadius(currentPoint, 700)
+            val loadResult = store.loadWithinRadius(currentPoint, BUNDLED_LOAD_RADIUS_METERS)
             loadResult.features
                 .distinctBy { it.id }
                 .map {
@@ -557,8 +564,8 @@ private data class DebugMapState(
     val nearbyFeatures: List<NearbyFeature>,
     val osmCrossings: List<OsmNearbyCrossing> = emptyList()
 ) {
-    fun currentBundleRadiusMeters(): Int = 700
-    fun currentOsmRadiusMeters(): Int = 250
+    fun currentBundleRadiusMeters(): Int = BUNDLED_LOAD_RADIUS_METERS
+    fun currentOsmRadiusMeters(): Int = OSM_RADIUS_METERS
 
     fun toHeaderSummaryText(): String {
         val bundledNearest =
@@ -591,13 +598,13 @@ private data class DebugMapState(
             appendLine(
                 "OSM      : ${osmCrossings.size}개"
             )
-            append("Radius   : OSM 250 m / Bundled 700 m")
+            append("Radius   : OSM ${currentOsmRadiusMeters()} m / Bundled tile load")
         }
     }
 
     fun toNearbySummaryText(): String {
         return buildString {
-            appendLine("Bundled Nearby 700m (${nearbyFeatures.size})")
+            appendLine("Bundled Nearby (${nearbyFeatures.size})")
             if (nearbyFeatures.isEmpty()) {
                 appendLine("none")
             } else {
@@ -669,18 +676,11 @@ private data class DebugMapState(
                   weight: 3
                 }).addTo(map).bindPopup('현재 GPS').openPopup();
                 let osmRadiusCircle = L.circle([${base.currentLat}, ${base.currentLon}], {
-                  radius: 250,
+                  radius: ${currentOsmRadiusMeters()},
                   color: '#64b5f6',
                   weight: 2,
                   fillColor: '#64b5f6',
                   fillOpacity: 0.08
-                }).addTo(map);
-                let bundledRadiusCircle = L.circle([${base.currentLat}, ${base.currentLon}], {
-                  radius: 700,
-                  color: '#ffd54f',
-                  weight: 1.5,
-                  dashArray: '6 6',
-                  fillOpacity: 0.0
                 }).addTo(map);
                 let bundledFeatures = ${bundledFeaturesJs()};
                 let osmFeatures = ${osmFeaturesJs()};
@@ -764,7 +764,7 @@ private data class DebugMapState(
                   ensureBundledLayers();
                   ensureOsmLayers();
                   bundledLayers.forEach((entry) => {
-                    const shouldShow = distanceMeters(lat, lon, entry.feature.lat, entry.feature.lon) <= bundledRadius;
+                    const shouldShow = true;
                     if (shouldShow && !entry.visible) {
                       entry.layer.addTo(map);
                       entry.visible = true;
@@ -798,8 +798,6 @@ private data class DebugMapState(
                   currentMarker.setLatLng([lat, lon]);
                   osmRadiusCircle.setLatLng([lat, lon]);
                   osmRadiusCircle.setRadius(osmRadius);
-                  bundledRadiusCircle.setLatLng([lat, lon]);
-                  bundledRadiusCircle.setRadius(bundledRadius);
                   if (matchedLine && matchedFeature) {
                     matchedLine.setLatLngs([[lat, lon], [matchedFeature.lat, matchedFeature.lon]]);
                   }
@@ -882,7 +880,8 @@ private data class DebugMapState(
             val base = resolveInitialBaseState(activity, DebugMapActivity.readIntent(intent))
             val currentPoint = GeoPoint(base.currentLat, base.currentLon)
             val nearbyFeatures =
-                runCatching { loadBundledNearbyFeatures(activity, currentPoint, 700) }.getOrDefault(emptyList())
+                runCatching { loadBundledNearbyFeatures(activity, currentPoint, BUNDLED_LOAD_RADIUS_METERS) }
+                    .getOrDefault(emptyList())
             return DebugMapState(base = base, nearbyFeatures = nearbyFeatures)
         }
     }
@@ -1002,7 +1001,6 @@ private fun loadBundledNearbyFeatures(
                 distanceMeters = distanceMeters
             )
         }
-        .filter { it.distanceMeters <= radiusMeters.toFloat() }
         .sortedBy { it.distanceMeters }
 }
 
@@ -1155,7 +1153,7 @@ private fun DebugMapActivity.tileCacheFile(url: String): File {
         MessageDigest.getInstance("SHA-256")
             .digest(url.toByteArray(StandardCharsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-    return File(cacheDir, "via-debug-tile-cache").resolve("$hash.bin")
+    return MapDebugCacheManager.tileCacheDir(this).resolve("$hash.bin")
 }
 
 private val TRANSPARENT_PNG_1X1 = byteArrayOf(
