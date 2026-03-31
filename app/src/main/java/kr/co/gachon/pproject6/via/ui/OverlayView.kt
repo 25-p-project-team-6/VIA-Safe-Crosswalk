@@ -15,6 +15,7 @@ import kotlin.math.min
 class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs) {
 
     private var results: List<BoundingBox> = LinkedList()
+    private var resultsInViewCoordinates: Boolean = false
     private var boxPaint = Paint()
     private var textBackgroundPaint = Paint()
     private var textPaint = Paint()
@@ -27,6 +28,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     }
 
     fun clear() {
+        results = emptyList()
+        resultsInViewCoordinates = false
         textPaint.reset()
         textBackgroundPaint.reset()
         boxPaint.reset()
@@ -58,7 +61,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        if (sourceWidth == 0 || sourceHeight == 0) return
+        if (!resultsInViewCoordinates && (sourceWidth == 0 || sourceHeight == 0)) return
 
         // Calculate scale and offset to match PreviewView's FILL_CENTER
         // PreviewView scales the image to fill the view, cropping if necessary.
@@ -72,21 +75,23 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
         for (result in results) {
             val boundingBox = result.box
 
-            // Transform normalized coordinates to view coordinates
-            // 1. Denormalize to source image coordinates
-            val topPx = boundingBox.top * sourceHeight
-            val bottomPx = boundingBox.bottom * sourceHeight
-            val leftPx = boundingBox.left * sourceWidth
-            val rightPx = boundingBox.right * sourceWidth
+            val drawableRect = if (resultsInViewCoordinates) {
+                boundingBox
+            } else {
+                // Transform normalized coordinates to view coordinates
+                // 1. Denormalize to source image coordinates
+                val topPx = boundingBox.top * sourceHeight
+                val bottomPx = boundingBox.bottom * sourceHeight
+                val leftPx = boundingBox.left * sourceWidth
+                val rightPx = boundingBox.right * sourceWidth
 
-            // 2. Apply scale and offset
-            val top = topPx * scale + dy
-            val bottom = bottomPx * scale + dy
-            val left = leftPx * scale + dx
-            val right = rightPx * scale + dx
-
-            // Draw bounding box
-            val drawableRect = RectF(left, top, right, bottom)
+                // 2. Apply scale and offset
+                val top = topPx * scale + dy
+                val bottom = bottomPx * scale + dy
+                val left = leftPx * scale + dx
+                val right = rightPx * scale + dx
+                RectF(left, top, right, bottom)
+            }
 
             if (result.isTarget) {
                 canvas.drawRect(drawableRect, targetPaint)
@@ -101,20 +106,21 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
             val textWidth = textPaint.measureText(drawableText)
             val textHeight = textPaint.textSize
             canvas.drawRect(
-                left,
-                top,
-                left + textWidth + 8,
-                top + textHeight + 8,
+                drawableRect.left,
+                drawableRect.top,
+                drawableRect.left + textWidth + 8,
+                drawableRect.top + textHeight + 8,
                 textBackgroundPaint
             )
 
             // Draw text
-            canvas.drawText(drawableText, left, top + textHeight, textPaint)
+            canvas.drawText(drawableText, drawableRect.left, drawableRect.top + textHeight, textPaint)
         }
     }
 
-    fun setResults(boundingBoxes: List<BoundingBox>) {
+    fun setResults(boundingBoxes: List<BoundingBox>, inViewCoordinates: Boolean = false) {
         results = boundingBoxes
+        resultsInViewCoordinates = inViewCoordinates
         invalidate()
     }
 

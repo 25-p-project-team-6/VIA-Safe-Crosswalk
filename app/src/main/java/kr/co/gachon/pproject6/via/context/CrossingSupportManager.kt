@@ -13,7 +13,6 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
 import androidx.core.content.ContextCompat
-import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.sqrt
@@ -35,16 +34,19 @@ class CrossingSupportManager(
     private var started = false
     private var lastMotionAt: Long = Long.MIN_VALUE
     private var lookingDownStartedAt: Long = Long.MIN_VALUE
-    private var lookingDownTiltThresholdDegrees = config.lookingDownTiltThresholdDegrees
+    private var lookingUpStartedAt: Long = Long.MIN_VALUE
     private var currentTiltDegrees: Float = 0f
+    private var currentSignedTiltDegrees: Float = 0f
     private var lastLocationMovementAt: Long = Long.MIN_VALUE
     private var lastLocationSample: Location? = null
-    private var crossingActive = false
-    private var crossingStartedAt: Long = Long.MIN_VALUE
-    private var distanceSinceCrossingStartMeters: Float = 0f
-    private var lastCrossingLocation: Location? = null
+    private var crossingWindowActive = false
+    private var crossingWindowStartedAt: Long = Long.MIN_VALUE
+    private var crossingWindowDistanceMeters: Float = 0f
+    private var lastCrossingWindowLocation: Location? = null
     private var gpsRegistered = false
     private var networkRegistered = false
+    private var lastHeadingDegrees: Float? = null
+    private val mapProximityManager = MapProximityManager(appContext, timeProvider)
 
     private val locationListener = LocationListener { location ->
         handleLocation(location)
@@ -74,11 +76,25 @@ class CrossingSupportManager(
         unregisterLocationUpdates()
     }
 
-    fun updateLookingDownThresholdDegrees(value: Float) {
-        lookingDownTiltThresholdDegrees = value
-    }
+    fun updateLookingDownThresholdDegrees(value: Float) = Unit
 
-    fun currentLookingDownThresholdDegrees(): Float = lookingDownTiltThresholdDegrees
+    fun currentLookingDownThresholdDegrees(): Float = config.lookingDownRawTiltRangeStartDegrees
+
+    fun currentLookingUpThresholdDegrees(): Float = config.lookingUpRawTiltRangeEndDegrees
+
+    fun setCrossingWindowActive(isActive: Boolean) {
+        val now = timeProvider()
+        if (isActive) {
+            if (!crossingWindowActive) {
+                crossingWindowActive = true
+                crossingWindowStartedAt = now
+                crossingWindowDistanceMeters = 0f
+                lastCrossingWindowLocation = lastLocationSample
+            }
+        } else if (crossingWindowActive) {
+            clearCrossingWindow()
+        }
+    }
 
     @SuppressLint("MissingPermission")
     fun refreshLocationRegistration() {
@@ -122,43 +138,49 @@ class CrossingSupportManager(
         val isLookingDown =
             lookingDownStartedAt != Long.MIN_VALUE &&
                 now - lookingDownStartedAt >= config.lookingDownHoldMs
+        val isLookingUp =
+            lookingUpStartedAt != Long.MIN_VALUE &&
+                now - lookingUpStartedAt >= config.lookingUpHoldMs
         val hasRecentLocationMovement =
             lastLocationMovementAt != Long.MIN_VALUE &&
                 now - lastLocationMovementAt <= config.locationHoldMs
-        val crossingActiveDurationMs =
-            if (crossingActive && crossingStartedAt != Long.MIN_VALUE) {
-                now - crossingStartedAt
+        val crossingWindowElapsedMs =
+            if (crossingWindowActive && crossingWindowStartedAt != Long.MIN_VALUE) {
+                now - crossingWindowStartedAt
             } else {
                 0L
             }
         return CrossingSupportSnapshot(
-            isCrossingActive = crossingActive,
+            isCrossingWindowActive = crossingWindowActive,
             hasRecentGyroMotion = hasRecentGyroMotion,
             isLookingDown = isLookingDown,
+            isLookingUp = isLookingUp,
             currentTiltDegrees = currentTiltDegrees,
+            currentSignedTiltDegrees = currentSignedTiltDegrees,
             hasRecentLocationMovement = hasRecentLocationMovement,
-            distanceSinceCrossingStartMeters = distanceSinceCrossingStartMeters,
-            crossingActiveDurationMs = crossingActiveDurationMs,
+            crossingWindowDistanceMeters = crossingWindowDistanceMeters,
+            crossingWindowElapsedMs = crossingWindowElapsedMs,
             nextCrosswalkDistanceThresholdMeters = config.nextCrosswalkDistanceThresholdMeters,
-            nextCrosswalkMinActiveMs = config.nextCrosswalkMinActiveMs
+            nextCrosswalkMinActiveMs = config.nextCrosswalkMinActiveMs,
+            mapProximitySnapshot = mapProximityManager.snapshot(),
+            currentLocationLatitude = lastLocationSample?.latitude,
+            currentLocationLongitude = lastLocationSample?.longitude,
+            currentLocationAccuracyMeters =
+                if (lastLocationSample?.hasAccuracy() == true) lastLocationSample?.accuracy else null
         )
     }
 
-    fun onGuidanceStateChanged(state: UserGuidanceState) {
-        val now = timeProvider()
-        if (state == UserGuidanceState.GO) {
-            if (!crossingActive) {
-                crossingActive = true
-                crossingStartedAt = now
-                distanceSinceCrossingStartMeters = 0f
-                lastCrossingLocation = lastLocationSample
-            }
-        } else if (crossingActive) {
-            crossingActive = false
-            crossingStartedAt = Long.MIN_VALUE
-            distanceSinceCrossingStartMeters = 0f
-            lastCrossingLocation = null
-        }
+    fun reset() {
+        lastMotionAt = Long.MIN_VALUE
+        lookingDownStartedAt = Long.MIN_VALUE
+        lookingUpStartedAt = Long.MIN_VALUE
+        currentTiltDegrees = 0f
+        currentSignedTiltDegrees = 0f
+        lastLocationMovementAt = Long.MIN_VALUE
+        lastLocationSample = null
+        lastHeadingDegrees = null
+        clearCrossingWindow()
+        mapProximityManager.reset()
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -174,14 +196,29 @@ class CrossingSupportManager(
                 }
             }
             Sensor.TYPE_GRAVITY -> {
-                val tiltDegrees = calculateTiltFromUprightDegrees(event.values[0], event.values[1], event.values[2])
+                val signedTiltDegrees =
+                    calculateSignedTiltFromUprightDegrees(
+                        event.values[0],
+                        event.values[1],
+                        event.values[2]
+                    )
+                val tiltDegrees = abs(signedTiltDegrees)
+                currentSignedTiltDegrees = signedTiltDegrees
                 currentTiltDegrees = tiltDegrees
-                if (tiltDegrees >= lookingDownTiltThresholdDegrees) {
+                if (signedTiltDegrees in config.lookingDownRawTiltRangeStartDegrees..config.lookingDownRawTiltRangeEndDegrees) {
                     if (lookingDownStartedAt == Long.MIN_VALUE) {
                         lookingDownStartedAt = timeProvider()
                     }
                 } else {
                     lookingDownStartedAt = Long.MIN_VALUE
+                }
+
+                if (signedTiltDegrees in config.lookingUpRawTiltRangeStartDegrees..config.lookingUpRawTiltRangeEndDegrees) {
+                    if (lookingUpStartedAt == Long.MIN_VALUE) {
+                        lookingUpStartedAt = timeProvider()
+                    }
+                } else {
+                    lookingUpStartedAt = Long.MIN_VALUE
                 }
             }
         }
@@ -209,18 +246,34 @@ class CrossingSupportManager(
             lastLocationMovementAt = now
         }
 
-        if (crossingActive) {
-            val lastCrossing = lastCrossingLocation
+        if (crossingWindowActive) {
+            val lastCrossing = lastCrossingWindowLocation
             if (lastCrossing != null) {
                 val segmentDistance = lastCrossing.distanceTo(location)
                 if (segmentDistance in config.crossingDistanceSegmentRangeMeters) {
-                    distanceSinceCrossingStartMeters += segmentDistance
+                    crossingWindowDistanceMeters += segmentDistance
                 }
             }
-            lastCrossingLocation = location
+            lastCrossingWindowLocation = location
         }
 
+        val headingDegrees =
+            when {
+                location.hasBearing() -> normalizeBearingDegrees(location.bearing)
+                previous != null && distanceMeters >= config.locationDistanceThresholdMeters ->
+                    normalizeBearingDegrees(previous.bearingTo(location))
+                else -> lastHeadingDegrees
+            }
+        lastHeadingDegrees = headingDegrees
         lastLocationSample = location
+        mapProximityManager.onLocation(location, headingDegrees)
+    }
+
+    private fun clearCrossingWindow() {
+        crossingWindowActive = false
+        crossingWindowStartedAt = Long.MIN_VALUE
+        crossingWindowDistanceMeters = 0f
+        lastCrossingWindowLocation = null
     }
 
     private fun unregisterLocationUpdates() {
@@ -252,17 +305,25 @@ class CrossingSupportManager(
 }
 
 internal fun calculateTiltFromUprightDegrees(x: Float, y: Float, z: Float): Float {
+    return abs(calculateSignedTiltFromUprightDegrees(x, y, z))
+}
+
+internal fun calculateSignedTiltFromUprightDegrees(x: Float, y: Float, z: Float): Float {
     if (y == 0f && z == 0f) {
         return 0f
     }
-    return Math.toDegrees(atan2(abs(z).toDouble(), abs(y).toDouble())).toFloat()
+    return Math.toDegrees(atan2((-z).toDouble(), (-y).toDouble())).toFloat()
 }
 
 data class CrossingSupportConfig(
     val gyroMotionThresholdRadPerSec: Float = 0.8f,
     val motionHoldMs: Long = 2_500L,
-    val lookingDownTiltThresholdDegrees: Float = 45f,
+    val lookingDownRawTiltRangeStartDegrees: Float = -160f,
+    val lookingDownRawTiltRangeEndDegrees: Float = -90f,
     val lookingDownHoldMs: Long = 900L,
+    val lookingUpRawTiltRangeStartDegrees: Float = 90f,
+    val lookingUpRawTiltRangeEndDegrees: Float = 120f,
+    val lookingUpHoldMs: Long = 900L,
     val locationSpeedThresholdMps: Float = 0.7f,
     val locationDistanceThresholdMeters: Float = 2.0f,
     val locationHoldMs: Long = 4_000L,
@@ -274,26 +335,29 @@ data class CrossingSupportConfig(
 )
 
 data class CrossingSupportSnapshot(
-    val isCrossingActive: Boolean = false,
+    val isCrossingWindowActive: Boolean = false,
     val hasRecentGyroMotion: Boolean = false,
     val isLookingDown: Boolean = false,
+    val isLookingUp: Boolean = false,
     val currentTiltDegrees: Float = 0f,
+    val currentSignedTiltDegrees: Float = 0f,
     val hasRecentLocationMovement: Boolean = false,
-    val distanceSinceCrossingStartMeters: Float = 0f,
-    val crossingActiveDurationMs: Long = 0L,
+    val crossingWindowDistanceMeters: Float = 0f,
+    val crossingWindowElapsedMs: Long = 0L,
     val nextCrosswalkDistanceThresholdMeters: Float = 8.0f,
-    val nextCrosswalkMinActiveMs: Long = 6_000L
+    val nextCrosswalkMinActiveMs: Long = 6_000L,
+    val mapProximitySnapshot: MapProximitySnapshot = MapProximitySnapshot(),
+    val currentLocationLatitude: Double? = null,
+    val currentLocationLongitude: Double? = null,
+    val currentLocationAccuracyMeters: Float? = null
 ) {
     val supportsWalkContinuation: Boolean
         get() = hasRecentGyroMotion || hasRecentLocationMovement || isLookingDown
 
-    val supportsNextCrosswalkTransition: Boolean
-        get() = isCrossingActive &&
-            hasRecentLocationMovement &&
-            distanceSinceCrossingStartMeters >= nextCrosswalkDistanceThresholdMeters &&
-            crossingActiveDurationMs >= nextCrosswalkMinActiveMs
-
     fun toDebugSummary(): String {
-        return "motion=$hasRecentGyroMotion, down=$isLookingDown, tilt=${String.format(Locale.US, "%.0f", currentTiltDegrees)}, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, next=$supportsNextCrosswalkTransition, dist=${String.format(Locale.US, "%.1f", distanceSinceCrossingStartMeters)}"
+        val latSummary = currentLocationLatitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"
+        val lonSummary = currentLocationLongitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"
+        val accSummary = currentLocationAccuracyMeters?.let { String.format(Locale.US, "%.1f", it) } ?: "n/a"
+        return "motion=$hasRecentGyroMotion, down=$isLookingDown, up=$isLookingUp, tilt=${String.format(Locale.US, "%.0f", currentTiltDegrees)}, signedTilt=${String.format(Locale.US, "%.0f", currentSignedTiltDegrees)}, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, window=$isCrossingWindowActive, dist=${String.format(Locale.US, "%.1f", crossingWindowDistanceMeters)}, elapsed=${crossingWindowElapsedMs}ms, lat=$latSummary, lon=$lonSummary, acc=${accSummary}m, ${mapProximitySnapshot.toDebugSummary()}"
     }
 }

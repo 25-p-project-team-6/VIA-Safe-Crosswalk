@@ -16,7 +16,6 @@ object GuidanceTuningDefaults {
         requireRedBaselineBeforeGo = true,
         resetToBaselineOnUnknownDuringWalk = true,
         blockGoWhenRiskDetected = true,
-        preserveReadyBaselineMs = 2_500L,
         walkAllowedUnknownGraceMs = 1_500L,
         walkAllowedUnknownGraceWithContextMs = 3_500L,
         walkAllowedUnknownGraceLookingDownMs = 4_500L
@@ -25,8 +24,12 @@ object GuidanceTuningDefaults {
     val crossingSupportConfig = CrossingSupportConfig(
         gyroMotionThresholdRadPerSec = 0.8f,
         motionHoldMs = 2_500L,
-        lookingDownTiltThresholdDegrees = 45f,
+        lookingDownRawTiltRangeStartDegrees = -160f,
+        lookingDownRawTiltRangeEndDegrees = -90f,
         lookingDownHoldMs = 900L,
+        lookingUpRawTiltRangeStartDegrees = 90f,
+        lookingUpRawTiltRangeEndDegrees = 120f,
+        lookingUpHoldMs = 900L,
         locationSpeedThresholdMps = 0.7f,
         locationDistanceThresholdMeters = 2.0f,
         locationHoldMs = 4_000L,
@@ -67,9 +70,6 @@ object GuidanceTuningDefaults {
             append(guidanceStabilizerConfig.actionConfirmFrames)
             append(", wait frames=")
             append(guidanceStabilizerConfig.waitConfirmFrames)
-            append(", ready hold=")
-            append(walkSignalConfig.preserveReadyBaselineMs)
-            append("ms")
             append(", walk unknown=")
             append(walkSignalConfig.walkAllowedUnknownGraceMs)
             append("ms")
@@ -83,9 +83,18 @@ object GuidanceTuningDefaults {
             append(crossingSupportConfig.motionHoldMs)
             append("ms")
             append(", ctx down=")
-            append(crossingSupportConfig.lookingDownTiltThresholdDegrees)
-            append("deg/")
+            append(crossingSupportConfig.lookingDownRawTiltRangeStartDegrees)
+            append("..")
+            append(crossingSupportConfig.lookingDownRawTiltRangeEndDegrees)
+            append("raw/")
             append(crossingSupportConfig.lookingDownHoldMs)
+            append("ms")
+            append(", ctx up=")
+            append(crossingSupportConfig.lookingUpRawTiltRangeStartDegrees)
+            append("..")
+            append(crossingSupportConfig.lookingUpRawTiltRangeEndDegrees)
+            append("raw/")
+            append(crossingSupportConfig.lookingUpHoldMs)
             append("ms")
             append(", ctx gps=")
             append(crossingSupportConfig.locationHoldMs)

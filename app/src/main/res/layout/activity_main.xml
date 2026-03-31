@@ -257,6 +257,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="4dp"
                     android:text="Target: None"
                     android:textColor="@color/via_accent"
                     android:textSize="15sp"
@@ -267,9 +269,23 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:fontFamily="monospace"
+                    android:lineSpacingExtra="4dp"
                     android:text="Decision: WAIT"
                     android:textColor="@color/via_on_surface"
                     android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/openGpsDebugMapButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:minHeight="52dp"
+                    android:text="현재 GPS를 지도에서 보기"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    app:cornerRadius="18dp" />
 
                 <TextView
                     android:id="@+id/tuningDebugText"

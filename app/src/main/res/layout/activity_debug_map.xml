@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/debugMapRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/debugMapSummaryText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:lineSpacingExtra="4dp"
+        android:text="지도 디버그 로딩 중"
+        android:textColor="@color/via_on_surface"
+        android:textSize="14sp" />
+
+    <ScrollView
+        android:id="@+id/debugMapNearbyScroll"
+        android:layout_width="match_parent"
+        android:layout_height="140dp"
+        android:layout_marginTop="10dp"
+        android:fillViewport="true">
+
+        <TextView
+            android:id="@+id/debugMapNearbyText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:lineSpacingExtra="4dp"
+            android:text="Nearby 목록 로딩 중"
+            android:textColor="@color/via_on_surface"
+            android:textSize="14sp" />
+    </ScrollView>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/openExternalMapButton"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:minHeight="52dp"
+        android:text="외부 지도에서 보기"
+        android:textAllCaps="false"
+        android:textSize="15sp"
+        app:cornerRadius="18dp" />
+
+    <WebView
+        android:id="@+id/debugMapWebView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="12dp"
+        android:layout_weight="1" />
+
+</LinearLayout>

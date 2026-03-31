@@ -22,6 +22,10 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "BUILD_STAMP", "\"$buildStamp\"")
+        buildConfigField("String", "MAP_DATA_MANIFEST_URL", "\"\"")
+        buildConfigField("long", "MAP_DATA_REFRESH_INTERVAL_MS", "86400000L")
+        buildConfigField("String", "KINETIC_MAP_API_BASE_URL", "\"https://api.map.kinetic.moe\"")
+        buildConfigField("String", "KINETIC_MAP_STYLE", "\"default\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

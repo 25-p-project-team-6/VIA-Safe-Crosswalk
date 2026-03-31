@@ -5,9 +5,40 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Rect
 
 object ImageUtils {
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+    fun cropBitmap(bitmap: Bitmap, cropRect: Rect): Bitmap {
+        val safeRect = Rect(
+            cropRect.left.coerceIn(0, bitmap.width),
+            cropRect.top.coerceIn(0, bitmap.height),
+            cropRect.right.coerceIn(0, bitmap.width),
+            cropRect.bottom.coerceIn(0, bitmap.height)
+        )
+
+        if (safeRect.width() <= 0 || safeRect.height() <= 0) {
+            return bitmap
+        }
+
+        if (
+            safeRect.left == 0 &&
+            safeRect.top == 0 &&
+            safeRect.right == bitmap.width &&
+            safeRect.bottom == bitmap.height
+        ) {
+            return bitmap
+        }
+
+        return Bitmap.createBitmap(
+            bitmap,
+            safeRect.left,
+            safeRect.top,
+            safeRect.width(),
+            safeRect.height()
+        )
+    }
 
     fun rotateBitmap(bitmap: Bitmap, degrees: Float, reusableBitmap: Bitmap? = null): Bitmap {
         val normalizedDegrees = ((degrees % 360f) + 360f) % 360f
