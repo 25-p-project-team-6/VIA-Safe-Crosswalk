@@ -40,6 +40,7 @@ class OsmNearbyCrossingFetcher(
     ): List<OsmNearbyCrossing> {
         val cacheKey = buildCacheKey(point, radiusMeters, limit)
         readCached(cacheKey, point, maxAgeMs = FRESH_CACHE_MS)?.let { return it }
+        val staleCached = readCached(cacheKey, point, maxAgeMs = STALE_CACHE_MS)
         val query =
             """
             [out:json][timeout:12];
@@ -87,7 +88,7 @@ class OsmNearbyCrossingFetcher(
                     .orEmpty()
             if (statusCode !in 200..299) {
                 Log.w("OsmNearby", "Overpass HTTP $statusCode: $body")
-                return emptyList()
+                return staleCached.orEmpty()
             }
 
             parseOverpassCrossings(body, point)
@@ -96,7 +97,7 @@ class OsmNearbyCrossingFetcher(
                 .also { writeCache(cacheKey, it) }
         } catch (error: Exception) {
             Log.w("OsmNearby", "Overpass fetch failed", error)
-            readCached(cacheKey, point, maxAgeMs = STALE_CACHE_MS).orEmpty()
+            staleCached.orEmpty()
         } finally {
             connection.disconnect()
         }
@@ -107,8 +108,8 @@ class OsmNearbyCrossingFetcher(
         radiusMeters: Int,
         limit: Int
     ): String {
-        val latBucket = kotlin.math.round(point.latitude * 2000.0) / 2000.0
-        val lonBucket = kotlin.math.round(point.longitude * 2000.0) / 2000.0
+        val latBucket = kotlin.math.round(point.latitude * 1000.0) / 1000.0
+        val lonBucket = kotlin.math.round(point.longitude * 1000.0) / 1000.0
         return String.format(Locale.US, "r%04d_l%03d_%.4f_%.4f", radiusMeters, limit, latBucket, lonBucket)
     }
 

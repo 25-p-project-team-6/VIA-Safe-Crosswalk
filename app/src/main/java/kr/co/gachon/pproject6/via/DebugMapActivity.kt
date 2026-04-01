@@ -316,14 +316,25 @@ class DebugMapActivity : AppCompatActivity() {
     private fun loadDebugDataForCurrentLocation(
         currentPoint: GeoPoint
     ) {
+        val previousState = mapState
         thread(start = true, isDaemon = true, name = "debug-map-data-refresh") {
             val bundledNearby = loadBundledNearby(currentPoint)
-            val osmNearby =
+            val fetchedOsmNearby =
                 osmFetcher.fetchNearby(
                     point = currentPoint,
                     radiusMeters = OSM_RADIUS_METERS,
                     limit = OSM_LIMIT
                 )
+            val osmNearby =
+                if (
+                    fetchedOsmNearby.isEmpty() &&
+                        previousState.osmCrossings.isNotEmpty() &&
+                        haversineDistanceMeters(previousState.currentPoint(), currentPoint) <= OSM_RADIUS_METERS
+                ) {
+                    previousState.osmCrossings
+                } else {
+                    fetchedOsmNearby
+                }
             val refreshedState =
                 mapState.withCurrentLocation(currentPoint).withNearbyData(
                     bundledNearby = bundledNearby,

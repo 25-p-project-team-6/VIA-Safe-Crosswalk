@@ -109,7 +109,14 @@ class MapProximityManager(
                             radiusMeters = OSM_RUNTIME_RADIUS_METERS,
                             limit = OSM_RUNTIME_LIMIT
                         )
-                    latestOsmFeatures = fetched.map(::toOsmFeatureRecord)
+                    val shouldKeepPrevious =
+                        fetched.isEmpty() &&
+                            latestOsmFeatures.isNotEmpty() &&
+                            lastOsmFetchPoint != null &&
+                            haversineDistanceMeters(lastOsmFetchPoint!!, point) <= OSM_RUNTIME_RADIUS_METERS
+                    if (!shouldKeepPrevious) {
+                        latestOsmFeatures = fetched.map(::toOsmFeatureRecord)
+                    }
                     lastOsmFetchPoint = point
                     lastOsmFetchAtMs = now()
                     synchronized(this) {
