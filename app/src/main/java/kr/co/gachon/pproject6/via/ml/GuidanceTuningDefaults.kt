@@ -18,8 +18,8 @@ object GuidanceTuningDefaults {
         walkAllowedUnknownGraceMatchedMs = 2_200L,
         walkAllowedUnknownGraceMatchedMovingMs = 3_500L,
         walkAllowedUnknownGraceMatchedMovingDownMs = 4_800L,
-        sameCrossingMaxDistanceMeters = 20f,
-        sameCrossingMaxElapsedMs = 12_000L
+        sameCrossingMaxDistanceMeters = 6f,
+        sameCrossingMaxElapsedMs = 5_000L
     )
 
     val crossingSupportConfig = CrossingSupportConfig(

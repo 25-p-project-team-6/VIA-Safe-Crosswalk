@@ -71,6 +71,29 @@ class ConservativeWalkSignalPolicyTest {
     }
 
     @Test
+    fun newCrossingWithOngoingGreenImmediatelyWaitsForFreshBaseline() {
+        val policy = ConservativeWalkSignalPolicy()
+        val snapshot =
+            supportSnapshot(
+                hasRecentLocationMovement = true,
+                crossingWindowDistanceMeters = 10f,
+                crossingWindowElapsedMs = 6_000L,
+                matchedClusterId = "cluster-b",
+                transitionKind = MapClusterTransitionKind.SAME_CROSSING
+            )
+
+        policy.update(TrafficLightState.RED)
+        policy.update(TrafficLightState.GREEN)
+
+        val nextGreen = policy.update(TrafficLightState.GREEN, snapshot)
+
+        assertEquals(UserGuidanceState.WAIT, nextGreen.state)
+        assertEquals(GuidanceBlockReason.NEED_RED_BASELINE, nextGreen.blockReason)
+        assertEquals(CrosswalkHandoffDecision.NEW_CROSSING, nextGreen.handoffDecision)
+        assertEquals(GuidancePhase.WAITING_FOR_RED_BASELINE, nextGreen.phase)
+    }
+
+    @Test
     fun newCrossingTransitionResetsBackToBaselineAfterUnknownGrace() {
         var now = 1_000L
         val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
@@ -104,9 +127,9 @@ class ConservativeWalkSignalPolicyTest {
         val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
         val snapshot =
             supportSnapshot(
-                hasRecentLocationMovement = true,
-                crossingWindowDistanceMeters = 10f,
-                crossingWindowElapsedMs = 8_000L,
+                hasRecentLocationMovement = false,
+                crossingWindowDistanceMeters = 4f,
+                crossingWindowElapsedMs = 3_000L,
                 matchedClusterId = "cluster-b",
                 transitionKind = MapClusterTransitionKind.SAME_CROSSING
             )

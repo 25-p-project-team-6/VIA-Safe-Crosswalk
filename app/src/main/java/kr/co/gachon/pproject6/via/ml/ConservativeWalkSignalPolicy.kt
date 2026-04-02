@@ -63,13 +63,24 @@ class ConservativeWalkSignalPolicy(
         crossingSupportSnapshot: CrossingSupportSnapshot,
         currentTime: Long
     ): GuidanceDecision {
+        val continuityTier = continuityTier(crossingSupportSnapshot)
+        val handoffDecision = handoffDecision(crossingSupportSnapshot)
         return when (state) {
             TrafficLightState.GREEN -> {
                 clearUnknownGrace()
-                goDecision(
-                    continuityTier = continuityTier(crossingSupportSnapshot),
-                    handoffDecision = handoffDecision(crossingSupportSnapshot)
-                )
+                if (handoffDecision == CrosswalkHandoffDecision.NEW_CROSSING) {
+                    phase = GuidancePhase.WAITING_FOR_RED_BASELINE
+                    waitDecision(
+                        blockReason = GuidanceBlockReason.NEED_RED_BASELINE,
+                        continuityTier = continuityTier,
+                        handoffDecision = handoffDecision
+                    )
+                } else {
+                    goDecision(
+                        continuityTier = continuityTier,
+                        handoffDecision = handoffDecision
+                    )
+                }
             }
 
             TrafficLightState.RED -> stopAndMoveTo(GuidancePhase.READY_FOR_GREEN_TRANSITION)
@@ -146,7 +157,7 @@ class ConservativeWalkSignalPolicy(
     private fun isSameCrossingContinuation(
         crossingSupportSnapshot: CrossingSupportSnapshot
     ): Boolean {
-        return crossingSupportSnapshot.hasRecentLocationMovement &&
+        return !crossingSupportSnapshot.hasRecentLocationMovement &&
             crossingSupportSnapshot.crossingWindowDistanceMeters <= config.sameCrossingMaxDistanceMeters &&
             crossingSupportSnapshot.crossingWindowElapsedMs <= config.sameCrossingMaxElapsedMs
     }
@@ -228,6 +239,6 @@ data class ConservativeWalkSignalConfig(
     val walkAllowedUnknownGraceMatchedMs: Long = 2_200L,
     val walkAllowedUnknownGraceMatchedMovingMs: Long = 3_500L,
     val walkAllowedUnknownGraceMatchedMovingDownMs: Long = 4_800L,
-    val sameCrossingMaxDistanceMeters: Float = 20f,
-    val sameCrossingMaxElapsedMs: Long = 12_000L
+    val sameCrossingMaxDistanceMeters: Float = 6f,
+    val sameCrossingMaxElapsedMs: Long = 5_000L
 )

@@ -24,7 +24,7 @@ class GuidanceTuningDefaultsTest {
         assertTrue(summary.contains("ctx down=-160.0..-90.0raw/900ms"))
         assertTrue(summary.contains("ctx up=90.0..120.0raw/900ms"))
         assertTrue(summary.contains("ctx gps=4000ms"))
-        assertTrue(summary.contains("ctx next=20.0m/12000ms"))
+        assertTrue(summary.contains("ctx next=6.0m/5000ms"))
         assertTrue(summary.contains("occupancy score≥0.35"))
         assertTrue(summary.contains("band=0.20..0.80"))
         assertTrue(summary.contains("caution=400ms"))
