@@ -8,8 +8,8 @@ class SignalAnalyzer(
     private val objectTracker: ObjectTracker = ObjectTracker(),
     private val walkSignalPolicy: ConservativeWalkSignalPolicy =
         ConservativeWalkSignalPolicy(GuidanceTuningDefaults.walkSignalConfig),
-    private val riskObjectEvaluator: RiskObjectEvaluator =
-        RiskObjectEvaluator(GuidanceTuningDefaults.riskObjectConfig)
+    private val occupancyEvaluator: CrosswalkOccupancyEvaluator =
+        CrosswalkOccupancyEvaluator(GuidanceTuningDefaults.occupancyConfig)
 ) {
     fun analyze(
         bitmap: Bitmap,
@@ -29,9 +29,11 @@ class SignalAnalyzer(
                 userGuidanceState = UserGuidanceState.WAIT,
                 guidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE,
                 guidanceBlockReason = GuidanceBlockReason.NO_SIGNAL,
+                guidanceContinuityTier = GuidanceContinuityTier.NONE,
+                handoffDecision = CrosswalkHandoffDecision.NONE,
                 crossingSupportSnapshot = crossingSupportSnapshot,
-                hasBlockingRisk = false,
-                blockingRiskLabels = emptyList()
+                occupancyCaution = false,
+                occupancyCautionLabels = emptyList()
             )
         }
 
@@ -44,12 +46,15 @@ class SignalAnalyzer(
         }
 
         val trafficState = PostProcessor.updateTrafficLightState(targetBox)
-        val blockingRisks = riskObjectEvaluator.findBlockingRisks(correctedBoxes)
         val guidanceDecision = walkSignalPolicy.update(
             state = trafficState,
-            hasBlockingRisk = blockingRisks.isNotEmpty(),
             crossingSupportSnapshot = crossingSupportSnapshot
         )
+        val activeOccupancy =
+            occupancyEvaluator.findActiveOccupancy(
+                boxes = correctedBoxes,
+                eligible = guidanceDecision.state == UserGuidanceState.GO
+            )
 
         return SignalAnalysisResult(
             boxesToShow = correctedBoxes,
@@ -60,9 +65,11 @@ class SignalAnalyzer(
             userGuidanceState = guidanceDecision.state,
             guidancePhase = guidanceDecision.phase,
             guidanceBlockReason = guidanceDecision.blockReason,
+            guidanceContinuityTier = guidanceDecision.continuityTier,
+            handoffDecision = guidanceDecision.handoffDecision,
             crossingSupportSnapshot = crossingSupportSnapshot,
-            hasBlockingRisk = blockingRisks.isNotEmpty(),
-            blockingRiskLabels = blockingRisks.map { it.clsName }.distinct().sorted()
+            occupancyCaution = activeOccupancy.isNotEmpty(),
+            occupancyCautionLabels = activeOccupancy.map { it.clsName }.distinct().sorted()
         )
     }
 
@@ -70,5 +77,6 @@ class SignalAnalyzer(
         objectTracker.reset()
         PostProcessor.resetState()
         walkSignalPolicy.reset()
+        occupancyEvaluator.reset()
     }
 }

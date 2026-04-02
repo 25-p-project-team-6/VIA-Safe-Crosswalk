@@ -5,12 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RiskObjectEvaluatorTest {
-    private val evaluator = RiskObjectEvaluator()
+    private val evaluator = CrosswalkOccupancyEvaluator()
 
     @Test
-    fun centeredLargeVehicleBlocksGuidance() {
+    fun centeredLargeVehicleBecomesOccupancyCandidate() {
         assertTrue(
-            evaluator.isBlockingRisk(
+            evaluator.isOccupancyCandidate(
                 label = "car",
                 score = 0.8f,
                 centerX = 0.5f,
@@ -21,9 +21,9 @@ class RiskObjectEvaluatorTest {
     }
 
     @Test
-    fun smallOffCenterVehicleDoesNotBlockGuidance() {
+    fun smallOffCenterVehicleIsIgnored() {
         assertFalse(
-            evaluator.isBlockingRisk(
+            evaluator.isOccupancyCandidate(
                 label = "car",
                 score = 0.8f,
                 centerX = 0.05f,

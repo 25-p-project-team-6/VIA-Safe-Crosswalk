@@ -6,14 +6,18 @@ class SignalFeedbackPolicy(
     private val timingConfig: SignalFeedbackTimingConfig = SignalFeedbackTimingConfig(),
     private val timeProvider: () -> Long = System::currentTimeMillis
 ) {
-    private var activeState: UserGuidanceState? = null
+    private var activeSignature: FeedbackSignature? = null
     private var lastEmissionAt: Long = Long.MIN_VALUE
 
-    fun shouldEmit(state: UserGuidanceState): Boolean {
+    fun shouldEmit(
+        state: UserGuidanceState,
+        occupancyCaution: Boolean = false
+    ): Boolean {
         val currentTime = timeProvider()
+        val signature = FeedbackSignature(state, occupancyCaution)
 
-        if (state != activeState) {
-            activeState = state
+        if (signature != activeSignature) {
+            activeSignature = signature
             lastEmissionAt = currentTime
             return true
         }
@@ -34,10 +38,15 @@ class SignalFeedbackPolicy(
     }
 
     fun clear() {
-        activeState = null
+        activeSignature = null
         lastEmissionAt = Long.MIN_VALUE
     }
 }
+
+private data class FeedbackSignature(
+    val state: UserGuidanceState,
+    val occupancyCaution: Boolean
+)
 
 data class SignalFeedbackTimingConfig(
     val actionRepeatIntervalMs: Long = 4_000L,

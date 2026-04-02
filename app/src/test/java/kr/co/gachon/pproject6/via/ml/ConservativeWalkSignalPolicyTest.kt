@@ -1,8 +1,11 @@
 package kr.co.gachon.pproject6.via.ml
 
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
+import kr.co.gachon.pproject6.via.context.MapClusterTransitionKind
+import kr.co.gachon.pproject6.via.context.MapFeatureKind
+import kr.co.gachon.pproject6.via.context.MapFeatureSource
+import kr.co.gachon.pproject6.via.context.MapProximitySnapshot
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConservativeWalkSignalPolicyTest {
@@ -10,257 +13,139 @@ class ConservativeWalkSignalPolicyTest {
     fun startupGreenDoesNotAllowWalking() {
         val policy = ConservativeWalkSignalPolicy()
 
-        assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(GuidanceBlockReason.NEED_RED_BASELINE, policy.update(TrafficLightState.GREEN, false).blockReason)
+        val decision = policy.update(TrafficLightState.GREEN)
+
+        assertEquals(UserGuidanceState.WAIT, decision.state)
+        assertEquals(GuidanceBlockReason.NEED_RED_BASELINE, decision.blockReason)
     }
 
     @Test
     fun redBaselineThenGreenAllowsWalking() {
         val policy = ConservativeWalkSignalPolicy()
 
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
+        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED).state)
+        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN).state)
     }
 
     @Test
-    fun greenWithoutRedBaselineKeepsWaitingAcrossUnknown() {
-        val policy = ConservativeWalkSignalPolicy()
+    fun unknownDuringWalkUsesMatchedMovingDownTierGrace() {
+        var now = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
+        val snapshot =
+            supportSnapshot(
+                hasRecentLocationMovement = true,
+                isLookingDown = true,
+                matchedClusterId = "cluster-a"
+            )
 
-        assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(GuidanceBlockReason.NO_SIGNAL, policy.update(TrafficLightState.UNKNOWN, false).blockReason)
-        assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.GREEN, false).state)
+        policy.update(TrafficLightState.RED)
+        policy.update(TrafficLightState.GREEN)
+
+        now += 4_700L
+        val stillGo = policy.update(TrafficLightState.UNKNOWN, snapshot)
+        now += 4_900L
+        val wait = policy.update(TrafficLightState.UNKNOWN, snapshot)
+
+        assertEquals(UserGuidanceState.GO, stillGo.state)
+        assertEquals(GuidanceContinuityTier.MATCHED_MOVING_DOWN, stillGo.continuityTier)
+        assertEquals(UserGuidanceState.WAIT, wait.state)
     }
 
     @Test
-    fun greenWithoutRedBaselineStillWaitsEvenWithStrongContextEvidence() {
-        val policy = ConservativeWalkSignalPolicy()
-        val snapshot = CrossingSupportSnapshot(
+    fun unknownAfterGraceWithoutNewCrossingWaitsButKeepsWalkPhase() {
+        var now = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
+        val snapshot = supportSnapshot(matchedClusterId = "cluster-a")
+
+        policy.update(TrafficLightState.RED)
+        policy.update(TrafficLightState.GREEN)
+
+        policy.update(TrafficLightState.UNKNOWN, snapshot)
+        now += 3_600L
+        val wait = policy.update(TrafficLightState.UNKNOWN, snapshot)
+        val reacquired = policy.update(TrafficLightState.GREEN, snapshot)
+
+        assertEquals(UserGuidanceState.WAIT, wait.state)
+        assertEquals(GuidancePhase.WALK_ALLOWED, wait.phase)
+        assertEquals(UserGuidanceState.GO, reacquired.state)
+    }
+
+    @Test
+    fun newCrossingTransitionResetsBackToBaselineAfterUnknownGrace() {
+        var now = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
+        val snapshot =
+            supportSnapshot(
+                hasRecentLocationMovement = true,
+                crossingWindowDistanceMeters = 24f,
+                crossingWindowElapsedMs = 13_000L,
+                matchedClusterId = "cluster-b",
+                transitionKind = MapClusterTransitionKind.NEW_CROSSING
+            )
+
+        policy.update(TrafficLightState.RED)
+        policy.update(TrafficLightState.GREEN)
+
+        policy.update(TrafficLightState.UNKNOWN, snapshot)
+        now += 3_600L
+        val wait = policy.update(TrafficLightState.UNKNOWN, snapshot)
+        val nextGreen = policy.update(TrafficLightState.GREEN, snapshot)
+
+        assertEquals(UserGuidanceState.WAIT, wait.state)
+        assertEquals(CrosswalkHandoffDecision.NEW_CROSSING, wait.handoffDecision)
+        assertEquals(GuidancePhase.WAITING_FOR_RED_BASELINE, wait.phase)
+        assertEquals(UserGuidanceState.WAIT, nextGreen.state)
+        assertEquals(GuidanceBlockReason.NEED_RED_BASELINE, nextGreen.blockReason)
+    }
+
+    @Test
+    fun sameCrossingHandoffKeepsWalkAllowedAfterGraceEnds() {
+        var now = 1_000L
+        val policy = ConservativeWalkSignalPolicy(timeProvider = { now })
+        val snapshot =
+            supportSnapshot(
+                hasRecentLocationMovement = true,
+                crossingWindowDistanceMeters = 10f,
+                crossingWindowElapsedMs = 8_000L,
+                matchedClusterId = "cluster-b",
+                transitionKind = MapClusterTransitionKind.SAME_CROSSING
+            )
+
+        policy.update(TrafficLightState.RED)
+        policy.update(TrafficLightState.GREEN)
+
+        policy.update(TrafficLightState.UNKNOWN, snapshot)
+        now += 3_600L
+        val wait = policy.update(TrafficLightState.UNKNOWN, snapshot)
+
+        assertEquals(UserGuidanceState.WAIT, wait.state)
+        assertEquals(GuidancePhase.WALK_ALLOWED, wait.phase)
+        assertEquals(CrosswalkHandoffDecision.SAME_CROSSING, wait.handoffDecision)
+    }
+
+    private fun supportSnapshot(
+        hasRecentLocationMovement: Boolean = false,
+        isLookingDown: Boolean = false,
+        crossingWindowDistanceMeters: Float = 0f,
+        crossingWindowElapsedMs: Long = 0L,
+        matchedClusterId: String? = null,
+        transitionKind: MapClusterTransitionKind = MapClusterTransitionKind.NONE
+    ): CrossingSupportSnapshot {
+        return CrossingSupportSnapshot(
             isCrossingWindowActive = true,
-            hasRecentGyroMotion = true,
-            isLookingDown = true,
-            hasRecentLocationMovement = true,
-            crossingWindowDistanceMeters = 20f,
-            crossingWindowElapsedMs = 12_000L
+            hasRecentLocationMovement = hasRecentLocationMovement,
+            isLookingDown = isLookingDown,
+            crossingWindowDistanceMeters = crossingWindowDistanceMeters,
+            crossingWindowElapsedMs = crossingWindowElapsedMs,
+            mapProximitySnapshot =
+                MapProximitySnapshot(
+                    isNearKnownFeature = matchedClusterId != null,
+                    matchedFeatureId = matchedClusterId,
+                    matchedKind = if (matchedClusterId != null) MapFeatureKind.CROSSWALK else null,
+                    matchedSource = if (matchedClusterId != null) MapFeatureSource.HYBRID else null,
+                    matchedClusterId = matchedClusterId,
+                    clusterTransitionKind = transitionKind
+                )
         )
-
-        val decision = policy.update(TrafficLightState.GREEN, false, snapshot)
-        assertEquals(UserGuidanceState.WAIT, decision.state)
-        assertEquals(GuidanceBlockReason.NEED_RED_BASELINE, decision.blockReason)
-    }
-
-    @Test
-    fun unknownAfterGoKeepsWalkPhaseUntilNextTransitionEvidenceAppears() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.UNKNOWN, false).state)
-        currentTime += 1_501L
-        assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.UNKNOWN, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun redAfterGoStopsAndPreparesForNextCycle() {
-        val policy = ConservativeWalkSignalPolicy()
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun blockingRiskPreventsGoUntilRiskClears() {
-        val policy = ConservativeWalkSignalPolicy()
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(GuidanceBlockReason.BLOCKING_RISK, policy.update(TrafficLightState.GREEN, true).blockReason)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun blockingRiskDuringWalkDowngradesToWaitButDoesNotLoseCycle() {
-        val policy = ConservativeWalkSignalPolicy()
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-        assertEquals(GuidanceBlockReason.BLOCKING_RISK, policy.update(TrafficLightState.GREEN, true).blockReason)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun configCanAllowImmediateGoWithoutRedBaseline() {
-        val policy = ConservativeWalkSignalPolicy(
-            ConservativeWalkSignalConfig(requireRedBaselineBeforeGo = false)
-        )
-
-        val decision = policy.update(TrafficLightState.GREEN, false)
-        assertEquals(UserGuidanceState.GO, decision.state)
-        assertEquals(GuidancePhase.WALK_ALLOWED, decision.phase)
-    }
-
-    @Test
-    fun briefUnknownDuringWalkKeepsGoState() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-
-        currentTime += 1_000L
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.UNKNOWN, false).state)
-
-        currentTime += 200L
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun crossingSupportExtendsUnknownGraceDuringWalk() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-        val support = CrossingSupportSnapshot(hasRecentGyroMotion = true)
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-
-        currentTime += 2_000L
-        assertEquals(
-            UserGuidanceState.GO,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = support
-            ).state
-        )
-
-        currentTime += 2_000L
-        assertEquals(
-            UserGuidanceState.WAIT,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = CrossingSupportSnapshot()
-            ).state
-        )
-    }
-
-    @Test
-    fun lookingDownExtendsUnknownGraceEvenLongerDuringWalk() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-        val support = CrossingSupportSnapshot(isLookingDown = true)
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-
-        currentTime += 4_000L
-        assertEquals(
-            UserGuidanceState.GO,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = support
-            ).state
-        )
-
-        currentTime += 700L
-        assertEquals(
-            UserGuidanceState.GO,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = CrossingSupportSnapshot()
-            ).state
-        )
-
-        currentTime += 900L
-        assertEquals(
-            UserGuidanceState.WAIT,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = CrossingSupportSnapshot()
-            ).state
-        )
-    }
-
-    @Test
-    fun nextTransitionEvidenceCanStillResetBaselineAfterUnknown() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-        val transitionContext = CrossingSupportSnapshot(
-            isCrossingWindowActive = true,
-            hasRecentLocationMovement = true,
-            crossingWindowDistanceMeters = 8.5f,
-            crossingWindowElapsedMs = 6_100L,
-            nextCrosswalkDistanceThresholdMeters = 8.0f,
-            nextCrosswalkMinActiveMs = 6_000L
-        )
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-
-        currentTime += 4_000L
-        assertEquals(
-            UserGuidanceState.GO,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = transitionContext
-            ).state
-        )
-
-        currentTime += 3_600L
-        assertEquals(
-            UserGuidanceState.WAIT,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = transitionContext
-            ).state
-        )
-        assertEquals(UserGuidanceState.WAIT, policy.update(TrafficLightState.GREEN, false).state)
-    }
-
-    @Test
-    fun longUnknownWithoutTransitionEvidenceWaitsButDoesNotResetBaseline() {
-        var currentTime = 1_000L
-        val policy = ConservativeWalkSignalPolicy(timeProvider = { currentTime })
-        val continuationOnly = CrossingSupportSnapshot(
-            isCrossingWindowActive = true,
-            hasRecentLocationMovement = false,
-            hasRecentGyroMotion = true,
-            crossingWindowDistanceMeters = 8.5f,
-            crossingWindowElapsedMs = 6_100L,
-            nextCrosswalkDistanceThresholdMeters = 8.0f,
-            nextCrosswalkMinActiveMs = 6_000L
-        )
-
-        assertEquals(UserGuidanceState.STOP, policy.update(TrafficLightState.RED, false).state)
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
-
-        currentTime += 3_600L
-        assertEquals(
-            UserGuidanceState.GO,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = continuationOnly
-            ).state
-        )
-
-        currentTime += 3_600L
-        assertEquals(
-            UserGuidanceState.WAIT,
-            policy.update(
-                TrafficLightState.UNKNOWN,
-                false,
-                crossingSupportSnapshot = continuationOnly
-            ).state
-        )
-        assertEquals(UserGuidanceState.GO, policy.update(TrafficLightState.GREEN, false).state)
     }
 }

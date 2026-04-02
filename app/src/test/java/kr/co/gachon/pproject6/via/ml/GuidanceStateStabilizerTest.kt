@@ -4,51 +4,72 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class GuidanceStateStabilizerTest {
-    private val stabilizer = GuidanceStateStabilizer(
-        GuidanceStateStabilizerConfig(actionConfirmFrames = 2, waitConfirmFrames = 3)
-    )
-
     @Test
-    fun firstSnapshotBecomesActiveImmediately() {
-        val initial = waitSnapshot(GuidanceBlockReason.NEED_RED_BASELINE)
+    fun waitNeedsTimeDebounceBeforeReplacingGo() {
+        var now = 0L
+        val stabilizer =
+            GuidanceStateStabilizer(
+                GuidanceStateStabilizerConfig(
+                    goConfirmDurationMs = 250L,
+                    stopConfirmDurationMs = 150L,
+                    waitConfirmDurationMs = 350L,
+                    cautionConfirmDurationMs = 400L,
+                    goMinimumHoldMs = 500L
+                ),
+                timeProvider = { now }
+            )
 
-        assertEquals(initial, stabilizer.stabilize(initial))
-    }
-
-    @Test
-    fun goTransitionRequiresTwoConsecutiveFrames() {
-        stabilizer.stabilize(stopSnapshot())
-
-        assertEquals(stopSnapshot(), stabilizer.stabilize(goSnapshot()))
-        assertEquals(goSnapshot(), stabilizer.stabilize(goSnapshot()))
-    }
-
-    @Test
-    fun waitTransitionRequiresThreeConsecutiveFrames() {
         stabilizer.stabilize(goSnapshot())
-
+        now += 100L
         assertEquals(goSnapshot(), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
+        now += 500L
         assertEquals(goSnapshot(), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
+        now += 350L
         assertEquals(waitSnapshot(GuidanceBlockReason.NO_SIGNAL), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
     }
 
     @Test
-    fun transientWaitCandidateClearsWhenGoReturns() {
-        stabilizer.stabilize(goSnapshot())
+    fun stopCanOverrideGoSoonerThanWait() {
+        var now = 0L
+        val stabilizer =
+            GuidanceStateStabilizer(
+                GuidanceStateStabilizerConfig(
+                    goConfirmDurationMs = 250L,
+                    stopConfirmDurationMs = 150L,
+                    waitConfirmDurationMs = 350L,
+                    cautionConfirmDurationMs = 400L,
+                    goMinimumHoldMs = 500L
+                ),
+                timeProvider = { now }
+            )
 
-        assertEquals(goSnapshot(), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
-        assertEquals(goSnapshot(), stabilizer.stabilize(goSnapshot()))
-        assertEquals(goSnapshot(), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
-        assertEquals(goSnapshot(), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
-        assertEquals(waitSnapshot(GuidanceBlockReason.NO_SIGNAL), stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NO_SIGNAL)))
+        stabilizer.stabilize(goSnapshot())
+        now += 200L
+        assertEquals(goSnapshot(), stabilizer.stabilize(stopSnapshot()))
+        now += 150L
+        assertEquals(stopSnapshot(), stabilizer.stabilize(stopSnapshot()))
     }
 
     @Test
-    fun sameGuidanceStateRefreshesSnapshotDetailsImmediately() {
-        stabilizer.stabilize(waitSnapshot(GuidanceBlockReason.NEED_RED_BASELINE))
+    fun cautionNeedsLongerDebounceThanGo() {
+        var now = 0L
+        val stabilizer =
+            GuidanceStateStabilizer(
+                GuidanceStateStabilizerConfig(
+                    goConfirmDurationMs = 250L,
+                    stopConfirmDurationMs = 150L,
+                    waitConfirmDurationMs = 350L,
+                    cautionConfirmDurationMs = 400L,
+                    goMinimumHoldMs = 500L
+                ),
+                timeProvider = { now }
+            )
 
-        val updated = waitSnapshot(GuidanceBlockReason.NO_SIGNAL)
-        assertEquals(updated, stabilizer.stabilize(updated))
+        stabilizer.stabilize(goSnapshot())
+        now += 300L
+        assertEquals(goSnapshot(), stabilizer.stabilize(goCautionSnapshot()))
+        now += 400L
+        assertEquals(goCautionSnapshot(), stabilizer.stabilize(goCautionSnapshot()))
     }
 
     private fun stopSnapshot(): GuidanceSnapshot {
@@ -69,15 +90,21 @@ class GuidanceStateStabilizerTest {
         )
     }
 
+    private fun goCautionSnapshot(): GuidanceSnapshot {
+        return GuidanceSnapshot(
+            trafficState = TrafficLightState.GREEN,
+            userGuidanceState = UserGuidanceState.GO,
+            guidancePhase = GuidancePhase.WALK_ALLOWED,
+            guidanceBlockReason = GuidanceBlockReason.NONE,
+            occupancyCaution = true
+        )
+    }
+
     private fun waitSnapshot(reason: GuidanceBlockReason): GuidanceSnapshot {
         return GuidanceSnapshot(
-            trafficState = if (reason == GuidanceBlockReason.NEED_RED_BASELINE) {
-                TrafficLightState.GREEN
-            } else {
-                TrafficLightState.UNKNOWN
-            },
+            trafficState = TrafficLightState.UNKNOWN,
             userGuidanceState = UserGuidanceState.WAIT,
-            guidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE,
+            guidancePhase = GuidancePhase.WALK_ALLOWED,
             guidanceBlockReason = reason
         )
     }

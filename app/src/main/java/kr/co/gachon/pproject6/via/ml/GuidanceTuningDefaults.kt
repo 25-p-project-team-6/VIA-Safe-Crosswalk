@@ -14,11 +14,12 @@ object GuidanceTuningDefaults {
 
     val walkSignalConfig = ConservativeWalkSignalConfig(
         requireRedBaselineBeforeGo = true,
-        resetToBaselineOnUnknownDuringWalk = true,
-        blockGoWhenRiskDetected = true,
-        walkAllowedUnknownGraceMs = 1_500L,
-        walkAllowedUnknownGraceWithContextMs = 3_500L,
-        walkAllowedUnknownGraceLookingDownMs = 4_500L
+        walkAllowedUnknownGraceMs = 1_200L,
+        walkAllowedUnknownGraceMatchedMs = 2_200L,
+        walkAllowedUnknownGraceMatchedMovingMs = 3_500L,
+        walkAllowedUnknownGraceMatchedMovingDownMs = 4_800L,
+        sameCrossingMaxDistanceMeters = 20f,
+        sameCrossingMaxElapsedMs = 12_000L
     )
 
     val crossingSupportConfig = CrossingSupportConfig(
@@ -38,16 +39,20 @@ object GuidanceTuningDefaults {
     )
 
     val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
-        actionConfirmFrames = 2,
-        waitConfirmFrames = 3
+        goConfirmDurationMs = 250L,
+        stopConfirmDurationMs = 150L,
+        waitConfirmDurationMs = 350L,
+        cautionConfirmDurationMs = 400L,
+        goMinimumHoldMs = 500L
     )
 
-    val riskObjectConfig = RiskObjectConfig(
-        blockingLabels = setOf("bicycle", "car", "motorcycle", "bus", "train", "truck"),
+    val occupancyConfig = CrosswalkOccupancyConfig(
+        labels = setOf("bicycle", "car", "motorcycle", "bus", "train", "truck"),
         minScore = 0.35f,
         minBottom = 0.45f,
         minArea = 0.015f,
-        blockingCenterBand = 0.2f..0.8f
+        centerBand = 0.2f..0.8f,
+        confirmDurationMs = 400L
     )
 
     val feedbackTimingConfig = SignalFeedbackTimingConfig(
@@ -66,18 +71,32 @@ object GuidanceTuningDefaults {
             append(", green keep=")
             append(signalStateTrackingConfig.greenPersistenceDurationMs)
             append("ms")
-            append(", go/stop frames=")
-            append(guidanceStabilizerConfig.actionConfirmFrames)
-            append(", wait frames=")
-            append(guidanceStabilizerConfig.waitConfirmFrames)
+            append(", go confirm=")
+            append(guidanceStabilizerConfig.goConfirmDurationMs)
+            append("ms")
+            append(", stop confirm=")
+            append(guidanceStabilizerConfig.stopConfirmDurationMs)
+            append("ms")
+            append(", wait confirm=")
+            append(guidanceStabilizerConfig.waitConfirmDurationMs)
+            append("ms")
+            append(", caution confirm=")
+            append(guidanceStabilizerConfig.cautionConfirmDurationMs)
+            append("ms")
+            append(", go hold=")
+            append(guidanceStabilizerConfig.goMinimumHoldMs)
+            append("ms")
             append(", walk unknown=")
             append(walkSignalConfig.walkAllowedUnknownGraceMs)
             append("ms")
-            append(", walk unknown ctx=")
-            append(walkSignalConfig.walkAllowedUnknownGraceWithContextMs)
+            append(", walk unknown matched=")
+            append(walkSignalConfig.walkAllowedUnknownGraceMatchedMs)
+            append("ms")
+            append(", walk unknown moving=")
+            append(walkSignalConfig.walkAllowedUnknownGraceMatchedMovingMs)
             append("ms")
             append(", walk unknown down=")
-            append(walkSignalConfig.walkAllowedUnknownGraceLookingDownMs)
+            append(walkSignalConfig.walkAllowedUnknownGraceMatchedMovingDownMs)
             append("ms")
             append(", ctx motion=")
             append(crossingSupportConfig.motionHoldMs)
@@ -100,21 +119,24 @@ object GuidanceTuningDefaults {
             append(crossingSupportConfig.locationHoldMs)
             append("ms")
             append(", ctx next=")
-            append(crossingSupportConfig.nextCrosswalkDistanceThresholdMeters)
+            append(walkSignalConfig.sameCrossingMaxDistanceMeters)
             append("m/")
-            append(crossingSupportConfig.nextCrosswalkMinActiveMs)
+            append(walkSignalConfig.sameCrossingMaxElapsedMs)
             append("ms")
             append(", ")
-            append("risk score≥")
-            append("%.2f".format(riskObjectConfig.minScore))
+            append("occupancy score≥")
+            append("%.2f".format(occupancyConfig.minScore))
             append(", bottom≥")
-            append("%.2f".format(riskObjectConfig.minBottom))
+            append("%.2f".format(occupancyConfig.minBottom))
             append(", area≥")
-            append("%.3f".format(riskObjectConfig.minArea))
+            append("%.3f".format(occupancyConfig.minArea))
             append(", band=")
-            append("%.2f".format(riskObjectConfig.blockingCenterBand.start))
+            append("%.2f".format(occupancyConfig.centerBand.start))
             append("..")
-            append("%.2f".format(riskObjectConfig.blockingCenterBand.endInclusive))
+            append("%.2f".format(occupancyConfig.centerBand.endInclusive))
+            append(", caution=")
+            append(occupancyConfig.confirmDurationMs)
+            append("ms")
             append(", wait=")
             append(feedbackTimingConfig.waitRepeatIntervalMs)
             append("ms, action=")

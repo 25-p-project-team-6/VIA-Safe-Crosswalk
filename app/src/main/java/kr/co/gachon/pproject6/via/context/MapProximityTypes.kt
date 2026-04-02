@@ -32,6 +32,12 @@ enum class MapFeatureSource(val wireName: String) {
     HYBRID("hybrid");
 }
 
+enum class MapClusterTransitionKind(val wireName: String) {
+    NONE("none"),
+    SAME_CROSSING("same_crossing"),
+    NEW_CROSSING("new_crossing");
+}
+
 data class MapFeatureRecord(
     val id: String,
     val kind: MapFeatureKind,
@@ -44,6 +50,31 @@ data class MapFeatureRecord(
     val source: MapFeatureSource = MapFeatureSource.BUNDLED
 )
 
+data class CrosswalkClusterMember(
+    val featureId: String,
+    val kind: MapFeatureKind,
+    val source: MapFeatureSource,
+    val point: GeoPoint,
+    val approachBearings: List<Float>
+)
+
+data class CrosswalkCluster(
+    val clusterId: String,
+    val centerPoint: GeoPoint,
+    val preferredAnchorId: String,
+    val preferredAnchorPoint: GeoPoint,
+    val kind: MapFeatureKind,
+    val source: MapFeatureSource,
+    val memberIds: List<String>,
+    val memberCount: Int,
+    val spanMeters: Float,
+    val hasPedSignal: Boolean,
+    val triggerRadiusMeters: Float,
+    val exitRadiusMeters: Float,
+    val approachBearings: List<Float>,
+    val datasetVersion: String
+)
+
 data class MapProximitySnapshot(
     val isNearKnownFeature: Boolean = false,
     val matchedFeatureId: String? = null,
@@ -53,11 +84,20 @@ data class MapProximitySnapshot(
     val matchedLongitude: Double? = null,
     val distanceMeters: Float? = null,
     val datasetVersion: String? = null,
-    val usedRemoteData: Boolean = false
+    val usedRemoteData: Boolean = false,
+    val matchedClusterId: String? = null,
+    val matchedAnchorId: String? = null,
+    val matchedMemberCount: Int = 0,
+    val matchedClusterSpanMeters: Float? = null,
+    val matchedHasPedSignal: Boolean = false,
+    val clusterTransitionKind: MapClusterTransitionKind = MapClusterTransitionKind.NONE,
+    val clusterTransitionDistanceMeters: Float? = null
 ) {
     fun toDebugSummary(): String {
         val distanceSummary =
             distanceMeters?.let { String.format(Locale.US, "%.1f", it) } ?: "n/a"
+        val spanSummary =
+            matchedClusterSpanMeters?.let { String.format(Locale.US, "%.1f", it) } ?: "n/a"
         return buildString {
             append("mapNear=")
             append(isNearKnownFeature)
@@ -69,6 +109,14 @@ data class MapProximitySnapshot(
             append(distanceSummary)
             append(", mapId=")
             append(matchedFeatureId ?: "none")
+            append(", mapCluster=")
+            append(matchedClusterId ?: "none")
+            append(", mapMembers=")
+            append(matchedMemberCount)
+            append(", mapSpan=")
+            append(spanSummary)
+            append(", mapTransition=")
+            append(clusterTransitionKind.wireName)
             append(", mapVer=")
             append(datasetVersion ?: "none")
             if (usedRemoteData) {
@@ -167,4 +215,112 @@ internal fun normalizeBearingDegrees(value: Float): Float {
 
 internal fun defaultExitRadiusMeters(triggerRadiusMeters: Float): Float {
     return max(triggerRadiusMeters + 20f, 55f)
+}
+
+internal fun featurePriority(feature: MapFeatureRecord): Int {
+    return when (feature.source) {
+        MapFeatureSource.HYBRID -> 6
+        MapFeatureSource.BUNDLED ->
+            if (feature.kind == MapFeatureKind.PED_SIGNAL) 5 else 4
+        MapFeatureSource.OSM ->
+            if (feature.kind == MapFeatureKind.PED_SIGNAL) 3 else 2
+    }
+}
+
+internal fun buildCrosswalkClusters(
+    features: List<MapFeatureRecord>,
+    mergeDistanceMeters: Float = 12f,
+    maxClusterSpanMeters: Float = 22f
+): List<CrosswalkCluster> {
+    val accumulators = mutableListOf<MutableCrosswalkCluster>()
+    val ordered = features.sortedWith(compareByDescending<MapFeatureRecord> { featurePriority(it) }.thenBy { it.id })
+    ordered.forEach { feature ->
+        val bestIndex =
+            accumulators.withIndex()
+                .filter { (_, cluster) -> cluster.canAccept(feature, mergeDistanceMeters, maxClusterSpanMeters) }
+                .minByOrNull { (_, cluster) -> haversineDistanceMeters(cluster.centerPoint(), feature.point) }
+                ?.index
+        if (bestIndex == null) {
+            accumulators += MutableCrosswalkCluster(feature)
+        } else {
+            accumulators[bestIndex].add(feature)
+        }
+    }
+    return accumulators.map { it.build() }
+}
+
+private class MutableCrosswalkCluster(
+    seed: MapFeatureRecord
+) {
+    private val members = mutableListOf(seed)
+
+    fun add(feature: MapFeatureRecord) {
+        members += feature
+    }
+
+    fun centerPoint(): GeoPoint {
+        val lat = members.sumOf { it.point.latitude } / members.size
+        val lon = members.sumOf { it.point.longitude } / members.size
+        return GeoPoint(lat, lon)
+    }
+
+    fun canAccept(
+        feature: MapFeatureRecord,
+        mergeDistanceMeters: Float,
+        maxClusterSpanMeters: Float
+    ): Boolean {
+        val closeEnough =
+            members.any { existing ->
+                haversineDistanceMeters(existing.point, feature.point) <= mergeDistanceMeters
+            } || haversineDistanceMeters(centerPoint(), feature.point) <= mergeDistanceMeters
+        if (!closeEnough) {
+            return false
+        }
+        return clusterSpanMeters(members + feature) <= maxClusterSpanMeters
+    }
+
+    fun build(): CrosswalkCluster {
+        val sortedMembers =
+            members.sortedWith(
+                compareByDescending<MapFeatureRecord> { if (it.kind == MapFeatureKind.PED_SIGNAL) 1 else 0 }
+                    .thenByDescending { featurePriority(it) }
+                    .thenBy { it.id }
+            )
+        val canonical = sortedMembers.first()
+        val preferred = sortedMembers.first()
+        val memberSources = members.map { it.source }.distinct()
+        val source =
+            if (memberSources.size == 1) {
+                memberSources.first()
+            } else {
+                MapFeatureSource.HYBRID
+            }
+        val hasPedSignal = members.any { it.kind == MapFeatureKind.PED_SIGNAL }
+        return CrosswalkCluster(
+            clusterId = canonical.id,
+            centerPoint = centerPoint(),
+            preferredAnchorId = preferred.id,
+            preferredAnchorPoint = preferred.point,
+            kind = if (hasPedSignal) MapFeatureKind.PED_SIGNAL else canonical.kind,
+            source = source,
+            memberIds = members.map { it.id }.sorted(),
+            memberCount = members.size,
+            spanMeters = clusterSpanMeters(members),
+            hasPedSignal = hasPedSignal,
+            triggerRadiusMeters = members.maxOf { it.triggerRadiusMeters },
+            exitRadiusMeters = members.maxOf { it.exitRadiusMeters },
+            approachBearings = members.flatMap { it.approachBearings }.distinct(),
+            datasetVersion = canonical.datasetVersion
+        )
+    }
+}
+
+private fun clusterSpanMeters(features: List<MapFeatureRecord>): Float {
+    var maxDistance = 0f
+    for (firstIndex in 0 until features.size) {
+        for (secondIndex in firstIndex + 1 until features.size) {
+            maxDistance = max(maxDistance, haversineDistanceMeters(features[firstIndex].point, features[secondIndex].point))
+        }
+    }
+    return maxDistance
 }

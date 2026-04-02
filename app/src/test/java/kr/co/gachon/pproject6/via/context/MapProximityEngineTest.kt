@@ -9,95 +9,83 @@ class MapProximityEngineTest {
     @Test
     fun requiresTwoConsecutiveAcceptedFixesBeforeEnteringNearState() {
         val engine = MapProximityEngine()
-        val feature = crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280)
+        val cluster = buildCrosswalkClusters(listOf(crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280))).single()
         val point = GeoPoint(latitude = 37.45005, longitude = 127.1280)
 
-        val first = engine.update(point, 5f, null, listOf(feature), "bundled-v1", false)
-        val second = engine.update(point, 5f, null, listOf(feature), "bundled-v1", false)
+        val first = engine.update(point, 5f, null, listOf(cluster), "bundled-v1", false)
+        val second = engine.update(point, 5f, null, listOf(cluster), "bundled-v1", false)
 
         assertFalse(first.isNearKnownFeature)
         assertTrue(second.isNearKnownFeature)
-        assertEquals("crosswalk-a", second.matchedFeatureId)
-        assertEquals(37.4500, second.matchedLatitude!!, 0.000001)
-        assertEquals(127.1280, second.matchedLongitude!!, 0.000001)
+        assertEquals("crosswalk-a", second.matchedClusterId)
+        assertEquals("crosswalk-a", second.matchedAnchorId)
+        assertEquals(1, second.matchedMemberCount)
     }
 
     @Test
-    fun preservesActiveMatchUntilExitRadiusIsExceeded() {
-        val engine = MapProximityEngine()
-        val feature = crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280)
-        val enterPoint = GeoPoint(latitude = 37.45005, longitude = 127.1280)
-        val stillInsideExit = GeoPoint(latitude = 37.45040, longitude = 127.1280)
+    fun overlappingBundledEndpointsAndOsmCenterBecomeOneCluster() {
+        val firstEndpoint = crosswalkFeature(id = "bundled-left", latitude = 37.45000, longitude = 127.12800)
+        val secondEndpoint = crosswalkFeature(id = "bundled-right", latitude = 37.45008, longitude = 127.12800)
+        val osmCenter =
+            crosswalkFeature(
+                id = "osm-center",
+                latitude = 37.45004,
+                longitude = 127.12800,
+                source = MapFeatureSource.OSM
+            )
 
-        engine.update(enterPoint, 4f, null, listOf(feature), "bundled-v1", false)
-        engine.update(enterPoint, 4f, null, listOf(feature), "bundled-v1", false)
-        val retained = engine.update(stillInsideExit, 4f, null, listOf(feature), "bundled-v1", false)
+        val clusters = buildCrosswalkClusters(listOf(firstEndpoint, secondEndpoint, osmCenter))
 
-        assertTrue(retained.isNearKnownFeature)
-        assertEquals("crosswalk-a", retained.matchedFeatureId)
+        assertEquals(1, clusters.size)
+        assertEquals(3, clusters.single().memberCount)
+        assertEquals(MapFeatureSource.HYBRID, clusters.single().source)
     }
 
     @Test
-    fun switchesToCloserCandidateBeforeOldExitRadiusWhenItStaysCloser() {
+    fun preservesClusterMatchWhenAnchorPointChangesInsideSameCluster() {
         val engine = MapProximityEngine()
-        val first = crosswalkFeature(id = "crosswalk-a", latitude = 37.45000, longitude = 127.12800)
-        val second = crosswalkFeature(id = "crosswalk-b", latitude = 37.45018, longitude = 127.12800)
+        val features =
+            listOf(
+                crosswalkFeature(id = "bundled-left", latitude = 37.45000, longitude = 127.12800),
+                crosswalkFeature(id = "bundled-right", latitude = 37.45008, longitude = 127.12800),
+                crosswalkFeature(id = "osm-center", latitude = 37.45004, longitude = 127.12800, source = MapFeatureSource.OSM)
+            )
+        val cluster = buildCrosswalkClusters(features).single()
+        val firstPoint = GeoPoint(latitude = 37.45001, longitude = 127.12800)
+        val secondPoint = GeoPoint(latitude = 37.45007, longitude = 127.12800)
+
+        engine.update(firstPoint, 4f, null, listOf(cluster), "bundled-v1+osm", false)
+        val matched = engine.update(firstPoint, 4f, null, listOf(cluster), "bundled-v1+osm", false)
+        val retained = engine.update(secondPoint, 4f, null, listOf(cluster), "bundled-v1+osm", false)
+
+        assertEquals(matched.matchedClusterId, retained.matchedClusterId)
+        assertEquals(MapClusterTransitionKind.NONE, retained.clusterTransitionKind)
+    }
+
+    @Test
+    fun switchesToCloserClusterAfterTwoConsistentFixes() {
+        val engine = MapProximityEngine()
+        val first = buildCrosswalkClusters(listOf(crosswalkFeature(id = "cluster-a", latitude = 37.45000, longitude = 127.12800))).single()
+        val second = buildCrosswalkClusters(listOf(crosswalkFeature(id = "cluster-b", latitude = 37.45018, longitude = 127.12800))).single()
         val initialPoint = GeoPoint(latitude = 37.45003, longitude = 127.12800)
         val movedPoint = GeoPoint(latitude = 37.45015, longitude = 127.12800)
 
         engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
         engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
-
         val firstSwitchAttempt = engine.update(movedPoint, 4f, null, listOf(first, second), "bundled-v1", false)
         val confirmedSwitch = engine.update(movedPoint, 4f, null, listOf(first, second), "bundled-v1", false)
 
-        assertEquals("crosswalk-a", firstSwitchAttempt.matchedFeatureId)
-        assertEquals("crosswalk-b", confirmedSwitch.matchedFeatureId)
-    }
-
-    @Test
-    fun doesNotSwitchWhenActiveCrosswalkStaysCloser() {
-        val engine = MapProximityEngine()
-        val first = crosswalkFeature(id = "crosswalk-a", latitude = 37.45000, longitude = 127.12800)
-        val second = crosswalkFeature(id = "crosswalk-b", latitude = 37.45008, longitude = 127.12800)
-        val initialPoint = GeoPoint(latitude = 37.45001, longitude = 127.12800)
-        val stillCloserToFirst = GeoPoint(latitude = 37.45003, longitude = 127.12800)
-
-        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
-        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
-
-        val afterMove = engine.update(stillCloserToFirst, 4f, null, listOf(first, second), "bundled-v1", false)
-        val secondAfterMove = engine.update(stillCloserToFirst, 4f, null, listOf(first, second), "bundled-v1", false)
-
-        assertEquals("crosswalk-a", afterMove.matchedFeatureId)
-        assertEquals("crosswalk-a", secondAfterMove.matchedFeatureId)
-    }
-
-    @Test
-    fun poorAccuracyStillDoesNotBreakExistingMatch() {
-        val engine = MapProximityEngine()
-        val first = crosswalkFeature(id = "crosswalk-a", latitude = 37.45000, longitude = 127.12800)
-        val second = crosswalkFeature(id = "crosswalk-b", latitude = 37.45018, longitude = 127.12800)
-        val initialPoint = GeoPoint(latitude = 37.45003, longitude = 127.12800)
-        val movedPoint = GeoPoint(latitude = 37.45015, longitude = 127.12800)
-
-        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
-        engine.update(initialPoint, 4f, null, listOf(first, second), "bundled-v1", false)
-
-        val firstSwitchAttempt = engine.update(movedPoint, 40f, null, listOf(first, second), "bundled-v1", false)
-        val secondSwitchAttempt = engine.update(movedPoint, 40f, null, listOf(first, second), "bundled-v1", false)
-
-        assertEquals("crosswalk-a", firstSwitchAttempt.matchedFeatureId)
-        assertEquals("crosswalk-a", secondSwitchAttempt.matchedFeatureId)
+        assertEquals("cluster-a", firstSwitchAttempt.matchedClusterId)
+        assertEquals("cluster-b", confirmedSwitch.matchedClusterId)
     }
 
     @Test
     fun poorAccuracyDoesNotCreateNewMatch() {
         val engine = MapProximityEngine()
-        val feature = crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280)
+        val cluster = buildCrosswalkClusters(listOf(crosswalkFeature(id = "crosswalk-a", latitude = 37.4500, longitude = 127.1280))).single()
         val point = GeoPoint(latitude = 37.45005, longitude = 127.1280)
 
-        val snapshot = engine.update(point, 40f, null, listOf(feature), "bundled-v1", false)
+        val snapshot = engine.update(point, 40f, null, listOf(cluster), "bundled-v1", false)
 
         assertFalse(snapshot.isNearKnownFeature)
         assertEquals("bundled-v1", snapshot.datasetVersion)
@@ -106,72 +94,35 @@ class MapProximityEngineTest {
     @Test
     fun headingBreaksNearDistanceTiesWhenApproachBearingExists() {
         val engine = MapProximityEngine()
-        val northSouth = crosswalkFeature(
-            id = "crosswalk-ns",
-            latitude = 37.4500,
-            longitude = 127.1280,
-            approachBearings = listOf(0f, 180f)
-        )
-        val eastWest = crosswalkFeature(
-            id = "crosswalk-ew",
-            latitude = 37.45002,
-            longitude = 127.1280,
-            approachBearings = listOf(90f, 270f)
-        )
+        val northSouth =
+            buildCrosswalkClusters(
+                listOf(
+                    crosswalkFeature(
+                        id = "crosswalk-ns",
+                        latitude = 37.4500,
+                        longitude = 127.1280,
+                        approachBearings = listOf(0f, 180f)
+                    )
+                )
+            ).single()
+        val eastWest =
+            buildCrosswalkClusters(
+                listOf(
+                    crosswalkFeature(
+                        id = "crosswalk-ew",
+                        latitude = 37.45002,
+                        longitude = 127.1280,
+                        approachBearings = listOf(90f, 270f)
+                    )
+                )
+            ).single()
         val point = GeoPoint(latitude = 37.45008, longitude = 127.1280)
 
         engine.update(point, 5f, 92f, listOf(northSouth, eastWest), "bundled-v1", false)
-        val snapshot =
-            engine.update(point, 5f, 92f, listOf(northSouth, eastWest), "bundled-v1", false)
+        val snapshot = engine.update(point, 5f, 92f, listOf(northSouth, eastWest), "bundled-v1", false)
 
         assertTrue(snapshot.isNearKnownFeature)
-        assertEquals("crosswalk-ew", snapshot.matchedFeatureId)
-    }
-
-    @Test
-    fun osmOnlyFeatureCanBecomeMatched() {
-        val engine = MapProximityEngine()
-        val feature =
-            crosswalkFeature(
-                id = "node:123",
-                latitude = 37.4500,
-                longitude = 127.1280,
-                source = MapFeatureSource.OSM
-            )
-        val point = GeoPoint(latitude = 37.45005, longitude = 127.1280)
-
-        engine.update(point, 5f, null, listOf(feature), "osm-live", false)
-        val snapshot = engine.update(point, 5f, null, listOf(feature), "osm-live", false)
-
-        assertTrue(snapshot.isNearKnownFeature)
-        assertEquals(MapFeatureSource.OSM, snapshot.matchedSource)
-        assertEquals("node:123", snapshot.matchedFeatureId)
-    }
-
-    @Test
-    fun overlappingBundledAndOsmFeaturesMergeIntoSingleHybridCandidate() {
-        val bundled =
-            crosswalkFeature(
-                id = "crosswalk-a",
-                latitude = 37.45000,
-                longitude = 127.12800,
-                source = MapFeatureSource.BUNDLED
-            )
-        val osm =
-            crosswalkFeature(
-                id = "node:999",
-                latitude = 37.45001,
-                longitude = 127.12800,
-                kind = MapFeatureKind.PED_SIGNAL,
-                source = MapFeatureSource.OSM
-            )
-
-        val merged = mergeProximityFeatures(listOf(bundled), listOf(osm))
-
-        assertEquals(1, merged.size)
-        assertEquals("crosswalk-a", merged.first().id)
-        assertEquals(MapFeatureKind.PED_SIGNAL, merged.first().kind)
-        assertEquals(MapFeatureSource.HYBRID, merged.first().source)
+        assertEquals("crosswalk-ew", snapshot.matchedClusterId)
     }
 
     private fun crosswalkFeature(

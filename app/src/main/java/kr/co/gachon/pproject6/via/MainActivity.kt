@@ -785,7 +785,10 @@ class MainActivity : AppCompatActivity() {
                     crossingSupportManager.setCrossingWindowActive(
                         analysisResult.guidancePhase == GuidancePhase.WALK_ALLOWED
                     )
-                    feedbackManager.onGuidanceStateChanged(analysisResult.userGuidanceState)
+                    feedbackManager.onGuidanceStateChanged(
+                        analysisResult.userGuidanceState,
+                        analysisResult.occupancyCaution
+                    )
                 } else {
                     crossingSupportManager.setCrossingWindowActive(false)
                     feedbackManager.clearState()
@@ -881,10 +884,10 @@ class MainActivity : AppCompatActivity() {
                     appendLine("Ratio : ${String.format(Locale.US, "%.2f", analysisResult.targetBox.debugRatio)}")
                 }
                 append(
-                    if (analysisResult.hasBlockingRisk) {
-                        "Risk  : ${analysisResult.blockingRiskLabels.joinToString(", ")}"
+                    if (analysisResult.occupancyCaution) {
+                        "Caution: ${analysisResult.occupancyCautionLabels.joinToString(", ")}"
                     } else {
-                        "Risk  : none"
+                        "Caution: none"
                     }
                 )
             }
@@ -917,8 +920,11 @@ class MainActivity : AppCompatActivity() {
                 appendLine(
                     "GPSFix  : lat=${context.currentLocationLatitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | lon=${context.currentLocationLongitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | acc=${context.currentLocationAccuracyMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}"
                 )
+                appendLine(
+                    "Context : tier=${analysisResult.guidanceContinuityTier} | handoff=${analysisResult.handoffDecision} | caution=${analysisResult.occupancyCaution}"
+                )
                 append(
-                    "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, id=${shortMapId(map.matchedFeatureId)}, ver=${map.datasetVersion ?: "none"}"
+                    "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, cluster=${shortMapId(map.matchedClusterId)}, members=${map.matchedMemberCount}, transition=${map.clusterTransitionKind.wireName}, ver=${map.datasetVersion ?: "none"}"
                 )
             }
         } else {
@@ -1060,16 +1066,19 @@ class MainActivity : AppCompatActivity() {
                     UserGuidanceState.GO -> {
                         statusTitleText.text = "건너세요"
                         statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                        statusDetailText.text = "초록 전환이 확인되었습니다"
+                        statusDetailText.text =
+                            if (analysisResult.occupancyCaution) {
+                                "차량 주의"
+                            } else {
+                                "초록 전환이 확인되었습니다"
+                            }
                     }
 
                     UserGuidanceState.WAIT,
                     UserGuidanceState.STOP -> {
                         statusTitleText.text = "잠시 기다리세요"
                         statusTitleText.setTextColor(Color.WHITE)
-                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
-                            "차량 또는 자전거를 확인했습니다"
-                        } else if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
+                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
                             "다음 신호 전환을 기다리고 있습니다"
                         } else {
                             "처음 본 초록불은 안내하지 않습니다"
@@ -1082,7 +1091,9 @@ class MainActivity : AppCompatActivity() {
                 if (analysisResult.userGuidanceState == UserGuidanceState.GO) {
                     statusTitleText.text = "건너세요"
                     statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                    statusDetailText.text = if (analysisResult.crossingSupportSnapshot.isLookingDown) {
+                    statusDetailText.text = if (analysisResult.occupancyCaution) {
+                        "차량 주의"
+                    } else if (analysisResult.crossingSupportSnapshot.isLookingDown) {
                         "휴대폰을 들어 신호등 쪽을 비춰주세요"
                     } else {
                         "초록 신호를 다시 찾는 중입니다"
@@ -1090,9 +1101,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     statusTitleText.text = "잠시 기다리세요"
                     statusTitleText.setTextColor(Color.WHITE)
-                    statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
-                        "주변 위험 요소를 확인 중입니다"
-                    } else if (analysisResult.targetBox == null) {
+                    statusDetailText.text = if (analysisResult.targetBox == null) {
                         "신호등을 화면 중앙에 맞춰주세요"
                     } else {
                         "신호 상태를 확인하고 있습니다"
@@ -1112,9 +1121,12 @@ class MainActivity : AppCompatActivity() {
             "guidance=${analysisResult.userGuidanceState}," +
                 "phase=${analysisResult.guidancePhase}," +
                 "reason=${analysisResult.guidanceBlockReason}," +
+                "tier=${analysisResult.guidanceContinuityTier}," +
+                "handoff=${analysisResult.handoffDecision}," +
+                "caution=${analysisResult.occupancyCaution}," +
                 "traffic=${analysisResult.trafficState}," +
                 "context=${analysisResult.crossingSupportSnapshot.toDebugSummary()}," +
-                "risk=${analysisResult.blockingRiskLabels.joinToString("|").ifBlank { "none" }}"
+                "occupancy=${analysisResult.occupancyCautionLabels.joinToString("|").ifBlank { "none" }}"
         }
 
         if (summary != lastLoggedDecisionSummary) {

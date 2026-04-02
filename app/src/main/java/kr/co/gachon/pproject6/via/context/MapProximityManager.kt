@@ -22,6 +22,7 @@ class MapProximityManager(
     private val osmFetcher = OsmNearbyCrossingFetcher(context)
     private val now = timeProvider
     private val osmRefreshInFlight = AtomicBoolean(false)
+    @Volatile private var latestClusters: List<CrosswalkCluster> = emptyList()
     @Volatile private var latestBundledFeatures: List<MapFeatureRecord> = emptyList()
     @Volatile private var latestOsmFeatures: List<MapFeatureRecord> = emptyList()
     @Volatile private var lastPoint: GeoPoint? = null
@@ -78,13 +79,13 @@ class MapProximityManager(
     @Synchronized
     private fun updateSnapshot(): MapProximitySnapshot {
         val point = lastPoint ?: return currentSnapshot
-        val mergedFeatures = mergeProximityFeatures(latestBundledFeatures, latestOsmFeatures)
+        latestClusters = buildCrosswalkClusters(latestBundledFeatures + latestOsmFeatures)
         currentSnapshot =
             engine.update(
                 point = point,
                 accuracyMeters = lastAccuracyMeters,
                 headingDegrees = lastHeadingDegrees,
-                features = mergedFeatures,
+                clusters = latestClusters,
                 datasetVersion = datasetLabel(),
                 usedRemoteData = lastUsedRemoteData
             )
@@ -155,63 +156,5 @@ class MapProximityManager(
             datasetVersion = "osm-live",
             source = MapFeatureSource.OSM
         )
-    }
-}
-
-internal fun mergeProximityFeatures(
-    bundledFeatures: List<MapFeatureRecord>,
-    osmFeatures: List<MapFeatureRecord>,
-    dedupeDistanceMeters: Float = 8f
-): List<MapFeatureRecord> {
-    val merged = mutableListOf<MapFeatureRecord>()
-    val ordered = (bundledFeatures + osmFeatures).sortedByDescending { featurePriority(it) }
-    for (feature in ordered) {
-        val existingIndex =
-            merged.indexOfFirst { existing ->
-                haversineDistanceMeters(existing.point, feature.point) <= dedupeDistanceMeters
-            }
-        if (existingIndex < 0) {
-            merged += feature
-        } else {
-            merged[existingIndex] = mergeFeatureRecords(merged[existingIndex], feature)
-        }
-    }
-    return merged
-}
-
-private fun mergeFeatureRecords(
-    current: MapFeatureRecord,
-    incoming: MapFeatureRecord
-): MapFeatureRecord {
-    val canonical =
-        if (featurePriority(incoming) > featurePriority(current)) incoming else current
-    val mergedSource =
-        when {
-            current.source == incoming.source -> canonical.source
-            else -> MapFeatureSource.HYBRID
-        }
-    val mergedKind =
-        if (current.kind == MapFeatureKind.PED_SIGNAL || incoming.kind == MapFeatureKind.PED_SIGNAL) {
-            MapFeatureKind.PED_SIGNAL
-        } else {
-            canonical.kind
-        }
-    val mergedBearings = (current.approachBearings + incoming.approachBearings).distinct()
-    return canonical.copy(
-        kind = mergedKind,
-        triggerRadiusMeters = maxOf(current.triggerRadiusMeters, incoming.triggerRadiusMeters),
-        exitRadiusMeters = maxOf(current.exitRadiusMeters, incoming.exitRadiusMeters),
-        approachBearings = mergedBearings,
-        source = mergedSource
-    )
-}
-
-private fun featurePriority(feature: MapFeatureRecord): Int {
-    return when (feature.source) {
-        MapFeatureSource.HYBRID -> 6
-        MapFeatureSource.BUNDLED ->
-            if (feature.kind == MapFeatureKind.PED_SIGNAL) 5 else 4
-        MapFeatureSource.OSM ->
-            if (feature.kind == MapFeatureKind.PED_SIGNAL) 3 else 2
     }
 }

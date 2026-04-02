@@ -12,9 +12,11 @@ data class SignalAnalysisResult(
     val userGuidanceState: UserGuidanceState,
     val guidancePhase: GuidancePhase,
     val guidanceBlockReason: GuidanceBlockReason,
+    val guidanceContinuityTier: GuidanceContinuityTier,
+    val handoffDecision: CrosswalkHandoffDecision,
     val crossingSupportSnapshot: CrossingSupportSnapshot,
-    val hasBlockingRisk: Boolean,
-    val blockingRiskLabels: List<String>
+    val occupancyCaution: Boolean,
+    val occupancyCautionLabels: List<String>
 )
 
 fun SignalAnalysisResult.toGuidanceSnapshot(): GuidanceSnapshot {
@@ -22,7 +24,10 @@ fun SignalAnalysisResult.toGuidanceSnapshot(): GuidanceSnapshot {
         trafficState = trafficState,
         userGuidanceState = userGuidanceState,
         guidancePhase = guidancePhase,
-        guidanceBlockReason = guidanceBlockReason
+        guidanceBlockReason = guidanceBlockReason,
+        guidanceContinuityTier = guidanceContinuityTier,
+        handoffDecision = handoffDecision,
+        occupancyCaution = occupancyCaution
     )
 }
 
@@ -31,6 +36,9 @@ fun SignalAnalysisResult.withGuidanceSnapshot(snapshot: GuidanceSnapshot): Signa
         trafficState = snapshot.trafficState,
         userGuidanceState = snapshot.userGuidanceState,
         guidancePhase = snapshot.guidancePhase,
-        guidanceBlockReason = snapshot.guidanceBlockReason
+        guidanceBlockReason = snapshot.guidanceBlockReason,
+        guidanceContinuityTier = snapshot.guidanceContinuityTier,
+        handoffDecision = snapshot.handoffDecision,
+        occupancyCaution = snapshot.occupancyCaution
     )
 }
