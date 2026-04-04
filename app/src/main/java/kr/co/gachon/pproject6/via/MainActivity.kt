@@ -1,10 +1,14 @@
 package kr.co.gachon.pproject6.via
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.RectF
+import android.location.Location
+import android.location.LocationManager
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -16,6 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.PreviewView
+import androidx.camera.view.transform.CoordinateTransform
+import androidx.camera.view.transform.ImageProxyTransformFactory
+import androidx.camera.view.transform.OutputTransform
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
@@ -25,7 +32,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.context.CrossingSupportManager
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
+import kr.co.gachon.pproject6.via.ml.GuidancePhase
 import kr.co.gachon.pproject6.via.ml.GuidanceStateStabilizer
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
@@ -37,6 +47,8 @@ import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.ml.toGuidanceSnapshot
 import kr.co.gachon.pproject6.via.ml.withGuidanceSnapshot
+import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
+import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
@@ -44,8 +56,16 @@ import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
 import kr.co.gachon.pproject6.via.util.RateTracker
 import org.tensorflow.lite.gpu.CompatibilityList
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class MainActivity : AppCompatActivity() {
+    private companion object {
+        private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
+        private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
+    }
+
     private lateinit var viewFinder: PreviewView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
@@ -58,6 +78,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modelNameText: TextView
     private lateinit var buildInfoText: TextView
     private lateinit var resetAppButton: MaterialButton
+    private lateinit var openGpsDebugMapButton: MaterialButton
+    private lateinit var clearMapCacheButton: MaterialButton
     private lateinit var targetInfoText: TextView
     private lateinit var decisionDebugText: TextView
     private lateinit var tuningDebugText: TextView
@@ -65,8 +87,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusDetailText: TextView
     private lateinit var confidenceSliderLabel: TextView
     private lateinit var trafficConfidenceLabel: TextView
+    private lateinit var downTiltLabel: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var trafficConfidenceSlider: Slider
+    private lateinit var downTiltSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var zoomSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var rawDetectionSwitch: androidx.appcompat.widget.SwitchCompat
@@ -79,10 +103,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusPanel: View
     private lateinit var statusBorder: View
     private var lastLoggedDecisionSummary: String? = null
+    private var lastLoggedMapSummary: String? = null
     private var suppressGpuToggleCallback = false
+    private var suppressZoomToggleCallback = false
     private lateinit var preferences: AppPreferences
+    private val locationManager by lazy {
+        getSystemService(LocationManager::class.java)
+    }
+    private var latestCrossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
 
     private var cameraManager: CameraManager? = null
+    private var hasStartedCamera = false
+    private var cameraRecoveryAttempts = 0
+    @Volatile
+    private var lastCameraFrameAtElapsedMs = 0L
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private var showDebugInfo = false
@@ -91,6 +125,7 @@ class MainActivity : AppCompatActivity() {
     private val showBBoxOverlay = true
 
     private var cameraExecutor: ExecutorService? = null
+    private var processingExecutor: ExecutorService? = null
 
     @Volatile
     private var detector: YoloDetector? = null
@@ -113,12 +148,33 @@ class MainActivity : AppCompatActivity() {
     
     // Performance Tracker
     private val performanceTracker = PerformanceTracker()
-    private val inputRateTracker = RateTracker(label = "Input FPS")
+    private val cameraRateTracker = RateTracker(label = "Camera FPS")
+    private val pendingFrame = AtomicReference<ImageProxy?>(null)
+    private val processingScheduled = AtomicBoolean(false)
+    private val imageProxyTransformFactory =
+        ImageProxyTransformFactory().apply {
+            setUsingCropRect(true)
+            setUsingRotationDegrees(true)
+        }
 
     private val signalAnalyzer = SignalAnalyzer()
     private val guidanceStateStabilizer =
         GuidanceStateStabilizer(GuidanceTuningDefaults.guidanceStabilizerConfig)
+    private lateinit var crossingSupportManager: CrossingSupportManager
     private lateinit var feedbackManager: SignalFeedbackManager
+    private val guidanceRuntimeResetter by lazy {
+        GuidanceRuntimeResetter(
+            resetAnalyzer = { signalAnalyzer.reset() },
+            resetStabilizer = { guidanceStateStabilizer.reset() },
+            resetCrossingSupport = { crossingSupportManager.reset() },
+            clearFeedback = { feedbackManager.clearState() },
+            afterReset = {
+                lastLoggedDecisionSummary = null
+                lastLoggedMapSummary = null
+                latestCrossingSupportSnapshot = CrossingSupportSnapshot()
+            }
+        )
+    }
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
@@ -148,6 +204,7 @@ class MainActivity : AppCompatActivity() {
             currentModelProfile = InferenceModelProfile.fromFileName(savedModel)
         }
         initialBackendPreference = preferences.selectedBackendLabel
+        KineticGuestSessionManager.from(this).prefetchIfNeeded()
 
         setContentView(R.layout.activity_main)
 
@@ -159,6 +216,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewFinder = findViewById(R.id.viewFinder)
+        viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+        viewFinder.scaleType = PreviewView.ScaleType.FILL_CENTER
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         debugToggleButton = findViewById(R.id.debugToggleButton)
@@ -167,6 +226,8 @@ class MainActivity : AppCompatActivity() {
         statusPanel = findViewById(R.id.statusPanel)
         backendStatusText = findViewById(R.id.backendStatusText)
         resetAppButton = findViewById(R.id.resetAppButton)
+        openGpsDebugMapButton = findViewById(R.id.openGpsDebugMapButton)
+        clearMapCacheButton = findViewById(R.id.clearMapCacheButton)
         inputFpsText = findViewById(R.id.inputFpsText)
         modelNameText = findViewById(R.id.modelNameText)
         buildInfoText = findViewById(R.id.buildInfoText)
@@ -182,8 +243,10 @@ class MainActivity : AppCompatActivity() {
         statusDetailText = findViewById(R.id.statusDetailText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
         trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
+        downTiltLabel = findViewById(R.id.downTiltLabel)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         trafficConfidenceSlider = findViewById(R.id.trafficConfidenceSlider)
+        downTiltSlider = findViewById(R.id.downTiltSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
         zoomSwitch = findViewById(R.id.swZoom2x)
         rawDetectionSwitch = findViewById(R.id.swRawDetection)
@@ -191,8 +254,9 @@ class MainActivity : AppCompatActivity() {
         highlightTargetSwitch = findViewById(R.id.swHighlightTarget)
         statusBorder = findViewById(R.id.statusBorder)
         feedbackManager = SignalFeedbackManager(this)
+        crossingSupportManager = CrossingSupportManager(this, GuidanceTuningDefaults.crossingSupportConfig)
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
-        tuningDebugText.text = "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}"
+        updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
         modelNameText.text = "모델: ${currentModelProfile.displayNameWithSize()}"
 
@@ -220,6 +284,13 @@ class MainActivity : AppCompatActivity() {
             finishAffinity()
             finish()
         }
+        openGpsDebugMapButton.setOnClickListener {
+            openGpsDebugMap()
+        }
+        clearMapCacheButton.setOnClickListener {
+            clearMapCaches()
+        }
+        updateGpsDebugMapButtonState()
 
         confidenceSlider.addOnChangeListener { _, value, _ ->
             generalObjThreshold = value
@@ -233,23 +304,40 @@ class MainActivity : AppCompatActivity() {
             updateDetectorThresholds()
         }
 
+        downTiltSlider.addOnChangeListener { _, value, _ ->
+            crossingSupportManager.updateLookingDownThresholdDegrees(value)
+            updateDownTiltLabel()
+            updateTuningDebugText()
+        }
+
         confidenceSlider.value = 0.5f
         trafficConfidenceSlider.value = 0.15f
+        downTiltSlider.value = 20f
+        downTiltSlider.isEnabled = false
+        updateDownTiltLabel()
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressGpuToggleCallback) {
                 return@setOnCheckedChangeListener
             }
-            initDetector(isChecked)
+            initDetector(isChecked, restartCameraAfterInit = hasStartedCamera)
             resetPerformanceStats()
         }
 
         zoomSwitch.setOnCheckedChangeListener { _, isChecked ->
-            val zoomRatio = if (isChecked) 2.0f else 1.0f
-            cameraManager?.setZoom(zoomRatio)
+            if (suppressZoomToggleCallback) {
+                return@setOnCheckedChangeListener
+            }
+            applySelectedZoom()
+        }
+        trafficLogicSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (!isChecked) {
+                guidanceRuntimeResetter.resetForTrafficLogicDisabled()
+            }
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+        processingExecutor = Executors.newSingleThreadExecutor()
 
         // Check GPU compatibility, but still try GPU first for deployable GPU-friendly models.
         val compatList = CompatibilityList()
@@ -271,7 +359,7 @@ class MainActivity : AppCompatActivity() {
         )
         publishBackendStatus("Initializing…")
         // Initialize detector with the recommended delegate for the selected model.
-        initDetector(gpuSwitch.isChecked)
+        initDetector(gpuSwitch.isChecked, restartCameraAfterInit = false)
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -282,6 +370,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupModelSpinner()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        crossingSupportManager.start()
+        latestCrossingSupportSnapshot = crossingSupportManager.snapshot()
+        updateGpsDebugMapButtonState()
+    }
+
+    override fun onPause() {
+        guidanceRuntimeResetter.resetForPause()
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        crossingSupportManager.stop()
+        super.onPause()
     }
 
     private fun updateDetectorThresholds() {
@@ -339,7 +441,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         resetPerformanceStats()
-        initDetector(gpuSwitch.isChecked)
+        initDetector(gpuSwitch.isChecked, restartCameraAfterInit = hasStartedCamera)
     }
 
     private fun setupModelSpinner() {
@@ -385,6 +487,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateTuningDebugText() {
+        tuningDebugText.text =
+            "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}, tilt raw down=-160..-90, up=90..120"
+    }
+
+    private fun updateDownTiltLabel() {
+        downTiltLabel.text = "Tilt Raw Range: down -160..-90 / up 90..120"
+    }
+
     private fun updateDebugInfo(
         inferenceTime: Long,
         totalLatencyMs: Long,
@@ -396,15 +507,25 @@ class MainActivity : AppCompatActivity() {
         performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        inputFpsText.text = inputRateTracker.rateStr
-        fpsText.text = "Detect ${performanceTracker.currentFpsStr}"
-        avgFpsText.text = performanceTracker.avgFpsStr
+        inputFpsText.text = cameraRateTracker.rateStr
+        fpsText.text = performanceTracker.currentFpsStr.replaceFirst("FPS", "Processed FPS")
+        avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
         stageBreakdownText.text = performanceTracker.stageBreakdownStr
     }
 
-    private fun initDetector(useGpu: Boolean) {
-        cameraExecutor?.execute {
+    private fun initDetector(
+        useGpu: Boolean,
+        restartCameraAfterInit: Boolean
+    ) {
+        val executor = processingExecutor ?: return
+        if (restartCameraAfterInit) {
+            runOnUiThread {
+                cameraManager?.stopCamera()
+            }
+            pendingFrame.getAndSet(null)?.close()
+        }
+        executor.execute {
             val oldDetector = detector
             detector = null // Pause detection
 
@@ -443,7 +564,7 @@ class MainActivity : AppCompatActivity() {
                         "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
-                    if (cameraManager != null) {
+                    if (restartCameraAfterInit && hasStartedCamera) {
                         startCamera()
                     }
                 }
@@ -462,14 +583,20 @@ class MainActivity : AppCompatActivity() {
                             checked = false,
                             enabled = currentModelProfile.recommendedUseGpu
                         )
-                        initDetector(false)
+                        initDetector(false, restartCameraAfterInit = restartCameraAfterInit)
                     }
                 }
             }
         }
     }
 
-    private fun startCamera() {
+    private fun startCamera(isRecoveryRestart: Boolean = false) {
+        cameraManager?.stopCamera()
+        hasStartedCamera = true
+        if (!isRecoveryRestart) {
+            cameraRecoveryAttempts = 0
+        }
+        lastCameraFrameAtElapsedMs = 0L
         val resolution = currentModelProfile.analysisResolution
         cameraManager = CameraManager(
             this,
@@ -478,7 +605,7 @@ class MainActivity : AppCompatActivity() {
             cameraExecutor!!,
             android.util.Size(resolution.width, resolution.height)
         ) { image ->
-            processImage(image)
+            enqueueFrame(image)
         }
 
         runOnUiThread {
@@ -492,23 +619,89 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     zoomSwitch.isEnabled = true
                     zoomSwitch.text = "Use 2x Zoom"
-                    if (!zoomSwitch.isChecked) {
-                        zoomSwitch.isChecked = true
-                    } else {
-                        cameraManager?.setZoom(2.0f)
-                    }
+                    applySelectedZoom()
                 }
             } else {
                 runOnUiThread {
+                    suppressZoomToggleCallback = true
+                    zoomSwitch.isChecked = false
+                    suppressZoomToggleCallback = false
                     zoomSwitch.isEnabled = false
                     zoomSwitch.text = "2x Zoom (Not Supported)"
+                    applySelectedZoom()
+                }
+            }
+        }
+        scheduleCameraColdStartRecovery()
+    }
+
+    private fun applySelectedZoom() {
+        val zoomRatio = if (zoomSwitch.isChecked && zoomSwitch.isEnabled) 2.0f else 1.0f
+        cameraManager?.setZoom(zoomRatio)
+    }
+    
+    private fun enqueueFrame(imageProxy: ImageProxy) {
+        lastCameraFrameAtElapsedMs = SystemClock.elapsedRealtime()
+        cameraRateTracker.mark()
+        val previousFrame = pendingFrame.getAndSet(imageProxy)
+        previousFrame?.close()
+        scheduleFrameProcessing()
+    }
+
+    private fun scheduleCameraColdStartRecovery() {
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        viewFinder.postDelayed(cameraColdStartRecoveryRunnable, CAMERA_COLD_START_TIMEOUT_MS)
+    }
+
+    private val cameraColdStartRecoveryRunnable =
+        Runnable {
+            if (!hasStartedCamera) {
+                return@Runnable
+            }
+            if (cameraRecoveryAttempts >= MAX_CAMERA_COLD_START_RECOVERIES) {
+                return@Runnable
+            }
+            val lastFrameAt = lastCameraFrameAtElapsedMs
+            val stalled =
+                lastFrameAt == 0L ||
+                    (SystemClock.elapsedRealtime() - lastFrameAt) >= CAMERA_COLD_START_TIMEOUT_MS
+            if (!stalled) {
+                return@Runnable
+            }
+            cameraRecoveryAttempts += 1
+            Log.w(
+                "MainActivity",
+                "No camera frames detected after startup, restarting preview (attempt=$cameraRecoveryAttempts)"
+            )
+            publishBackendStatus("카메라 초기화 재시도 중…")
+            startCamera(isRecoveryRestart = true)
+        }
+
+    private fun scheduleFrameProcessing() {
+        val executor = processingExecutor ?: run {
+            pendingFrame.getAndSet(null)?.close()
+            return
+        }
+        if (!processingScheduled.compareAndSet(false, true)) {
+            return
+        }
+
+        executor.execute {
+            try {
+                while (true) {
+                    val nextFrame = pendingFrame.getAndSet(null) ?: break
+                    processImage(nextFrame)
+                }
+            } finally {
+                processingScheduled.set(false)
+                if (pendingFrame.get() != null) {
+                    scheduleFrameProcessing()
                 }
             }
         }
     }
-    
+
     private fun processImage(imageProxy: ImageProxy) {
-        inputRateTracker.mark()
         val activeDetector = detector
         if (activeDetector == null) {
             imageProxy.close()
@@ -521,6 +714,8 @@ class MainActivity : AppCompatActivity() {
 
         try {
             val copyStartNs = SystemClock.elapsedRealtimeNanos()
+            val analysisOutputTransform = imageProxyTransformFactory.getOutputTransform(imageProxy)
+            val cropRect = imageProxy.cropRect
             val bitmap = imageProxy.toBitmap()
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             imageProxy.close()
@@ -528,12 +723,13 @@ class MainActivity : AppCompatActivity() {
             stageDurationsMs["copy"] = elapsedMillis(copyStartNs)
 
             val rotateStartNs = SystemClock.elapsedRealtimeNanos()
+            val croppedBitmap = ImageUtils.cropBitmap(bitmap, cropRect)
             val rotatedBitmap = ImageUtils.rotateBitmap(
-                bitmap = bitmap,
+                bitmap = croppedBitmap,
                 degrees = rotationDegrees.toFloat(),
                 reusableBitmap = reusableRotatedBitmap
             )
-            if (rotatedBitmap !== bitmap) {
+            if (rotatedBitmap !== croppedBitmap) {
                 reusableRotatedBitmap = rotatedBitmap
             }
             stageDurationsMs["rotate"] = elapsedMillis(rotateStartNs)
@@ -543,12 +739,19 @@ class MainActivity : AppCompatActivity() {
             stageDurationsMs["detect"] = elapsedMillis(detectStartNs)
 
             val enableTrafficLogic = trafficLogicSwitch.isChecked
+            val crossingSupportSnapshot =
+                if (enableTrafficLogic) {
+                    crossingSupportManager.snapshot()
+                } else {
+                    CrossingSupportSnapshot()
+                }
             val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
             val rawAnalysisResult = signalAnalyzer.analyze(
                 bitmap = rotatedBitmap,
                 rawBoxes = result.boxes,
                 enableTrafficLogic = enableTrafficLogic,
-                enableHighlight = highlightTargetSwitch.isChecked
+                enableHighlight = highlightTargetSwitch.isChecked,
+                crossingSupportSnapshot = crossingSupportSnapshot
             )
             val analysisResult =
                 if (enableTrafficLogic) {
@@ -563,16 +766,31 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 val uiStartNs = SystemClock.elapsedRealtimeNanos()
-                renderOverlay(rotatedBitmap, analysisResult, rawDetectionSwitch.isChecked)
+                latestCrossingSupportSnapshot = analysisResult.crossingSupportSnapshot
+                renderOverlay(
+                    bitmap = rotatedBitmap,
+                    analysisResult = analysisResult,
+                    showRawBoxes = rawDetectionSwitch.isChecked,
+                    analysisOutputTransform = analysisOutputTransform
+                )
                 updateTargetInfo(analysisResult, enableTrafficLogic)
                 updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
+                updateGpsDebugMapButtonState()
                 updateUserStatus(analysisResult, enableTrafficLogic)
                 updateStatusBorder(analysisResult.userGuidanceState, enableTrafficLogic)
                 logDecisionIfChanged(analysisResult, enableTrafficLogic)
+                logMapIfChanged(analysisResult.crossingSupportSnapshot)
 
                 if (enableTrafficLogic) {
-                    feedbackManager.onGuidanceStateChanged(analysisResult.userGuidanceState)
+                    crossingSupportManager.setCrossingWindowActive(
+                        analysisResult.guidancePhase == GuidancePhase.WALK_ALLOWED
+                    )
+                    feedbackManager.onGuidanceStateChanged(
+                        analysisResult.userGuidanceState,
+                        analysisResult.occupancyCaution
+                    )
                 } else {
+                    crossingSupportManager.setCrossingWindowActive(false)
                     feedbackManager.clearState()
                 }
 
@@ -595,14 +813,62 @@ class MainActivity : AppCompatActivity() {
     private fun renderOverlay(
         bitmap: Bitmap,
         analysisResult: SignalAnalysisResult,
-        showRawBoxes: Boolean
+        showRawBoxes: Boolean,
+        analysisOutputTransform: OutputTransform?
     ) {
-        overlay.setInputImageSize(bitmap.width, bitmap.height)
-
         if (showRawBoxes && showBBoxOverlay) {
-            overlay.setResults(analysisResult.boxesToShow)
+            val mappedBoxes =
+                mapBoxesToPreviewView(
+                    boxes = analysisResult.boxesToShow,
+                    sourceWidth = bitmap.width.toFloat(),
+                    sourceHeight = bitmap.height.toFloat(),
+                    analysisOutputTransform = analysisOutputTransform
+                )
+            if (mappedBoxes != null) {
+                overlay.setResults(mappedBoxes, inViewCoordinates = true)
+            } else {
+                overlay.setInputImageSize(bitmap.width, bitmap.height)
+                overlay.setResults(analysisResult.boxesToShow)
+            }
         } else {
-            overlay.setResults(emptyList())
+            overlay.setResults(emptyList(), inViewCoordinates = true)
+        }
+    }
+
+    private fun mapBoxesToPreviewView(
+        boxes: List<OverlayView.BoundingBox>,
+        sourceWidth: Float,
+        sourceHeight: Float,
+        analysisOutputTransform: OutputTransform?
+    ): List<OverlayView.BoundingBox>? {
+        if (analysisOutputTransform == null) {
+            return null
+        }
+
+        val previewOutputTransform = viewFinder.outputTransform ?: return null
+
+        return try {
+            val coordinateTransform =
+                CoordinateTransform(analysisOutputTransform, previewOutputTransform)
+            boxes.map { box ->
+                val mappedRect = RectF(
+                    box.box.left * sourceWidth,
+                    box.box.top * sourceHeight,
+                    box.box.right * sourceWidth,
+                    box.box.bottom * sourceHeight
+                )
+                coordinateTransform.mapRect(mappedRect)
+                OverlayView.BoundingBox(
+                    box = mappedRect,
+                    clsName = box.clsName,
+                    score = box.score,
+                    debugRatio = box.debugRatio,
+                    isTarget = box.isTarget
+                )
+            }
+        } catch (e: IllegalArgumentException) {
+            Log.w("MainActivity", "Preview transform unavailable for overlay mapping", e)
+            null
         }
     }
 
@@ -611,23 +877,20 @@ class MainActivity : AppCompatActivity() {
         enableTrafficLogic: Boolean
     ) {
         targetInfoText.text = if (enableTrafficLogic) {
-            val ratioText = if (analysisResult.targetBox != null && analysisResult.targetBox.debugRatio >= 0) {
-                String.format(" (Ratio: %.2f)", analysisResult.targetBox.debugRatio)
-            } else {
-                ""
+            buildString {
+                appendLine("Target: ${analysisResult.targetClassName}")
+                appendLine("Score : ${String.format(Locale.US, "%.2f", analysisResult.targetScore)}")
+                if (analysisResult.targetBox != null && analysisResult.targetBox.debugRatio >= 0f) {
+                    appendLine("Ratio : ${String.format(Locale.US, "%.2f", analysisResult.targetBox.debugRatio)}")
+                }
+                append(
+                    if (analysisResult.occupancyCaution) {
+                        "Caution: ${analysisResult.occupancyCautionLabels.joinToString(", ")}"
+                    } else {
+                        "Caution: none"
+                    }
+                )
             }
-            val targetSummary = String.format(
-                "Target: %s (Score: %.2f)%s",
-                analysisResult.targetClassName,
-                analysisResult.targetScore,
-                ratioText
-            )
-            val riskSummary = if (analysisResult.hasBlockingRisk) {
-                " | Risk: ${analysisResult.blockingRiskLabels.joinToString(", ")}"
-            } else {
-                ""
-            }
-            targetSummary + riskSummary
         } else {
             "Logic Disabled"
         }
@@ -638,10 +901,146 @@ class MainActivity : AppCompatActivity() {
         enableTrafficLogic: Boolean
     ) {
         decisionDebugText.text = if (enableTrafficLogic) {
-            "Decision: ${analysisResult.userGuidanceState} | Phase: ${analysisResult.guidancePhase} | Reason: ${analysisResult.guidanceBlockReason}"
+            val context = analysisResult.crossingSupportSnapshot
+            val map = context.mapProximitySnapshot
+            buildString {
+                appendLine("Decision: ${analysisResult.userGuidanceState}")
+                appendLine("Phase   : ${analysisResult.guidancePhase}")
+                appendLine("Reason  : ${analysisResult.guidanceBlockReason}")
+                appendLine("Traffic : ${analysisResult.trafficState}")
+                appendLine(
+                    "Motion  : ${context.hasRecentGyroMotion} | GPS: ${context.hasRecentLocationMovement} | Down: ${context.isLookingDown} | Up: ${context.isLookingUp}"
+                )
+                appendLine(
+                    "Tilt    : abs=${String.format(Locale.US, "%.0f", context.currentTiltDegrees)}° | signed=${String.format(Locale.US, "%.0f", context.currentSignedTiltDegrees)}° | Keep: ${context.supportsWalkContinuation}"
+                )
+                appendLine(
+                    "Window  : ${context.isCrossingWindowActive} | Dist: ${String.format(Locale.US, "%.1f", context.crossingWindowDistanceMeters)}m | Elapsed: ${context.crossingWindowElapsedMs}ms"
+                )
+                appendLine(
+                    "GPSFix  : lat=${context.currentLocationLatitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | lon=${context.currentLocationLongitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"} | acc=${context.currentLocationAccuracyMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}"
+                )
+                appendLine(
+                    "Context : tier=${analysisResult.guidanceContinuityTier} | handoff=${analysisResult.handoffDecision} | caution=${analysisResult.occupancyCaution}"
+                )
+                append(
+                    "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, cluster=${shortMapId(map.matchedClusterId)}, members=${map.matchedMemberCount}, transition=${map.clusterTransitionKind.wireName}, ver=${map.datasetVersion ?: "none"}"
+                )
+            }
         } else {
             "Decision: DISABLED"
         }
+    }
+
+    private fun shortMapId(
+        matchedFeatureId: String?
+    ): String {
+        if (matchedFeatureId.isNullOrBlank()) {
+            return "none"
+        }
+        return if (matchedFeatureId.length <= 24) {
+            matchedFeatureId
+        } else {
+            matchedFeatureId.take(24) + "…"
+        }
+    }
+
+    private fun updateGpsDebugMapButtonState() {
+        val currentSnapshot = currentCrossingSupportSnapshot()
+        val hasLocationPermission = hasAnyLocationPermission()
+        val hasMatch =
+            currentSnapshot.mapProximitySnapshot.matchedLatitude != null &&
+                currentSnapshot.mapProximitySnapshot.matchedLongitude != null
+        openGpsDebugMapButton.isEnabled = hasLocationPermission
+        openGpsDebugMapButton.text =
+            if (hasLocationPermission) {
+                if (hasMatch) {
+                    "GPS + 매칭 지도 보기"
+                } else {
+                    "현재 GPS를 지도에서 보기"
+                }
+            } else {
+                "위치 권한 필요"
+            }
+    }
+
+    private fun openGpsDebugMap() {
+        val currentSnapshot = currentCrossingSupportSnapshot()
+        val fallbackLocation = bestAvailableLocation()
+        val lat = currentSnapshot.currentLocationLatitude ?: fallbackLocation?.latitude
+        val lon = currentSnapshot.currentLocationLongitude ?: fallbackLocation?.longitude
+        val mapSnapshot = currentSnapshot.mapProximitySnapshot
+        startActivity(
+            DebugMapActivity.newIntent(
+                activity = this,
+                currentLat = lat ?: Double.NaN,
+                currentLon = lon ?: Double.NaN,
+                currentAccMeters =
+                    currentSnapshot.currentLocationAccuracyMeters
+                        ?: if (fallbackLocation?.hasAccuracy() == true) fallbackLocation.accuracy else null,
+                matchedLat = mapSnapshot.matchedLatitude,
+                matchedLon = mapSnapshot.matchedLongitude,
+                matchedKind = mapSnapshot.matchedKind?.wireName,
+                matchedSource = mapSnapshot.matchedSource?.wireName,
+                matchedId = mapSnapshot.matchedFeatureId,
+                matchedDistMeters = mapSnapshot.distanceMeters,
+                mapVersion = mapSnapshot.datasetVersion,
+                isNearKnownFeature = mapSnapshot.isNearKnownFeature
+            )
+        )
+    }
+
+    private fun currentCrossingSupportSnapshot(): CrossingSupportSnapshot {
+        return if (::crossingSupportManager.isInitialized) {
+            crossingSupportManager.snapshot()
+        } else {
+            latestCrossingSupportSnapshot
+        }
+    }
+
+    private fun clearMapCaches() {
+        val deletedEntries = MapDebugCacheManager.clearAll(this)
+        KineticGuestSessionManager.from(this).invalidateSession()
+        Toast.makeText(
+            this,
+            "지도 캐시 초기화 완료 (${deletedEntries}개 삭제)",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun bestAvailableLocation(): Location? {
+        if (!hasAnyLocationPermission()) {
+            return null
+        }
+
+        val candidates =
+            buildList {
+                runCatching {
+                    if (locationManager?.isProviderEnabled(LocationManager.GPS_PROVIDER) == true) {
+                        locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { add(it) }
+                    }
+                }
+                runCatching {
+                    if (locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
+                        locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)?.let { add(it) }
+                    }
+                }
+            }
+        return candidates.minWithOrNull(
+            compareBy<Location> { if (it.hasAccuracy()) it.accuracy else Float.MAX_VALUE }
+                .thenByDescending { it.time }
+        )
+    }
+
+    private fun hasAnyLocationPermission(): Boolean {
+        val hasFine =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        val hasCoarse =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        return hasFine || hasCoarse
     }
 
     private fun updateUserStatus(
@@ -667,16 +1066,19 @@ class MainActivity : AppCompatActivity() {
                     UserGuidanceState.GO -> {
                         statusTitleText.text = "건너세요"
                         statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                        statusDetailText.text = "초록 전환이 확인되었습니다"
+                        statusDetailText.text =
+                            if (analysisResult.occupancyCaution) {
+                                "차량 주의"
+                            } else {
+                                "초록 전환이 확인되었습니다"
+                            }
                     }
 
                     UserGuidanceState.WAIT,
                     UserGuidanceState.STOP -> {
                         statusTitleText.text = "잠시 기다리세요"
                         statusTitleText.setTextColor(Color.WHITE)
-                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
-                            "차량 또는 자전거를 확인했습니다"
-                        } else if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
+                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
                             "다음 신호 전환을 기다리고 있습니다"
                         } else {
                             "처음 본 초록불은 안내하지 않습니다"
@@ -689,13 +1091,17 @@ class MainActivity : AppCompatActivity() {
                 if (analysisResult.userGuidanceState == UserGuidanceState.GO) {
                     statusTitleText.text = "건너세요"
                     statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                    statusDetailText.text = "초록 신호를 다시 찾는 중입니다"
+                    statusDetailText.text = if (analysisResult.occupancyCaution) {
+                        "차량 주의"
+                    } else if (analysisResult.crossingSupportSnapshot.isLookingDown) {
+                        "휴대폰을 들어 신호등 쪽을 비춰주세요"
+                    } else {
+                        "초록 신호를 다시 찾는 중입니다"
+                    }
                 } else {
                     statusTitleText.text = "잠시 기다리세요"
                     statusTitleText.setTextColor(Color.WHITE)
-                    statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.BLOCKING_RISK) {
-                        "주변 위험 요소를 확인 중입니다"
-                    } else if (analysisResult.targetBox == null) {
+                    statusDetailText.text = if (analysisResult.targetBox == null) {
                         "신호등을 화면 중앙에 맞춰주세요"
                     } else {
                         "신호 상태를 확인하고 있습니다"
@@ -715,13 +1121,27 @@ class MainActivity : AppCompatActivity() {
             "guidance=${analysisResult.userGuidanceState}," +
                 "phase=${analysisResult.guidancePhase}," +
                 "reason=${analysisResult.guidanceBlockReason}," +
+                "tier=${analysisResult.guidanceContinuityTier}," +
+                "handoff=${analysisResult.handoffDecision}," +
+                "caution=${analysisResult.occupancyCaution}," +
                 "traffic=${analysisResult.trafficState}," +
-                "risk=${analysisResult.blockingRiskLabels.joinToString("|").ifBlank { "none" }}"
+                "context=${analysisResult.crossingSupportSnapshot.toDebugSummary()}," +
+                "occupancy=${analysisResult.occupancyCautionLabels.joinToString("|").ifBlank { "none" }}"
         }
 
         if (summary != lastLoggedDecisionSummary) {
             lastLoggedDecisionSummary = summary
             Log.i("VIA_GUIDANCE", summary)
+        }
+    }
+
+    private fun logMapIfChanged(
+        crossingSupportSnapshot: CrossingSupportSnapshot
+    ) {
+        val summary = crossingSupportSnapshot.mapProximitySnapshot.toDebugSummary()
+        if (summary != lastLoggedMapSummary) {
+            lastLoggedMapSummary = summary
+            Log.i("VIA_MAP", summary)
         }
     }
 
@@ -743,11 +1163,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetPerformanceStats() {
         performanceTracker.clear()
-        inputRateTracker.clear()
-        inputFpsText.text = "Input FPS: 0"
-        avgFpsText.text = "Avg FPS: 0"
+        cameraRateTracker.clear()
+        inputFpsText.text = "Camera FPS: 0"
+        avgFpsText.text = "Processed Avg FPS: 0"
         avgLatencyText.text = "Avg Latency: 0ms"
-        fpsText.text = "Detect FPS: 0"
+        fpsText.text = "Processed FPS: 0"
         latencyText.text = "Detect: 0ms | Total: 0ms"
         stageBreakdownText.text = "Stages: n/a"
     }
@@ -779,11 +1199,19 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        hasStartedCamera = false
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        cameraRecoveryAttempts = 0
+        lastCameraFrameAtElapsedMs = 0L
+        pendingFrame.getAndSet(null)?.close()
         cameraExecutor?.shutdown()
+        processingExecutor?.shutdown()
         cameraManager?.stopCamera()
         detector?.close()
         feedbackManager.release()
+        crossingSupportManager.stop()
         guidanceStateStabilizer.reset()
         signalAnalyzer.reset()
+        lastLoggedMapSummary = null
     }
 }

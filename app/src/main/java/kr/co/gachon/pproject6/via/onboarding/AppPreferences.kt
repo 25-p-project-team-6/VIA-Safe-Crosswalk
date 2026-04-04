@@ -29,6 +29,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getLong(KEY_CALIBRATION_COMPLETED_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_CALIBRATION_COMPLETED_AT, value).apply()
 
+    var mapDatasetVersion: String?
+        get() = prefs.getString(KEY_MAP_DATASET_VERSION, null)
+        set(value) = prefs.edit().putString(KEY_MAP_DATASET_VERSION, value).apply()
+
+    var mapLastDatasetCheckAtMillis: Long
+        get() = prefs.getLong(KEY_MAP_LAST_DATASET_CHECK_AT, 0L)
+        set(value) = prefs.edit().putLong(KEY_MAP_LAST_DATASET_CHECK_AT, value).apply()
+
+    var mapInstallationId: String?
+        get() = prefs.getString(KEY_MAP_INSTALLATION_ID, null)
+        set(value) = prefs.edit().putString(KEY_MAP_INSTALLATION_ID, value).apply()
+
     fun saveCalibration(
         result: CalibrationProfileResult,
         deviceSummary: String,
@@ -63,5 +75,8 @@ class AppPreferences(context: Context) {
         private const val KEY_CALIBRATION_SUMMARY = "calibration_summary"
         private const val KEY_DEVICE_SUMMARY = "device_summary"
         private const val KEY_CALIBRATION_COMPLETED_AT = "calibration_completed_at"
+        private const val KEY_MAP_DATASET_VERSION = "map_dataset_version"
+        private const val KEY_MAP_LAST_DATASET_CHECK_AT = "map_last_dataset_check_at"
+        private const val KEY_MAP_INSTALLATION_ID = "map_installation_id"
     }
 }

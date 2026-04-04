@@ -4,6 +4,7 @@ import android.graphics.RectF
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 
 class ObjectTracker {
 
@@ -88,9 +89,11 @@ class ObjectTracker {
 
         val area = rect.width() * rect.height()
 
-        // Score Formula: (Confidence * Area * 1000) / (Distance + 0.1)
-        // Weighted by confidence and area, penalized by distance
-        return (box.score * area * 1000) / (dist + 0.1f)
+        return calculateTargetPriority(
+            confidence = box.score,
+            normalizedArea = area,
+            centerDistance = dist
+        )
     }
 
     private fun calculateIoU(a: RectF, b: RectF): Float {
@@ -109,4 +112,17 @@ class ObjectTracker {
         }
         return 0f
     }
+}
+
+internal fun calculateTargetPriority(
+    confidence: Float,
+    normalizedArea: Float,
+    centerDistance: Float
+): Float {
+    val clampedArea = normalizedArea.coerceAtLeast(1e-6f)
+    val sizeWeightedArea = clampedArea.toDouble().pow(1.25).toFloat()
+    // Center proximity still matters, but it now acts as a mild tie-breaker
+    // instead of overwhelming size when a nearer crosswalk signal appears larger.
+    val centerBias = 1f / (1f + centerDistance * 1.25f)
+    return confidence * sizeWeightedArea * centerBias * 1000f
 }

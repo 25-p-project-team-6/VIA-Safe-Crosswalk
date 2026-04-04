@@ -28,6 +28,7 @@ import kr.co.gachon.pproject6.via.BuildConfig
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
+import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import org.tensorflow.lite.gpu.CompatibilityList
 import java.util.Locale
@@ -82,12 +83,16 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var calibrationFinalized = false
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+            val cameraGranted =
+                result[Manifest.permission.CAMERA] ?: hasCameraPermission()
+            val locationGranted =
+                result[Manifest.permission.ACCESS_FINE_LOCATION] ?: hasLocationPermission()
+            if (cameraGranted && locationGranted) {
                 startCalibration()
             } else {
                 showPermissionStep(
-                    detailOverride = "카메라 권한이 없으면 신호를 볼 수 없습니다. 허용 버튼을 눌러 주세요."
+                    detailOverride = "카메라와 위치 권한이 모두 필요합니다. 다시 허용해 주세요."
                 )
             }
         }
@@ -143,10 +148,10 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         when (currentStep) {
             Step.INTRO -> showPermissionStep()
             Step.PERMISSION -> {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                if (hasCameraPermission() && hasLocationPermission()) {
                     startCalibration()
                 } else {
-                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                    requestOnboardingPermissions()
                 }
             }
             Step.CALIBRATING -> Unit
@@ -194,8 +199,8 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         progressBar.visibility = View.GONE
         progressText.visibility = View.GONE
         stepLabelText.text = "2 / 3 · 권한 허용"
-        titleText.text = "카메라 권한이 필요합니다"
-        bodyText.text = "앱 사용을 위해 카메라 권한을 요청합니다."
+        titleText.text = "권한이 필요합니다"
+        bodyText.text = "카메라와 위치 권한을 허용해 주세요."
         detailText.text = detailOverride ?: "허용 버튼을 누르면 다음 단계로 진행합니다."
         actionButton.isEnabled = true
         actionButton.text = "권한 허용"
@@ -203,6 +208,40 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         secondaryButton.text = "다시 듣기"
         replayButton.visibility = View.GONE
         speakCurrentStep(forceReplay = true)
+    }
+
+    private fun requestOnboardingPermissions() {
+        val missingPermissions = buildList {
+            if (!hasCameraPermission()) {
+                add(Manifest.permission.CAMERA)
+            }
+            if (!hasLocationPermission()) {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+        }
+
+        if (missingPermissions.isEmpty()) {
+            startCalibration()
+            return
+        }
+
+        permissionLauncher.launch(missingPermissions.toTypedArray())
+    }
+
+    private fun hasCameraPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        val hasFine =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        val hasCoarse =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        return hasFine || hasCoarse
     }
 
     private fun startCalibration() {
@@ -431,7 +470,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Step.INTRO ->
                 "처음 설정을 시작합니다. 앱 설정 절차를 진행합니다. 다음 버튼을 눌러 진행해 주세요."
             Step.PERMISSION ->
-                "카메라 권한이 필요합니다. 허용 버튼을 누르면 다음 단계로 진행합니다."
+                "카메라와 위치 권한을 허용해 주세요. 허용 버튼을 눌러 진행해 주세요."
             Step.CALIBRATING ->
                 "설정을 확인하는 중입니다. 잠시만 기다려 주세요."
             Step.RESULT ->
@@ -504,15 +543,28 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         (value * resources.displayMetrics.density).toInt()
 
     private fun launchMain() {
+        activeRun?.finished = true
+        cameraManager?.stopCamera()
+        cameraManager = null
+        calibrationDetector?.close()
+        calibrationDetector = null
+        reusableRotatedBitmap = null
+        cameraExecutor?.shutdownNow()
+        cameraExecutor = null
+        KineticGuestSessionManager.from(this).prefetchIfNeeded()
         startActivity(Intent(this, MainActivity::class.java))
         finish()
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        activeRun?.finished = true
         cameraManager?.stopCamera()
+        cameraManager = null
         calibrationDetector?.close()
+        calibrationDetector = null
         cameraExecutor?.shutdown()
+        cameraExecutor = null
         if (::tts.isInitialized) {
             tts.stop()
             tts.shutdown()

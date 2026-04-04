@@ -39,8 +39,11 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         ttsReady = true
     }
 
-    fun onGuidanceStateChanged(state: UserGuidanceState) {
-        if (!feedbackPolicy.shouldEmit(state)) {
+    fun onGuidanceStateChanged(
+        state: UserGuidanceState,
+        occupancyCaution: Boolean = false
+    ) {
+        if (!feedbackPolicy.shouldEmit(state, occupancyCaution)) {
             return
         }
 
@@ -51,13 +54,18 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
             }
 
             UserGuidanceState.GO -> {
-                speak("건너세요")
-                vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
+                if (occupancyCaution) {
+                    speak("건너세요. 차량 주의.")
+                    vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
+                } else {
+                    speak("건너세요")
+                    vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
+                }
             }
 
             UserGuidanceState.WAIT -> {
                 speak("잠시 기다리세요")
-                cancelVibration()
+                vibrate(longArrayOf(0, 140))
             }
         }
     }

@@ -1,21 +1,22 @@
 package kr.co.gachon.pproject6.via.ml
 
 import android.graphics.Bitmap
+import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.ui.OverlayView
 
 class SignalAnalyzer(
     private val objectTracker: ObjectTracker = ObjectTracker(),
     private val walkSignalPolicy: ConservativeWalkSignalPolicy =
         ConservativeWalkSignalPolicy(GuidanceTuningDefaults.walkSignalConfig),
-    private val riskObjectEvaluator: RiskObjectEvaluator =
-        RiskObjectEvaluator(GuidanceTuningDefaults.riskObjectConfig),
-    private val targetSessionTracker: SignalTargetSessionTracker = SignalTargetSessionTracker()
+    private val occupancyEvaluator: CrosswalkOccupancyEvaluator =
+        CrosswalkOccupancyEvaluator(GuidanceTuningDefaults.occupancyConfig)
 ) {
     fun analyze(
         bitmap: Bitmap,
         rawBoxes: List<OverlayView.BoundingBox>,
         enableTrafficLogic: Boolean,
-        enableHighlight: Boolean
+        enableHighlight: Boolean,
+        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
     ): SignalAnalysisResult {
         if (!enableTrafficLogic) {
             reset()
@@ -28,8 +29,11 @@ class SignalAnalyzer(
                 userGuidanceState = UserGuidanceState.WAIT,
                 guidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE,
                 guidanceBlockReason = GuidanceBlockReason.NO_SIGNAL,
-                hasBlockingRisk = false,
-                blockingRiskLabels = emptyList()
+                guidanceContinuityTier = GuidanceContinuityTier.NONE,
+                handoffDecision = CrosswalkHandoffDecision.NONE,
+                crossingSupportSnapshot = crossingSupportSnapshot,
+                occupancyCaution = false,
+                occupancyCautionLabels = emptyList()
             )
         }
 
@@ -41,30 +45,16 @@ class SignalAnalyzer(
             targetBox.isTarget = true
         }
 
-        val shouldResetForReacquiredTarget =
-            targetSessionTracker.onFrame(
-                targetBox?.let {
-                    NormalizedTargetBox(
-                        left = it.box.left,
-                        top = it.box.top,
-                        right = it.box.right,
-                        bottom = it.box.bottom
-                    )
-                }
-            )
-        if (shouldResetForReacquiredTarget) {
-            PostProcessor.resetState()
-            if (walkSignalPolicy.shouldResetOnTargetSessionChange()) {
-                walkSignalPolicy.reset()
-            }
-        }
-
         val trafficState = PostProcessor.updateTrafficLightState(targetBox)
-        val blockingRisks = riskObjectEvaluator.findBlockingRisks(correctedBoxes)
         val guidanceDecision = walkSignalPolicy.update(
             state = trafficState,
-            hasBlockingRisk = blockingRisks.isNotEmpty()
+            crossingSupportSnapshot = crossingSupportSnapshot
         )
+        val activeOccupancy =
+            occupancyEvaluator.findActiveOccupancy(
+                boxes = correctedBoxes,
+                eligible = guidanceDecision.state == UserGuidanceState.GO
+            )
 
         return SignalAnalysisResult(
             boxesToShow = correctedBoxes,
@@ -75,15 +65,18 @@ class SignalAnalyzer(
             userGuidanceState = guidanceDecision.state,
             guidancePhase = guidanceDecision.phase,
             guidanceBlockReason = guidanceDecision.blockReason,
-            hasBlockingRisk = blockingRisks.isNotEmpty(),
-            blockingRiskLabels = blockingRisks.map { it.clsName }.distinct().sorted()
+            guidanceContinuityTier = guidanceDecision.continuityTier,
+            handoffDecision = guidanceDecision.handoffDecision,
+            crossingSupportSnapshot = crossingSupportSnapshot,
+            occupancyCaution = activeOccupancy.isNotEmpty(),
+            occupancyCautionLabels = activeOccupancy.map { it.clsName }.distinct().sorted()
         )
     }
 
     fun reset() {
         objectTracker.reset()
-        targetSessionTracker.reset()
         PostProcessor.resetState()
         walkSignalPolicy.reset()
+        occupancyEvaluator.reset()
     }
 }
