@@ -166,7 +166,7 @@ class MainActivity : AppCompatActivity() {
     private val processingScheduled = AtomicBoolean(false)
     private val imageProxyTransformFactory =
         ImageProxyTransformFactory().apply {
-            setUsingCropRect(true)
+            setUsingCropRect(false)
             setUsingRotationDegrees(true)
         }
 
@@ -635,6 +635,9 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     zoomSwitch.isEnabled = true
                     zoomSwitch.text = "Use 2x Zoom"
+                    suppressZoomToggleCallback = true
+                    zoomSwitch.isChecked = true
+                    suppressZoomToggleCallback = false
                     applySelectedZoom()
                 }
             } else {
@@ -731,7 +734,6 @@ class MainActivity : AppCompatActivity() {
         try {
             val copyStartNs = SystemClock.elapsedRealtimeNanos()
             val analysisOutputTransform = imageProxyTransformFactory.getOutputTransform(imageProxy)
-            val cropRect = imageProxy.cropRect
             val bitmap = imageProxy.toBitmap()
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             imageProxy.close()
@@ -739,13 +741,12 @@ class MainActivity : AppCompatActivity() {
             stageDurationsMs["copy"] = elapsedMillis(copyStartNs)
 
             val rotateStartNs = SystemClock.elapsedRealtimeNanos()
-            val croppedBitmap = ImageUtils.cropBitmap(bitmap, cropRect)
             val rotatedBitmap = ImageUtils.rotateBitmap(
-                bitmap = croppedBitmap,
+                bitmap = bitmap,
                 degrees = rotationDegrees.toFloat(),
                 reusableBitmap = reusableRotatedBitmap
             )
-            if (rotatedBitmap !== croppedBitmap) {
+            if (rotatedBitmap !== bitmap) {
                 reusableRotatedBitmap = rotatedBitmap
             }
             stageDurationsMs["rotate"] = elapsedMillis(rotateStartNs)
