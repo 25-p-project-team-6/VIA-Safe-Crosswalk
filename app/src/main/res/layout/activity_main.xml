@@ -15,6 +15,14 @@
         android:contentDescription="실시간 카메라 미리보기" />
 
     <View
+        android:id="@+id/statusTintOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:background="@android:color/transparent"
+        android:translationZ="2dp" />
+
+    <View
         android:id="@+id/statusBorder"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -104,9 +112,36 @@
             android:paddingBottom="20dp">
 
             <TextView
+                android:id="@+id/statusIconText"
+                android:layout_width="112dp"
+                android:layout_height="112dp"
+                android:background="@drawable/status_icon_background"
+                android:gravity="center"
+                android:text="?"
+                android:textColor="@color/via_on_surface"
+                android:textSize="54sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/statusBadgeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/status_badge_background"
+                android:gravity="center"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="차량 주의"
+                android:textColor="@color/via_status_badge_on"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/statusTitleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
                 android:gravity="center"
                 android:text="신호 상태 확인 중"
                 android:textColor="@color/via_on_surface"
