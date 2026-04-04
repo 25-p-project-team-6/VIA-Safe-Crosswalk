@@ -19,7 +19,7 @@
     <color name="via_status_stop">#FFFF6B6B</color>
     <color name="via_status_wait">#FF7F8A99</color>
     <color name="via_status_caution">#FFFFC857</color>
-    <color name="via_status_go_tint">#2641C75E</color>
-    <color name="via_status_stop_tint">#26FF6B6B</color>
+    <color name="via_status_go_tint">#4D41C75E</color>
+    <color name="via_status_stop_tint">#52FF6B6B</color>
     <color name="via_status_badge_on">#FF1B1F24</color>
 </resources>
