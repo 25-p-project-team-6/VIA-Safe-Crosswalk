@@ -1,7 +1,5 @@
 package kr.co.gachon.pproject6.via.feedback
 
-import kr.co.gachon.pproject6.via.ml.UserGuidanceState
-
 class SignalFeedbackPolicy(
     private val timingConfig: SignalFeedbackTimingConfig = SignalFeedbackTimingConfig(),
     private val timeProvider: () -> Long = System::currentTimeMillis
@@ -10,11 +8,11 @@ class SignalFeedbackPolicy(
     private var lastEmissionAt: Long = Long.MIN_VALUE
 
     fun shouldEmit(
-        state: UserGuidanceState,
-        occupancyCaution: Boolean = false
+        signatureKey: String,
+        family: FeedbackRepeatFamily
     ): Boolean {
         val currentTime = timeProvider()
-        val signature = FeedbackSignature(state, occupancyCaution)
+        val signature = FeedbackSignature(signatureKey, family)
 
         if (signature != activeSignature) {
             activeSignature = signature
@@ -23,7 +21,7 @@ class SignalFeedbackPolicy(
         }
 
         val repeatInterval =
-            if (state == UserGuidanceState.WAIT) {
+            if (family == FeedbackRepeatFamily.WAIT_LIKE) {
                 timingConfig.waitRepeatIntervalMs
             } else {
                 timingConfig.actionRepeatIntervalMs
@@ -44,9 +42,14 @@ class SignalFeedbackPolicy(
 }
 
 private data class FeedbackSignature(
-    val state: UserGuidanceState,
-    val occupancyCaution: Boolean
+    val key: String,
+    val family: FeedbackRepeatFamily
 )
+
+enum class FeedbackRepeatFamily {
+    ACTION_LIKE,
+    WAIT_LIKE
+}
 
 data class SignalFeedbackTimingConfig(
     val actionRepeatIntervalMs: Long = 4_000L,

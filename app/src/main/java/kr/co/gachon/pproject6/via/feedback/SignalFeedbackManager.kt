@@ -7,8 +7,9 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
 import java.util.Locale
+import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
+import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
-import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 
 class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
     private val appContext = context.applicationContext
@@ -39,32 +40,40 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         ttsReady = true
     }
 
-    fun onGuidanceStateChanged(
-        state: UserGuidanceState,
-        occupancyCaution: Boolean = false
+    fun onAdvisoryChanged(
+        assessment: AdvisoryAssessment
     ) {
-        if (!feedbackPolicy.shouldEmit(state, occupancyCaution)) {
+        val family =
+            when (assessment.state) {
+                AdvisoryState.RED_CONFIRMED,
+                AdvisoryState.GREEN_CONFIRMED,
+                AdvisoryState.GREEN_WITH_CAUTION -> FeedbackRepeatFamily.ACTION_LIKE
+                AdvisoryState.TRANSITION_WAIT,
+                AdvisoryState.UNCERTAIN_VIEW -> FeedbackRepeatFamily.WAIT_LIKE
+            }
+        if (!feedbackPolicy.shouldEmit(assessment.speechText, family)) {
             return
         }
 
-        when (state) {
-            UserGuidanceState.STOP -> {
-                speak("멈추세요")
+        when (assessment.state) {
+            AdvisoryState.RED_CONFIRMED -> {
+                speak(assessment.speechText)
                 vibrate(longArrayOf(0, 400, 200, 400))
             }
 
-            UserGuidanceState.GO -> {
-                if (occupancyCaution) {
-                    speak("건너세요. 차량 주의.")
-                    vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
-                } else {
-                    speak("건너세요")
-                    vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
-                }
+            AdvisoryState.GREEN_CONFIRMED -> {
+                speak(assessment.speechText)
+                vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
             }
 
-            UserGuidanceState.WAIT -> {
-                speak("잠시 기다리세요")
+            AdvisoryState.GREEN_WITH_CAUTION -> {
+                speak(assessment.speechText)
+                vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
+            }
+
+            AdvisoryState.TRANSITION_WAIT,
+            AdvisoryState.UNCERTAIN_VIEW -> {
+                speak(assessment.speechText)
                 vibrate(longArrayOf(0, 140))
             }
         }

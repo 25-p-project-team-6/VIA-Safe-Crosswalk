@@ -55,6 +55,12 @@ object GuidanceTuningDefaults {
         confirmDurationMs = 400L
     )
 
+    val advisoryConfig = AdvisoryHeuristicsConfig(
+        highConfidenceMinScore = 75,
+        mediumConfidenceMinScore = 55,
+        smallTargetAreaThreshold = 0.015f
+    )
+
     val feedbackTimingConfig = SignalFeedbackTimingConfig(
         actionRepeatIntervalMs = 4_000L,
         waitRepeatIntervalMs = 8_000L
@@ -137,6 +143,12 @@ object GuidanceTuningDefaults {
             append(", caution=")
             append(occupancyConfig.confirmDurationMs)
             append("ms")
+            append(", advisory high≥")
+            append(advisoryConfig.highConfidenceMinScore)
+            append(", medium≥")
+            append(advisoryConfig.mediumConfidenceMinScore)
+            append(", small<")
+            append("%.3f".format(advisoryConfig.smallTargetAreaThreshold))
             append(", wait=")
             append(feedbackTimingConfig.waitRepeatIntervalMs)
             append("ms, action=")
