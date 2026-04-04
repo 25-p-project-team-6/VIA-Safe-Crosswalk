@@ -2,6 +2,7 @@ package kr.co.gachon.pproject6.via
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -66,6 +67,15 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
     }
 
+    private data class StatusVisualState(
+        val iconText: String,
+        val iconBackgroundColor: Int,
+        val iconTextColor: Int,
+        val tintColor: Int,
+        val borderResId: Int,
+        val badgeText: String?
+    )
+
     private lateinit var viewFinder: PreviewView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
@@ -85,6 +95,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tuningDebugText: TextView
     private lateinit var statusTitleText: TextView
     private lateinit var statusDetailText: TextView
+    private lateinit var statusIconText: TextView
+    private lateinit var statusBadgeText: TextView
     private lateinit var confidenceSliderLabel: TextView
     private lateinit var trafficConfidenceLabel: TextView
     private lateinit var downTiltLabel: TextView
@@ -102,6 +114,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var topControlCard: View
     private lateinit var statusPanel: View
     private lateinit var statusBorder: View
+    private lateinit var statusTintOverlay: View
     private var lastLoggedDecisionSummary: String? = null
     private var lastLoggedMapSummary: String? = null
     private var suppressGpuToggleCallback = false
@@ -218,6 +231,7 @@ class MainActivity : AppCompatActivity() {
         viewFinder = findViewById(R.id.viewFinder)
         viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         viewFinder.scaleType = PreviewView.ScaleType.FILL_CENTER
+        statusTintOverlay = findViewById(R.id.statusTintOverlay)
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         debugToggleButton = findViewById(R.id.debugToggleButton)
@@ -241,6 +255,8 @@ class MainActivity : AppCompatActivity() {
         tuningDebugText = findViewById(R.id.tuningDebugText)
         statusTitleText = findViewById(R.id.statusTitleText)
         statusDetailText = findViewById(R.id.statusDetailText)
+        statusIconText = findViewById(R.id.statusIconText)
+        statusBadgeText = findViewById(R.id.statusBadgeText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
         trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
         downTiltLabel = findViewById(R.id.downTiltLabel)
@@ -777,7 +793,7 @@ class MainActivity : AppCompatActivity() {
                 updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
                 updateGpsDebugMapButtonState()
                 updateUserStatus(analysisResult, enableTrafficLogic)
-                updateStatusBorder(analysisResult.userGuidanceState, enableTrafficLogic)
+                updateStatusVisuals(analysisResult, enableTrafficLogic)
                 logDecisionIfChanged(analysisResult, enableTrafficLogic)
                 logMapIfChanged(analysisResult.crossingSupportSnapshot)
 
@@ -1111,6 +1127,79 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateStatusVisuals(
+        analysisResult: SignalAnalysisResult,
+        enableTrafficLogic: Boolean
+    ) {
+        if (!enableTrafficLogic) {
+            statusBorder.setBackgroundResource(R.drawable.border_transparent)
+            statusTintOverlay.setBackgroundColor(Color.TRANSPARENT)
+            statusTintOverlay.alpha = 0f
+            statusIconText.text = "?"
+            statusIconText.setTextColor(ContextCompat.getColor(this, R.color.via_on_surface))
+            statusIconText.backgroundTintList =
+                ColorStateList.valueOf(ContextCompat.getColor(this, R.color.via_status_wait))
+            statusBadgeText.visibility = View.GONE
+            return
+        }
+
+        val visualState = deriveStatusVisualState(analysisResult)
+        statusBorder.setBackgroundResource(visualState.borderResId)
+        statusTintOverlay.setBackgroundColor(visualState.tintColor)
+        statusTintOverlay.alpha = if (visualState.tintColor == Color.TRANSPARENT) 0f else 1f
+        statusIconText.text = visualState.iconText
+        statusIconText.setTextColor(visualState.iconTextColor)
+        statusIconText.backgroundTintList = ColorStateList.valueOf(visualState.iconBackgroundColor)
+        statusBadgeText.visibility = if (visualState.badgeText != null) View.VISIBLE else View.GONE
+        statusBadgeText.text = visualState.badgeText ?: ""
+    }
+
+    private fun deriveStatusVisualState(
+        analysisResult: SignalAnalysisResult
+    ): StatusVisualState {
+        return when {
+            analysisResult.userGuidanceState == UserGuidanceState.STOP ->
+                StatusVisualState(
+                    iconText = "■",
+                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_stop),
+                    iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
+                    tintColor = ContextCompat.getColor(this, R.color.via_status_stop_tint),
+                    borderResId = R.drawable.border_red,
+                    badgeText = null
+                )
+
+            analysisResult.userGuidanceState == UserGuidanceState.GO && analysisResult.occupancyCaution ->
+                StatusVisualState(
+                    iconText = "▶",
+                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_go),
+                    iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
+                    tintColor = Color.TRANSPARENT,
+                    borderResId = R.drawable.border_green,
+                    badgeText = "차량 주의"
+                )
+
+            analysisResult.userGuidanceState == UserGuidanceState.GO ->
+                StatusVisualState(
+                    iconText = "▶",
+                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_go),
+                    iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
+                    tintColor = ContextCompat.getColor(this, R.color.via_status_go_tint),
+                    borderResId = R.drawable.border_green,
+                    badgeText = null
+                )
+
+            else ->
+                StatusVisualState(
+                    iconText = "…",
+                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_wait),
+                    iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
+                    tintColor = Color.TRANSPARENT,
+                    borderResId = R.drawable.border_transparent,
+                    badgeText = null
+                )
+        }
+    }
+
     private fun logDecisionIfChanged(
         analysisResult: SignalAnalysisResult,
         enableTrafficLogic: Boolean
@@ -1142,22 +1231,6 @@ class MainActivity : AppCompatActivity() {
         if (summary != lastLoggedMapSummary) {
             lastLoggedMapSummary = summary
             Log.i("VIA_MAP", summary)
-        }
-    }
-
-    private fun updateStatusBorder(
-        guidanceState: UserGuidanceState,
-        enableTrafficLogic: Boolean
-    ) {
-        if (!enableTrafficLogic) {
-            statusBorder.setBackgroundResource(R.drawable.border_transparent)
-            return
-        }
-
-        when (guidanceState) {
-            UserGuidanceState.STOP -> statusBorder.setBackgroundResource(R.drawable.border_red)
-            UserGuidanceState.GO -> statusBorder.setBackgroundResource(R.drawable.border_green)
-            UserGuidanceState.WAIT -> statusBorder.setBackgroundResource(R.drawable.border_transparent)
         }
     }
 
