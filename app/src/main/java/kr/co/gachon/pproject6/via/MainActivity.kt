@@ -35,8 +35,11 @@ import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
+import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
+import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
 import kr.co.gachon.pproject6.via.ml.GuidancePhase
+import kr.co.gachon.pproject6.via.ml.SignalAdvisoryEvaluator
 import kr.co.gachon.pproject6.via.ml.GuidanceStateStabilizer
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
@@ -47,6 +50,7 @@ import kr.co.gachon.pproject6.via.ml.TrafficLightState
 import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.ml.toGuidanceSnapshot
+import kr.co.gachon.pproject6.via.ml.withAdvisoryAssessment
 import kr.co.gachon.pproject6.via.ml.withGuidanceSnapshot
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
@@ -171,6 +175,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     private val signalAnalyzer = SignalAnalyzer()
+    private val advisoryEvaluator = SignalAdvisoryEvaluator(GuidanceTuningDefaults.advisoryConfig)
     private val guidanceStateStabilizer =
         GuidanceStateStabilizer(GuidanceTuningDefaults.guidanceStabilizerConfig)
     private lateinit var crossingSupportManager: CrossingSupportManager
@@ -769,7 +774,7 @@ class MainActivity : AppCompatActivity() {
                 enableHighlight = highlightTargetSwitch.isChecked,
                 crossingSupportSnapshot = crossingSupportSnapshot
             )
-            val analysisResult =
+            val stabilizedAnalysisResult =
                 if (enableTrafficLogic) {
                     rawAnalysisResult.withGuidanceSnapshot(
                         guidanceStateStabilizer.stabilize(rawAnalysisResult.toGuidanceSnapshot())
@@ -777,6 +782,14 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     guidanceStateStabilizer.reset()
                     rawAnalysisResult
+                }
+            val analysisResult =
+                if (enableTrafficLogic) {
+                    stabilizedAnalysisResult.withAdvisoryAssessment(
+                        advisoryEvaluator.evaluate(stabilizedAnalysisResult)
+                    )
+                } else {
+                    stabilizedAnalysisResult
                 }
             stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
 
@@ -801,9 +814,16 @@ class MainActivity : AppCompatActivity() {
                     crossingSupportManager.setCrossingWindowActive(
                         analysisResult.guidancePhase == GuidancePhase.WALK_ALLOWED
                     )
-                    feedbackManager.onGuidanceStateChanged(
-                        analysisResult.userGuidanceState,
-                        analysisResult.occupancyCaution
+                    feedbackManager.onAdvisoryChanged(
+                        AdvisoryAssessment(
+                            state = analysisResult.advisoryState,
+                            confidenceLevel = analysisResult.advisoryConfidenceLevel,
+                            confidenceScore = analysisResult.advisoryConfidenceScore,
+                            confidenceReasons = analysisResult.advisoryConfidenceReasons,
+                            titleText = analysisResult.advisoryTitleText,
+                            detailText = analysisResult.advisoryDetailText,
+                            speechText = analysisResult.advisorySpeechText
+                        )
                     )
                 } else {
                     crossingSupportManager.setCrossingWindowActive(false)
@@ -939,6 +959,9 @@ class MainActivity : AppCompatActivity() {
                 appendLine(
                     "Context : tier=${analysisResult.guidanceContinuityTier} | handoff=${analysisResult.handoffDecision} | caution=${analysisResult.occupancyCaution}"
                 )
+                appendLine(
+                    "Advisory: ${analysisResult.advisoryState} | conf=${analysisResult.advisoryConfidenceLevel}(${analysisResult.advisoryConfidenceScore}) | signals=${analysisResult.trafficLightCount} | zoom=${analysisResult.needsZoomSuggestion} | reacquire=${analysisResult.targetRecentlyReacquired} | clusterChanges=${analysisResult.recentMatchedClusterChangeCount}"
+                )
                 append(
                     "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, cluster=${shortMapId(map.matchedClusterId)}, members=${map.matchedMemberCount}, transition=${map.clusterTransitionKind.wireName}, ver=${map.datasetVersion ?: "none"}"
                 )
@@ -1069,62 +1092,17 @@ class MainActivity : AppCompatActivity() {
             statusDetailText.text = "신호 인식이 일시중지되었습니다"
             return
         }
-
-        when (analysisResult.trafficState) {
-            TrafficLightState.RED -> {
-                statusTitleText.text = "멈추세요"
-                statusTitleText.setTextColor(Color.parseColor("#FF6B6B"))
-                statusDetailText.text = "빨간불"
+        statusTitleText.text = analysisResult.advisoryTitleText
+        statusTitleText.setTextColor(
+            when (analysisResult.advisoryState) {
+                AdvisoryState.RED_CONFIRMED -> Color.parseColor("#FF6B6B")
+                AdvisoryState.GREEN_CONFIRMED,
+                AdvisoryState.GREEN_WITH_CAUTION -> Color.parseColor("#51CF66")
+                AdvisoryState.TRANSITION_WAIT,
+                AdvisoryState.UNCERTAIN_VIEW -> Color.WHITE
             }
-
-            TrafficLightState.GREEN -> {
-                when (analysisResult.userGuidanceState) {
-                    UserGuidanceState.GO -> {
-                        statusTitleText.text = "건너세요"
-                        statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                        statusDetailText.text =
-                            if (analysisResult.occupancyCaution) {
-                                "차량 주의"
-                            } else {
-                                "초록 전환이 확인되었습니다"
-                            }
-                    }
-
-                    UserGuidanceState.WAIT,
-                    UserGuidanceState.STOP -> {
-                        statusTitleText.text = "잠시 기다리세요"
-                        statusTitleText.setTextColor(Color.WHITE)
-                        statusDetailText.text = if (analysisResult.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE) {
-                            "다음 신호 전환을 기다리고 있습니다"
-                        } else {
-                            "처음 본 초록불은 안내하지 않습니다"
-                        }
-                    }
-                }
-            }
-
-            TrafficLightState.UNKNOWN -> {
-                if (analysisResult.userGuidanceState == UserGuidanceState.GO) {
-                    statusTitleText.text = "건너세요"
-                    statusTitleText.setTextColor(Color.parseColor("#51CF66"))
-                    statusDetailText.text = if (analysisResult.occupancyCaution) {
-                        "차량 주의"
-                    } else if (analysisResult.crossingSupportSnapshot.isLookingDown) {
-                        "휴대폰을 들어 신호등 쪽을 비춰주세요"
-                    } else {
-                        "초록 신호를 다시 찾는 중입니다"
-                    }
-                } else {
-                    statusTitleText.text = "잠시 기다리세요"
-                    statusTitleText.setTextColor(Color.WHITE)
-                    statusDetailText.text = if (analysisResult.targetBox == null) {
-                        "신호등을 화면 중앙에 맞춰주세요"
-                    } else {
-                        "신호 상태를 확인하고 있습니다"
-                    }
-                }
-            }
-        }
+        )
+        statusDetailText.text = analysisResult.advisoryDetailText
     }
 
     private fun updateStatusVisuals(
@@ -1158,7 +1136,7 @@ class MainActivity : AppCompatActivity() {
         analysisResult: SignalAnalysisResult
     ): StatusVisualState {
         return when {
-            analysisResult.userGuidanceState == UserGuidanceState.STOP ->
+            analysisResult.advisoryState == AdvisoryState.RED_CONFIRMED ->
                 StatusVisualState(
                     iconText = "■",
                     iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_stop),
@@ -1168,7 +1146,7 @@ class MainActivity : AppCompatActivity() {
                     badgeText = null
                 )
 
-            analysisResult.userGuidanceState == UserGuidanceState.GO && analysisResult.occupancyCaution ->
+            analysisResult.advisoryState == AdvisoryState.GREEN_WITH_CAUTION ->
                 StatusVisualState(
                     iconText = "▶",
                     iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_go),
@@ -1178,7 +1156,7 @@ class MainActivity : AppCompatActivity() {
                     badgeText = "차량 주의"
                 )
 
-            analysisResult.userGuidanceState == UserGuidanceState.GO ->
+            analysisResult.advisoryState == AdvisoryState.GREEN_CONFIRMED ->
                 StatusVisualState(
                     iconText = "▶",
                     iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_go),
@@ -1190,7 +1168,7 @@ class MainActivity : AppCompatActivity() {
 
             else ->
                 StatusVisualState(
-                    iconText = "…",
+                    iconText = if (analysisResult.advisoryState == AdvisoryState.TRANSITION_WAIT) "⌛" else "?",
                     iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_wait),
                     iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
                     tintColor = Color.TRANSPARENT,
@@ -1210,6 +1188,8 @@ class MainActivity : AppCompatActivity() {
             "guidance=${analysisResult.userGuidanceState}," +
                 "phase=${analysisResult.guidancePhase}," +
                 "reason=${analysisResult.guidanceBlockReason}," +
+                "advisory=${analysisResult.advisoryState}," +
+                "confidence=${analysisResult.advisoryConfidenceLevel}:${analysisResult.advisoryConfidenceScore}," +
                 "tier=${analysisResult.guidanceContinuityTier}," +
                 "handoff=${analysisResult.handoffDecision}," +
                 "caution=${analysisResult.occupancyCaution}," +

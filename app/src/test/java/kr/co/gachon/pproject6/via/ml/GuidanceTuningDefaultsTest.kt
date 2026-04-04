@@ -28,6 +28,9 @@ class GuidanceTuningDefaultsTest {
         assertTrue(summary.contains("occupancy score≥0.35"))
         assertTrue(summary.contains("band=0.20..0.80"))
         assertTrue(summary.contains("caution=400ms"))
+        assertTrue(summary.contains("advisory high≥75"))
+        assertTrue(summary.contains("medium≥55"))
+        assertTrue(summary.contains("small<0.015"))
         assertTrue(summary.contains("wait=8000ms"))
         assertTrue(summary.contains("action=4000ms"))
     }
