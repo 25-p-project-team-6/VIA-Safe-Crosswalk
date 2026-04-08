@@ -48,6 +48,8 @@ class CrossingSupportManager(
     private var lastHeadingDegrees: Float? = null
     private var lookingDownRawTiltRangeStartDegrees = config.lookingDownRawTiltRangeStartDegrees
     private var lookingDownRawTiltRangeEndDegrees = config.lookingDownRawTiltRangeEndDegrees
+    private var lookingUpRawTiltRangeStartDegrees = config.lookingUpRawTiltRangeStartDegrees
+    private var lookingUpRawTiltRangeEndDegrees = config.lookingUpRawTiltRangeEndDegrees
     private val mapProximityManager = MapProximityManager(appContext, timeProvider)
 
     private val locationListener = LocationListener { location ->
@@ -85,7 +87,12 @@ class CrossingSupportManager(
 
     fun currentLookingDownThresholdDegrees(): Float = kotlin.math.abs(lookingDownRawTiltRangeEndDegrees)
 
-    fun currentLookingUpThresholdDegrees(): Float = config.lookingUpRawTiltRangeEndDegrees
+    fun updateLookingUpThresholdDegrees(value: Float) {
+        val clampedThresholdDegrees = value.coerceIn(90f, 170f)
+        lookingUpRawTiltRangeEndDegrees = clampedThresholdDegrees
+    }
+
+    fun currentLookingUpThresholdDegrees(): Float = lookingUpRawTiltRangeEndDegrees
 
     fun setCrossingWindowActive(isActive: Boolean) {
         val now = timeProvider()
@@ -243,7 +250,7 @@ class CrossingSupportManager(
                     lookingDownStartedAt = Long.MIN_VALUE
                 }
 
-                if (signedTiltDegrees in config.lookingUpRawTiltRangeStartDegrees..config.lookingUpRawTiltRangeEndDegrees) {
+                if (signedTiltDegrees in lookingUpRawTiltRangeStartDegrees..lookingUpRawTiltRangeEndDegrees) {
                     if (lookingUpStartedAt == Long.MIN_VALUE) {
                         lookingUpStartedAt = timeProvider()
                     }

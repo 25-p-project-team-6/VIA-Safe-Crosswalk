@@ -100,9 +100,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var confidenceSliderLabel: TextView
     private lateinit var trafficConfidenceLabel: TextView
     private lateinit var downTiltLabel: TextView
+    private lateinit var upTiltLabel: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var trafficConfidenceSlider: Slider
     private lateinit var downTiltSlider: Slider
+    private lateinit var upTiltSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
     private lateinit var zoomSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var rawDetectionSwitch: androidx.appcompat.widget.SwitchCompat
@@ -260,9 +262,11 @@ class MainActivity : AppCompatActivity() {
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
         trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
         downTiltLabel = findViewById(R.id.downTiltLabel)
+        upTiltLabel = findViewById(R.id.upTiltLabel)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         trafficConfidenceSlider = findViewById(R.id.trafficConfidenceSlider)
         downTiltSlider = findViewById(R.id.downTiltSlider)
+        upTiltSlider = findViewById(R.id.upTiltSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
         zoomSwitch = findViewById(R.id.swZoom2x)
         rawDetectionSwitch = findViewById(R.id.swRawDetection)
@@ -325,12 +329,20 @@ class MainActivity : AppCompatActivity() {
             updateDownTiltLabel()
             updateTuningDebugText()
         }
+        upTiltSlider.addOnChangeListener { _, value, _ ->
+            crossingSupportManager.updateLookingUpThresholdDegrees(value)
+            updateUpTiltLabel()
+            updateTuningDebugText()
+        }
 
         confidenceSlider.value = 0.5f
         trafficConfidenceSlider.value = 0.15f
         downTiltSlider.value = crossingSupportManager.currentLookingDownThresholdDegrees()
+        upTiltSlider.value = crossingSupportManager.currentLookingUpThresholdDegrees()
         downTiltSlider.isEnabled = true
+        upTiltSlider.isEnabled = true
         updateDownTiltLabel()
+        updateUpTiltLabel()
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (suppressGpuToggleCallback) {
@@ -510,7 +522,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateDownTiltLabel() {
         downTiltLabel.text =
-            "Tilt Raw Range: down -160..-${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingDownThresholdDegrees())} / up 90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
+            "Down Tilt Range: -160..-${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingDownThresholdDegrees())}"
+    }
+
+    private fun updateUpTiltLabel() {
+        upTiltLabel.text =
+            "Up Tilt Range: 90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
     }
 
     private fun updateDebugInfo(
@@ -896,11 +913,16 @@ class MainActivity : AppCompatActivity() {
     ) {
         targetInfoText.text = if (enableTrafficLogic) {
             buildString {
-                appendLine("Target: ${analysisResult.targetClassName}")
-                appendLine("Score : ${String.format(Locale.US, "%.2f", analysisResult.targetScore)}")
-                if (analysisResult.targetBox != null && analysisResult.targetBox.debugRatio >= 0f) {
-                    appendLine("Ratio : ${String.format(Locale.US, "%.2f", analysisResult.targetBox.debugRatio)}")
-                }
+                appendLine("Target : ${analysisResult.targetClassName}")
+                appendLine("Score  : ${String.format(Locale.US, "%.2f", analysisResult.targetScore)}")
+                appendLine(
+                    "Ratio  : ${
+                        analysisResult.targetBox
+                            ?.takeIf { it.debugRatio >= 0f }
+                            ?.let { String.format(Locale.US, "%.2f", it.debugRatio) }
+                            ?: "--"
+                    }"
+                )
                 append(
                     if (analysisResult.occupancyCaution) {
                         "Caution: ${analysisResult.occupancyCautionLabels.joinToString(", ")}"
@@ -910,7 +932,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } else {
-            "Logic Disabled"
+            "Target : None\nScore  : 0.00\nRatio  : --\nCaution: none"
         }
     }
 
@@ -946,7 +968,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } else {
-            "Decision: DISABLED"
+            "Decision: DISABLED\nPhase   : --\nReason  : --\nTraffic : --\nMotion  : --\nTilt    : --\nWindow  : --\nGPSFix  : --\nContext : --\nMap     : --"
         }
     }
 
