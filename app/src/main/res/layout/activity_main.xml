@@ -294,7 +294,8 @@
                     android:layout_marginTop="12dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
-                    android:text="Target: None"
+                    android:minLines="4"
+                    android:text="Target : None&#10;Score  : 0.00&#10;Ratio  : --&#10;Caution: none"
                     android:textColor="@color/via_accent"
                     android:textSize="15sp"
                     android:textStyle="bold" />
@@ -306,7 +307,8 @@
                     android:layout_marginTop="8dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
-                    android:text="Decision: WAIT"
+                    android:minLines="8"
+                    android:text="Decision: WAIT&#10;Phase   : --&#10;Reason  : --&#10;Traffic : --&#10;Motion  : --&#10;Tilt    : --&#10;Window  : --&#10;GPSFix  : --&#10;Context : --&#10;Map     : --"
                     android:textColor="@color/via_on_surface"
                     android:textSize="14sp" />
 
@@ -435,7 +437,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="Down Tilt: 45°"
+                    android:text="Down Tilt Range: -160..-90"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -444,9 +446,28 @@
                     android:id="@+id/downTiltSlider"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:value="45"
-                    android:valueFrom="20.0"
-                    android:valueTo="90.0"
+                    android:value="90"
+                    android:valueFrom="70.0"
+                    android:valueTo="140.0"
+                    android:stepSize="1.0" />
+
+                <TextView
+                    android:id="@+id/upTiltLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Up Tilt Range: 90..120"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/upTiltSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="120"
+                    android:valueFrom="90.0"
+                    android:valueTo="170.0"
                     android:stepSize="1.0" />
             </LinearLayout>
         </ScrollView>
