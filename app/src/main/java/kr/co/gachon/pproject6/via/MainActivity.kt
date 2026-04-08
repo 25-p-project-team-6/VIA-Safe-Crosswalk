@@ -21,9 +21,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
 import androidx.camera.view.PreviewView
-import androidx.camera.view.transform.CoordinateTransform
-import androidx.camera.view.transform.ImageProxyTransformFactory
-import androidx.camera.view.transform.OutputTransform
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.slider.Slider
 import java.util.concurrent.ExecutorService
@@ -164,11 +161,6 @@ class MainActivity : AppCompatActivity() {
     private val cameraRateTracker = RateTracker(label = "Camera FPS")
     private val pendingFrame = AtomicReference<ImageProxy?>(null)
     private val processingScheduled = AtomicBoolean(false)
-    private val imageProxyTransformFactory =
-        ImageProxyTransformFactory().apply {
-            setUsingCropRect(false)
-            setUsingRotationDegrees(true)
-        }
 
     private val signalAnalyzer = SignalAnalyzer()
     private val guidanceStateStabilizer =
@@ -733,7 +725,6 @@ class MainActivity : AppCompatActivity() {
 
         try {
             val copyStartNs = SystemClock.elapsedRealtimeNanos()
-            val analysisOutputTransform = imageProxyTransformFactory.getOutputTransform(imageProxy)
             val bitmap = imageProxy.toBitmap()
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             imageProxy.close()
@@ -787,8 +778,7 @@ class MainActivity : AppCompatActivity() {
                 renderOverlay(
                     bitmap = rotatedBitmap,
                     analysisResult = analysisResult,
-                    showRawBoxes = rawDetectionSwitch.isChecked,
-                    analysisOutputTransform = analysisOutputTransform
+                    showRawBoxes = rawDetectionSwitch.isChecked
                 )
                 updateTargetInfo(analysisResult, enableTrafficLogic)
                 updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
@@ -830,62 +820,13 @@ class MainActivity : AppCompatActivity() {
     private fun renderOverlay(
         bitmap: Bitmap,
         analysisResult: SignalAnalysisResult,
-        showRawBoxes: Boolean,
-        analysisOutputTransform: OutputTransform?
+        showRawBoxes: Boolean
     ) {
+        overlay.setInputImageSize(bitmap.width, bitmap.height)
         if (showRawBoxes && showBBoxOverlay) {
-            val mappedBoxes =
-                mapBoxesToPreviewView(
-                    boxes = analysisResult.boxesToShow,
-                    sourceWidth = bitmap.width.toFloat(),
-                    sourceHeight = bitmap.height.toFloat(),
-                    analysisOutputTransform = analysisOutputTransform
-                )
-            if (mappedBoxes != null) {
-                overlay.setResults(mappedBoxes, inViewCoordinates = true)
-            } else {
-                overlay.setInputImageSize(bitmap.width, bitmap.height)
-                overlay.setResults(analysisResult.boxesToShow)
-            }
+            overlay.setResults(analysisResult.boxesToShow)
         } else {
-            overlay.setResults(emptyList(), inViewCoordinates = true)
-        }
-    }
-
-    private fun mapBoxesToPreviewView(
-        boxes: List<OverlayView.BoundingBox>,
-        sourceWidth: Float,
-        sourceHeight: Float,
-        analysisOutputTransform: OutputTransform?
-    ): List<OverlayView.BoundingBox>? {
-        if (analysisOutputTransform == null) {
-            return null
-        }
-
-        val previewOutputTransform = viewFinder.outputTransform ?: return null
-
-        return try {
-            val coordinateTransform =
-                CoordinateTransform(analysisOutputTransform, previewOutputTransform)
-            boxes.map { box ->
-                val mappedRect = RectF(
-                    box.box.left * sourceWidth,
-                    box.box.top * sourceHeight,
-                    box.box.right * sourceWidth,
-                    box.box.bottom * sourceHeight
-                )
-                coordinateTransform.mapRect(mappedRect)
-                OverlayView.BoundingBox(
-                    box = mappedRect,
-                    clsName = box.clsName,
-                    score = box.score,
-                    debugRatio = box.debugRatio,
-                    isTarget = box.isTarget
-                )
-            }
-        } catch (e: IllegalArgumentException) {
-            Log.w("MainActivity", "Preview transform unavailable for overlay mapping", e)
-            null
+            overlay.setResults(emptyList())
         }
     }
 
