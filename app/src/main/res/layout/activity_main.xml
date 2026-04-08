@@ -435,7 +435,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="Down Tilt: 45°"
+                    android:text="Tilt Raw Range: down -160..-90 / up 90..120"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -444,9 +444,9 @@
                     android:id="@+id/downTiltSlider"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:value="45"
-                    android:valueFrom="20.0"
-                    android:valueTo="90.0"
+                    android:value="90"
+                    android:valueFrom="70.0"
+                    android:valueTo="140.0"
                     android:stepSize="1.0" />
             </LinearLayout>
         </ScrollView>

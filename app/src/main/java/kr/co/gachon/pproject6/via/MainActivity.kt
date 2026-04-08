@@ -328,8 +328,8 @@ class MainActivity : AppCompatActivity() {
 
         confidenceSlider.value = 0.5f
         trafficConfidenceSlider.value = 0.15f
-        downTiltSlider.value = 20f
-        downTiltSlider.isEnabled = false
+        downTiltSlider.value = crossingSupportManager.currentLookingDownThresholdDegrees()
+        downTiltSlider.isEnabled = true
         updateDownTiltLabel()
 
         gpuSwitch.setOnCheckedChangeListener { _, isChecked ->
@@ -505,11 +505,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateTuningDebugText() {
         tuningDebugText.text =
-            "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}, tilt raw down=-160..-90, up=90..120"
+            "Tuning: ${GuidanceTuningDefaults.toDebugSummary()}, tilt raw down=-160..-${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingDownThresholdDegrees())}, up=90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
     }
 
     private fun updateDownTiltLabel() {
-        downTiltLabel.text = "Tilt Raw Range: down -160..-90 / up 90..120"
+        downTiltLabel.text =
+            "Tilt Raw Range: down -160..-${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingDownThresholdDegrees())} / up 90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
     }
 
     private fun updateDebugInfo(
