@@ -8,6 +8,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
@@ -26,6 +27,12 @@ class CameraManager(
     private var cameraProvider: ProcessCameraProvider? = null
 
     fun startCamera(onZoomStateReady: ((maxZoom: Float) -> Unit)? = null) {
+        val viewPort = viewFinder.viewPort
+        if (viewPort == null) {
+            viewFinder.post { startCamera(onZoomStateReady) }
+            return
+        }
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
@@ -53,11 +60,15 @@ class CameraManager(
 
             try {
                 cameraProvider.unbindAll()
+                val useCaseGroup = UseCaseGroup.Builder()
+                    .addUseCase(preview)
+                    .addUseCase(imageAnalyzer)
+                    .setViewPort(viewPort)
+                    .build()
                 camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
-                    preview,
-                    imageAnalyzer
+                    useCaseGroup
                 )
 
                 // Check Zoom capabilities if callback provided
