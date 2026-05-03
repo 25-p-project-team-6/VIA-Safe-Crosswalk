@@ -26,6 +26,7 @@ import kr.co.gachon.pproject6.via.MainActivity
 import kr.co.gachon.pproject6.via.R
 import kr.co.gachon.pproject6.via.BuildConfig
 import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.ml.DetectionLabels
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
@@ -276,8 +277,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun discoverModelFiles(): List<String> {
         return assets.list("")
-            ?.filter { it.endsWith(".tflite", ignoreCase = true) }
-            ?.sorted()
+            ?.let { DetectionLabels.modelFilesForActiveSchema(it.toList()) }
             ?: emptyList()
     }
 
@@ -307,9 +307,15 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     context = this,
                     modelPath = profile.fileName,
                     useGpu = candidateUsesGpu,
-                    labels = listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red"),
+                    labels = DetectionLabels.sevenClassLabels,
                     defaultIouThreshold = 0.5f,
-                    specificIouThresholds = mapOf("red" to 0.05f, "green" to 0.05f)
+                    specificIouThresholds =
+                        mapOf(
+                            DetectionLabels.HUMAN_RED to 0.05f,
+                            DetectionLabels.HUMAN_GREEN to 0.05f,
+                            DetectionLabels.VEHICLE_RED to 0.05f,
+                            DetectionLabels.VEHICLE_GREEN to 0.05f
+                        )
                 )
                 detector.setup()
                 calibrationDetector = detector

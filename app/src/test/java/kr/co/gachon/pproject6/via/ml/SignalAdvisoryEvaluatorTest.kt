@@ -76,7 +76,7 @@ class SignalAdvisoryEvaluatorTest {
                 trafficState = TrafficLightState.GREEN,
                 userGuidanceState = UserGuidanceState.GO,
                 occupancyCaution = true,
-                occupancyCautionLabels = listOf("car")
+                occupancyCautionLabels = listOf(DetectionLabels.VEHICLE)
             )
 
         val advisory = evaluator.evaluate(result)
@@ -85,12 +85,31 @@ class SignalAdvisoryEvaluatorTest {
         assertTrue(advisory.detailText.contains("점유"))
     }
 
+    @Test
+    fun vehicleSignalOnlyStaysUncertainAndRequestsPedestrianSignal() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.UNKNOWN,
+                userGuidanceState = UserGuidanceState.WAIT,
+                targetScore = 0f,
+                trafficLightCount = 0,
+                vehicleTrafficLightCount = 1
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
+        assertTrue(advisory.speechText.contains("차량 신호"))
+    }
+
     private fun baseResult(
         trafficState: TrafficLightState = TrafficLightState.UNKNOWN,
         userGuidanceState: UserGuidanceState = UserGuidanceState.WAIT,
         guidanceBlockReason: GuidanceBlockReason = GuidanceBlockReason.NO_SIGNAL,
         targetScore: Float = 0.75f,
         trafficLightCount: Int = 1,
+        vehicleTrafficLightCount: Int = 0,
         multipleSignalDetected: Boolean = false,
         needsZoomSuggestion: Boolean = false,
         occupancyCaution: Boolean = false,
@@ -101,8 +120,9 @@ class SignalAdvisoryEvaluatorTest {
             boxesToShow = emptyList(),
             targetBox = null,
             targetScore = targetScore,
-            targetClassName = "green",
+            targetClassName = DetectionLabels.HUMAN_GREEN,
             trafficLightCount = trafficLightCount,
+            vehicleTrafficLightCount = vehicleTrafficLightCount,
             multipleSignalDetected = multipleSignalDetected,
             needsZoomSuggestion = needsZoomSuggestion,
             targetRecentlyReacquired = false,
