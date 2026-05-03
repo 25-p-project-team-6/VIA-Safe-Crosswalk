@@ -14,9 +14,7 @@ class ObjectTracker {
     private val IOU_THRESHOLD = 0.5f
 
     fun selectTarget(boxes: List<OverlayView.BoundingBox>): Pair<OverlayView.BoundingBox, Float>? {
-        val trafficLights = boxes.filter {
-            it.clsName.equals("red", ignoreCase = true) || it.clsName.equals("green", ignoreCase = true)
-        }
+        val trafficLights = boxes.filter { DetectionLabels.isPedestrianSignal(it.clsName) }
 
         if (trafficLights.isEmpty()) {
             trackedTarget = null

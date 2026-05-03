@@ -9,6 +9,7 @@ data class SignalAnalysisResult(
     val targetScore: Float,
     val targetClassName: String,
     val trafficLightCount: Int,
+    val vehicleTrafficLightCount: Int = 0,
     val multipleSignalDetected: Boolean,
     val needsZoomSuggestion: Boolean,
     val targetRecentlyReacquired: Boolean,

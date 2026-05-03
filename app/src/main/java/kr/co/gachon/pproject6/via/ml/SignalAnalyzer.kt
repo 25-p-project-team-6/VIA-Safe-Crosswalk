@@ -34,6 +34,7 @@ class SignalAnalyzer(
                 targetScore = 0f,
                 targetClassName = "None",
                 trafficLightCount = 0,
+                vehicleTrafficLightCount = 0,
                 multipleSignalDetected = false,
                 needsZoomSuggestion = false,
                 targetRecentlyReacquired = false,
@@ -58,10 +59,8 @@ class SignalAnalyzer(
             targetBox.isTarget = true
         }
         val now = timeProvider()
-        val targetSignals =
-            correctedBoxes.filter {
-                it.clsName.equals("red", ignoreCase = true) || it.clsName.equals("green", ignoreCase = true)
-            }
+        val targetSignals = correctedBoxes.filter { DetectionLabels.isPedestrianSignal(it.clsName) }
+        val vehicleSignals = correctedBoxes.filter { DetectionLabels.isVehicleSignal(it.clsName) }
         val targetArea = targetBox?.let { it.box.width() * it.box.height() } ?: 0f
         val targetRecentlyReacquired = updateTargetReacquire(targetBox != null, now)
         val recentMatchedClusterChangeCount =
@@ -69,7 +68,8 @@ class SignalAnalyzer(
                 crossingSupportSnapshot.mapProximitySnapshot.matchedClusterId,
                 now
             )
-        val multipleSignalDetected = targetSignals.size >= 2
+        val multipleSignalDetected = targetSignals.size >= 2 ||
+            (targetSignals.isNotEmpty() && vehicleSignals.isNotEmpty())
         val needsZoomSuggestion =
             targetSignals.isNotEmpty() &&
                 (multipleSignalDetected || targetArea < GuidanceTuningDefaults.advisoryConfig.smallTargetAreaThreshold)
@@ -91,6 +91,7 @@ class SignalAnalyzer(
             targetScore = targetData?.second ?: 0f,
             targetClassName = targetBox?.clsName ?: "None",
             trafficLightCount = targetSignals.size,
+            vehicleTrafficLightCount = vehicleSignals.size,
             multipleSignalDetected = multipleSignalDetected,
             needsZoomSuggestion = needsZoomSuggestion,
             targetRecentlyReacquired = targetRecentlyReacquired,

@@ -25,7 +25,8 @@ enum class AdvisoryConfidenceReason {
     MATCHED_CLUSTER_MISSING,
     SIGNAL_LOST_GRACE,
     LOOKING_DOWN,
-    OCCUPANCY_CAUTION
+    OCCUPANCY_CAUTION,
+    VEHICLE_SIGNAL_VISIBLE
 }
 
 data class AdvisoryAssessment(
@@ -51,6 +52,7 @@ data class AdvisoryHeuristicsConfig(
     val noMatchPenalty: Int = 12,
     val lostSignalPenalty: Int = 14,
     val cautionPenalty: Int = 8,
+    val vehicleSignalPenalty: Int = 10,
     val matchedStableBonus: Int = 10,
     val stableRedBonus: Int = 18,
     val stableGreenBonus: Int = 14,

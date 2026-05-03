@@ -47,7 +47,7 @@ object GuidanceTuningDefaults {
     )
 
     val occupancyConfig = CrosswalkOccupancyConfig(
-        labels = setOf("bicycle", "car", "motorcycle", "bus", "train", "truck"),
+        labels = DetectionLabels.occupancyLabels,
         minScore = 0.35f,
         minBottom = 0.45f,
         minArea = 0.015f,
