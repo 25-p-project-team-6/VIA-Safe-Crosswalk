@@ -14,12 +14,11 @@
         android:layout_height="match_parent"
         android:contentDescription="실시간 카메라 미리보기" />
 
-    <ImageView
+    <VideoView
         android:id="@+id/videoReplayFrameView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="샘플 영상 리플레이 프레임"
-        android:scaleType="centerCrop"
         android:visibility="gone" />
 
     <View

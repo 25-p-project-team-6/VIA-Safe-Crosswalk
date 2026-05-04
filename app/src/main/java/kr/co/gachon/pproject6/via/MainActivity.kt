@@ -12,14 +12,15 @@ import android.media.MediaMetadataRetriever
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
@@ -87,7 +88,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var viewFinder: PreviewView
-    private lateinit var videoReplayFrameView: ImageView
+    private lateinit var videoReplayFrameView: VideoView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
     private lateinit var avgFpsText: TextView
@@ -665,6 +666,7 @@ class MainActivity : AppCompatActivity() {
     private fun startCamera(isRecoveryRestart: Boolean = false) {
         videoReplayRunning.set(false)
         videoReplayFrameView.visibility = View.GONE
+        viewFinder.visibility = View.VISIBLE
         inputRateLabel = "Camera FPS"
         videoReplayButton.text = "샘플 영상 선택"
         cameraManager?.stopCamera()
@@ -728,7 +730,17 @@ class MainActivity : AppCompatActivity() {
         hasStartedCamera = false
         pendingFrame.getAndSet(null)?.close()
 
+        viewFinder.visibility = View.GONE
         videoReplayFrameView.visibility = View.VISIBLE
+        videoReplayFrameView.setVideoURI(uri)
+        videoReplayFrameView.setOnPreparedListener { player ->
+            player.isLooping = true
+            videoReplayFrameView.start()
+        }
+        videoReplayFrameView.setOnErrorListener { _, what, extra ->
+            Log.w("VIA_REPLAY", "VideoView playback error what=$what extra=$extra")
+            false
+        }
         videoReplayButton.text = "샘플 영상 중지"
         publishBackendStatus("Replay: sample video")
         zoomSwitch.isEnabled = false
@@ -749,11 +761,7 @@ class MainActivity : AppCompatActivity() {
                 while (videoReplayRunning.get()) {
                     val frameStartNs = SystemClock.elapsedRealtimeNanos()
                     val decodeStartNs = SystemClock.elapsedRealtimeNanos()
-                    val frame =
-                        retriever.getFrameAtTime(
-                            timestampUs,
-                            MediaMetadataRetriever.OPTION_CLOSEST
-                        )
+                    val frame = extractReplayFrame(retriever, timestampUs)
 
                     if (frame == null) {
                         timestampUs = 0L
@@ -770,11 +778,6 @@ class MainActivity : AppCompatActivity() {
                         linkedMapOf("decode" to elapsedMillis(decodeStartNs))
 
                     cameraRateTracker.mark()
-                    runOnUiThread {
-                        if (videoReplayRunning.get()) {
-                            videoReplayFrameView.setImageBitmap(bitmap)
-                        }
-                    }
                     processBitmapFrame(
                         bitmap = bitmap,
                         frameStartNs = frameStartNs,
@@ -805,6 +808,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun extractReplayFrame(
+        retriever: MediaMetadataRetriever,
+        timestampUs: Long
+    ): Bitmap? {
+        val targetWidth = currentModelProfile.analysisResolution.width
+        val targetHeight = currentModelProfile.analysisResolution.height
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            retriever.getScaledFrameAtTime(
+                timestampUs,
+                MediaMetadataRetriever.OPTION_CLOSEST,
+                targetWidth,
+                targetHeight
+            )
+        } else {
+            retriever
+                .getFrameAtTime(timestampUs, MediaMetadataRetriever.OPTION_CLOSEST)
+                ?.let { frame ->
+                    Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true)
+                }
+        }
+    }
+
     private fun stopVideoReplay(
         restoreCamera: Boolean,
         clearSelectedVideo: Boolean
@@ -817,8 +842,9 @@ class MainActivity : AppCompatActivity() {
         if (!::videoReplayFrameView.isInitialized) {
             return
         }
+        videoReplayFrameView.stopPlayback()
         videoReplayFrameView.visibility = View.GONE
-        videoReplayFrameView.setImageDrawable(null)
+        viewFinder.visibility = View.VISIBLE
         videoReplayButton.text = "샘플 영상 선택"
         overlay.clear()
         inputRateLabel = "Camera FPS"
