@@ -14,7 +14,7 @@
         android:layout_height="match_parent"
         android:contentDescription="실시간 카메라 미리보기" />
 
-    <VideoView
+    <TextureView
         android:id="@+id/videoReplayFrameView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

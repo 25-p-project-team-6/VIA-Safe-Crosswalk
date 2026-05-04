@@ -8,19 +8,20 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
-import android.media.MediaMetadataRetriever
+import android.graphics.SurfaceTexture
 import android.location.Location
 import android.location.LocationManager
+import android.media.MediaPlayer
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
+import android.view.Surface
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageProxy
@@ -67,15 +68,17 @@ import kr.co.gachon.pproject6.via.util.PerformanceTracker
 import kr.co.gachon.pproject6.via.util.RateTracker
 import org.tensorflow.lite.gpu.CompatibilityList
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
-        private const val VIDEO_REPLAY_FRAME_INTERVAL_US = 200_000L
-        private const val VIDEO_REPLAY_FRAME_DELAY_MS = 200L
+        private const val VIDEO_REPLAY_FRAME_DELAY_MS = 33L
+        private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L
     }
 
     private data class StatusVisualState(
@@ -88,7 +91,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var viewFinder: PreviewView
-    private lateinit var videoReplayFrameView: VideoView
+    private lateinit var videoReplayFrameView: TextureView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
     private lateinit var avgFpsText: TextView
@@ -144,6 +147,8 @@ class MainActivity : AppCompatActivity() {
     private val videoReplayRunning = AtomicBoolean(false)
     private var videoReplayUri: Uri? = null
     private var pendingReplayUriAfterDetectorInit: Uri? = null
+    private var videoReplayPlayer: MediaPlayer? = null
+    private var videoReplaySurface: Surface? = null
     private var inputRateLabel = "Camera FPS"
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
@@ -732,50 +737,35 @@ class MainActivity : AppCompatActivity() {
 
         viewFinder.visibility = View.GONE
         videoReplayFrameView.visibility = View.VISIBLE
-        videoReplayFrameView.setVideoURI(uri)
-        videoReplayFrameView.setOnPreparedListener { player ->
-            player.isLooping = true
-            videoReplayFrameView.start()
-        }
-        videoReplayFrameView.setOnErrorListener { _, what, extra ->
-            Log.w("VIA_REPLAY", "VideoView playback error what=$what extra=$extra")
-            false
-        }
         videoReplayButton.text = "샘플 영상 중지"
-        publishBackendStatus("Replay: sample video")
+        publishBackendStatus("Replay: preparing video input")
         zoomSwitch.isEnabled = false
         zoomSwitch.text = "2x Zoom (Replay)"
+        prepareVideoReplayPlayer(uri)
 
         executor.execute {
-            val retriever = MediaMetadataRetriever()
             try {
-                retriever.setDataSource(this, uri)
-                val durationUs =
-                    retriever
-                        .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                        ?.toLongOrNull()
-                        ?.times(1_000L)
-                        ?: 0L
-                var timestampUs = 0L
-
                 while (videoReplayRunning.get()) {
-                    val frameStartNs = SystemClock.elapsedRealtimeNanos()
-                    val decodeStartNs = SystemClock.elapsedRealtimeNanos()
-                    val frame = extractReplayFrame(retriever, timestampUs)
-
-                    if (frame == null) {
-                        timestampUs = 0L
+                    if (!videoReplayFrameView.isAvailable || detector == null) {
+                        Thread.sleep(50L)
                         continue
                     }
 
-                    val bitmap =
-                        if (frame.config == Bitmap.Config.ARGB_8888) {
-                            frame
-                        } else {
-                            frame.copy(Bitmap.Config.ARGB_8888, false)
-                        }
+                    val frameStartNs = SystemClock.elapsedRealtimeNanos()
+                    val captureStartNs = SystemClock.elapsedRealtimeNanos()
+                    val resolution = currentModelProfile.analysisResolution
+                    val bitmap = captureReplayBitmap(
+                        width = resolution.width,
+                        height = resolution.height
+                    )
+
+                    if (bitmap == null) {
+                        Thread.sleep(50L)
+                        continue
+                    }
+
                     val stageDurationsMs =
-                        linkedMapOf("decode" to elapsedMillis(decodeStartNs))
+                        linkedMapOf("capture" to elapsedMillis(captureStartNs))
 
                     cameraRateTracker.mark()
                     processBitmapFrame(
@@ -786,10 +776,6 @@ class MainActivity : AppCompatActivity() {
                         useLiveContext = false
                     )
 
-                    timestampUs += VIDEO_REPLAY_FRAME_INTERVAL_US
-                    if (durationUs > 0L && timestampUs >= durationUs) {
-                        timestampUs = 0L
-                    }
                     Thread.sleep(VIDEO_REPLAY_FRAME_DELAY_MS)
                 }
             } catch (e: Exception) {
@@ -802,32 +788,108 @@ class MainActivity : AppCompatActivity() {
                     ).show()
                     stopVideoReplay(restoreCamera = true, clearSelectedVideo = true)
                 }
-            } finally {
-                runCatching { retriever.release() }
             }
         }
     }
 
-    private fun extractReplayFrame(
-        retriever: MediaMetadataRetriever,
-        timestampUs: Long
-    ): Bitmap? {
-        val targetWidth = currentModelProfile.analysisResolution.width
-        val targetHeight = currentModelProfile.analysisResolution.height
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            retriever.getScaledFrameAtTime(
-                timestampUs,
-                MediaMetadataRetriever.OPTION_CLOSEST,
-                targetWidth,
-                targetHeight
-            )
+    private fun prepareVideoReplayPlayer(uri: Uri) {
+        releaseVideoReplayPlayer()
+
+        fun attach(surfaceTexture: SurfaceTexture) {
+            val surface = Surface(surfaceTexture)
+            videoReplaySurface = surface
+            val player = MediaPlayer()
+            videoReplayPlayer = player
+            try {
+                player.setDataSource(this, uri)
+                player.setSurface(surface)
+                player.isLooping = true
+                player.setOnPreparedListener {
+                    if (videoReplayRunning.get()) {
+                        it.start()
+                        publishBackendStatus("Replay: video input")
+                    }
+                }
+                player.setOnErrorListener { _, what, extra ->
+                    Log.w("VIA_REPLAY", "MediaPlayer playback error what=$what extra=$extra")
+                    Toast.makeText(
+                        this,
+                        "샘플 영상 재생 실패: $what/$extra",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    stopVideoReplay(restoreCamera = true, clearSelectedVideo = true)
+                    true
+                }
+                player.prepareAsync()
+            } catch (e: Exception) {
+                Log.e("VIA_REPLAY", "Failed to prepare sample video", e)
+                Toast.makeText(this, "샘플 영상 준비 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                stopVideoReplay(restoreCamera = true, clearSelectedVideo = true)
+            }
+        }
+
+        if (videoReplayFrameView.isAvailable) {
+            videoReplayFrameView.surfaceTexture?.let(::attach)
         } else {
-            retriever
-                .getFrameAtTime(timestampUs, MediaMetadataRetriever.OPTION_CLOSEST)
-                ?.let { frame ->
-                    Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true)
+            videoReplayFrameView.surfaceTextureListener =
+                object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(
+                        surface: SurfaceTexture,
+                        width: Int,
+                        height: Int
+                    ) {
+                        attach(surface)
+                    }
+
+                    override fun onSurfaceTextureSizeChanged(
+                        surface: SurfaceTexture,
+                        width: Int,
+                        height: Int
+                    ) = Unit
+
+                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                        videoReplayRunning.set(false)
+                        releaseVideoReplayPlayer()
+                        return true
+                    }
+
+                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
                 }
         }
+    }
+
+    private fun captureReplayBitmap(width: Int, height: Int): Bitmap? {
+        if (!videoReplayRunning.get()) {
+            return null
+        }
+
+        val latch = CountDownLatch(1)
+        val bitmapRef = AtomicReference<Bitmap?>()
+        runOnUiThread {
+            try {
+                if (videoReplayRunning.get() && videoReplayFrameView.isAvailable) {
+                    bitmapRef.set(videoReplayFrameView.getBitmap(width, height))
+                }
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await(VIDEO_REPLAY_CAPTURE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        return bitmapRef.get()
+    }
+
+    private fun releaseVideoReplayPlayer() {
+        videoReplayPlayer?.let { player ->
+            runCatching {
+                if (player.isPlaying) {
+                    player.stop()
+                }
+            }
+            runCatching { player.release() }
+        }
+        videoReplayPlayer = null
+        videoReplaySurface?.release()
+        videoReplaySurface = null
     }
 
     private fun stopVideoReplay(
@@ -842,7 +904,8 @@ class MainActivity : AppCompatActivity() {
         if (!::videoReplayFrameView.isInitialized) {
             return
         }
-        videoReplayFrameView.stopPlayback()
+        releaseVideoReplayPlayer()
+        videoReplayFrameView.surfaceTextureListener = null
         videoReplayFrameView.visibility = View.GONE
         viewFinder.visibility = View.VISIBLE
         videoReplayButton.text = "샘플 영상 선택"
