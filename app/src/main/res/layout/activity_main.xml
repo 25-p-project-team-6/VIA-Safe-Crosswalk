@@ -14,6 +14,13 @@
         android:layout_height="match_parent"
         android:contentDescription="실시간 카메라 미리보기" />
 
+    <TextureView
+        android:id="@+id/videoReplayFrameView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="샘플 영상 리플레이 프레임"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/statusTintOverlay"
         android:layout_width="match_parent"
@@ -214,22 +221,46 @@
                     android:textSize="16sp"
                     app:cornerRadius="18dp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/videoReplayButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:minHeight="56dp"
+                    android:text="샘플 영상 선택"
+                    android:textAllCaps="false"
+                    android:textSize="16sp"
+                    app:cornerRadius="18dp" />
+
                 <TextView
                     android:id="@+id/modelNameText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Model: Loading..."
+                    android:text="현재 모델: Loading..."
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/modelSpinnerLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="테스트할 모델 선택"
+                    android:textColor="@color/via_accent"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <Spinner
                     android:id="@+id/modelSpinner"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:backgroundTint="@color/via_accent_container"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/debug_spinner_outline_background"
+                    android:minHeight="52dp"
+                    android:paddingHorizontal="12dp"
                     android:importantForAccessibility="yes" />
 
                 <TextView
@@ -435,7 +466,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="Down Tilt: 45°"
+                    android:text="Down Tilt Range: -160..-90"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -444,9 +475,28 @@
                     android:id="@+id/downTiltSlider"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:value="45"
-                    android:valueFrom="20.0"
-                    android:valueTo="90.0"
+                    android:value="90"
+                    android:valueFrom="70.0"
+                    android:valueTo="140.0"
+                    android:stepSize="1.0" />
+
+                <TextView
+                    android:id="@+id/upTiltLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Up Tilt Range: 90..120"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/upTiltSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="120"
+                    android:valueFrom="90.0"
+                    android:valueTo="170.0"
                     android:stepSize="1.0" />
             </LinearLayout>
         </ScrollView>
