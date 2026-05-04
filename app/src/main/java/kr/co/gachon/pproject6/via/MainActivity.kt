@@ -77,7 +77,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
-        private const val VIDEO_REPLAY_FRAME_DELAY_MS = 33L
+        private const val VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS = 33L
         private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L
     }
 
@@ -776,7 +776,12 @@ class MainActivity : AppCompatActivity() {
                         useLiveContext = false
                     )
 
-                    Thread.sleep(VIDEO_REPLAY_FRAME_DELAY_MS)
+                    val elapsedMs = elapsedMillis(frameStartNs)
+                    val remainingFrameBudgetMs =
+                        VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS - elapsedMs
+                    if (remainingFrameBudgetMs > 0L) {
+                        Thread.sleep(remainingFrameBudgetMs)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error replaying sample video", e)
