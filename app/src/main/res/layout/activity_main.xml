@@ -238,18 +238,37 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Model: Loading..."
+                    android:text="현재 모델: Loading..."
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/modelSpinnerLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="테스트할 모델 선택"
+                    android:textColor="@color/via_accent"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <Spinner
                     android:id="@+id/modelSpinner"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="6dp"
                     android:backgroundTint="@color/via_accent_container"
                     android:importantForAccessibility="yes" />
+
+                <TextView
+                    android:id="@+id/modelSpinnerHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="눌러서 7cls_v2 해상도/INT8·float16 모델을 바꿔 테스트"
+                    android:textColor="@color/via_on_surface_variant"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/inputFpsText"
