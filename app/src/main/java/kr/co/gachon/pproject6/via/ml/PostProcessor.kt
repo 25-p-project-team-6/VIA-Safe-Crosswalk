@@ -20,11 +20,7 @@ object PostProcessor {
             val newScore = box.score // Keep confidence score
             var debugRatio = -1f
 
-            if (clsName.equals("green", ignoreCase = true) || clsName.equals(
-                    "red",
-                    ignoreCase = true
-                )
-            ) {
+            if (DetectionLabels.isPedestrianSignal(clsName)) {
 
                 // Crop ROI
                 val rect = box.box
@@ -41,7 +37,7 @@ object PostProcessor {
                     val pixels = scratchPixels
                     bitmap.getPixels(pixels, 0, w, x, y, w, h)
 
-                    val isCurrentGreen = clsName.equals("green", ignoreCase = true)
+                    val isCurrentGreen = DetectionLabels.isPedestrianGreen(clsName)
                     // Calculate ratio for current color
                     val currentRatio = calculateColorRatio(
                         pixels = pixels,
@@ -60,7 +56,7 @@ object PostProcessor {
 
                         if (otherRatio > 0.05f) {
                             // Swap!
-                            newClsName = if (isCurrentGreen) "red" else "green"
+                            newClsName = DetectionLabels.swappedPedestrianSignalLabel(clsName) ?: clsName
                             debugRatio = otherRatio // Show the ratio of the new color
                             // Log.d(TAG, "Swapped $clsName -> $newClsName (Ratio: $currentRatio vs $otherRatio)")
                         }
@@ -122,13 +118,15 @@ object PostProcessor {
 
 
 
-    fun updateTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
-        val currentState = when {
+    internal fun observedTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
+        return when {
             targetBox == null -> TrafficLightState.UNKNOWN
-            targetBox.clsName.equals("red", ignoreCase = true) -> TrafficLightState.RED
-            targetBox.clsName.equals("green", ignoreCase = true) -> TrafficLightState.GREEN
-            else -> TrafficLightState.UNKNOWN
+            else -> DetectionLabels.pedestrianTrafficState(targetBox.clsName)
         }
+    }
+
+    fun updateTrafficLightState(targetBox: OverlayView.BoundingBox?): TrafficLightState {
+        val currentState = observedTrafficLightState(targetBox)
 
         val isHighConfidence = targetBox != null && targetBox.score >= 0.5f
         return stateTracker.update(currentState, isHighConfidence)

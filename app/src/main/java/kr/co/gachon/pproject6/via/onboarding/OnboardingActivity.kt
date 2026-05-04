@@ -26,6 +26,7 @@ import kr.co.gachon.pproject6.via.MainActivity
 import kr.co.gachon.pproject6.via.R
 import kr.co.gachon.pproject6.via.BuildConfig
 import kr.co.gachon.pproject6.via.camera.CameraManager
+import kr.co.gachon.pproject6.via.ml.DetectionLabels
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
@@ -276,8 +277,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun discoverModelFiles(): List<String> {
         return assets.list("")
-            ?.filter { it.endsWith(".tflite", ignoreCase = true) }
-            ?.sorted()
+            ?.let { DetectionLabels.modelFilesForActiveSchema(it.toList()) }
             ?: emptyList()
     }
 
@@ -296,7 +296,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val profile = candidateProfiles[currentCandidateIndex]
         progressBar.progress = 0
         progressText.text = "${currentCandidateIndex + 1} / ${candidateProfiles.size}"
-        bodyText.text = "${profile.displayNameWithSize()} 측정 중"
+        bodyText.text = "${profile.fileName} 측정 중"
         detailText.text = "목표: 15 FPS 이상"
 
         val candidateUsesGpu = profile.recommendedUseGpu
@@ -307,15 +307,21 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     context = this,
                     modelPath = profile.fileName,
                     useGpu = candidateUsesGpu,
-                    labels = listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red"),
+                    labels = DetectionLabels.sevenClassLabels,
                     defaultIouThreshold = 0.5f,
-                    specificIouThresholds = mapOf("red" to 0.05f, "green" to 0.05f)
+                    specificIouThresholds =
+                        mapOf(
+                            DetectionLabels.HUMAN_RED to 0.05f,
+                            DetectionLabels.HUMAN_GREEN to 0.05f,
+                            DetectionLabels.VEHICLE_RED to 0.05f,
+                            DetectionLabels.VEHICLE_GREEN to 0.05f
+                        )
                 )
                 detector.setup()
                 calibrationDetector = detector
                 activeRun = ActiveCalibrationRun(profile, detector.runtimeBackendLabel, detector.compatibilityReportedSupported)
                 runOnUiThread {
-                    bodyText.text = "${profile.displayNameWithSize()} 측정 중"
+                    bodyText.text = "${profile.fileName} 측정 중"
                     detailText.text = "${detector.runtimeBackendLabel} 가속"
                     bindCalibrationCamera(profile)
                 }
@@ -393,7 +399,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val result = run.toResult()
                 calibrationResults += result
                 runOnUiThread {
-                    bodyText.text = "${result.profile.displayNameWithSize()} 측정 완료"
+                    bodyText.text = "${result.profile.fileName} 측정 완료"
                     detailText.text = "${"%.1f".format(result.averageDetectFps)} FPS"
                     if (result.meetsTarget()) {
                         finalizeCalibration()
@@ -438,7 +444,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         val summaryLines = calibrationResults.joinToString("\n") { result ->
-            "${result.profile.displayNameWithSize()} / ${result.backendLabel} / ${"%.1f".format(result.averageDetectFps)} FPS"
+            "${result.profile.fileName} / ${result.backendLabel} / ${"%.1f".format(result.averageDetectFps)} FPS"
         }
         preferences.saveCalibration(
             result = bestResult,
@@ -453,7 +459,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         progressText.visibility = View.GONE
         stepLabelText.text = "완료"
         titleText.text = "설정이 완료되었습니다"
-        bodyText.text = "${bestResult.profile.displayName()} (${bestResult.profile.inputSize ?: 0}px)"
+        bodyText.text = bestResult.profile.fileName
         detailText.text = "${bestResult.backendLabel} 가속 / ${"%.1f".format(bestResult.averageDetectFps)} FPS"
         actionButton.isEnabled = true
         actionButton.text = "시작하기"

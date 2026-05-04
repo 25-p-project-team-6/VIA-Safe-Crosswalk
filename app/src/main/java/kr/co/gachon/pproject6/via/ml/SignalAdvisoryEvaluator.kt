@@ -35,6 +35,10 @@ class SignalAdvisoryEvaluator(
             reasons += AdvisoryConfidenceReason.MULTIPLE_SIGNALS
             score -= config.multipleSignalPenalty
         }
+        if (result.vehicleTrafficLightCount > 0) {
+            reasons += AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE
+            score -= config.vehicleSignalPenalty
+        }
         if (result.needsZoomSuggestion) {
             reasons += AdvisoryConfidenceReason.TARGET_SMALL
             score -= config.targetSmallPenalty
@@ -81,6 +85,7 @@ class SignalAdvisoryEvaluator(
                 result.trafficState == TrafficLightState.GREEN &&
                     confidenceLevel != AdvisoryConfidenceLevel.LOW &&
                     !result.multipleSignalDetected &&
+                    result.vehicleTrafficLightCount == 0 &&
                     !result.needsZoomSuggestion &&
                     result.recentMatchedClusterChangeCount == 0 &&
                     !result.targetRecentlyReacquired -> AdvisoryState.GREEN_CONFIRMED
@@ -95,6 +100,8 @@ class SignalAdvisoryEvaluator(
                 AdvisoryState.TRANSITION_WAIT -> "다음 신호 전환을 기다립니다"
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
+                        result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
+                            "차량 신호가 보여 보행자 신호 확인이 필요합니다"
                         result.multipleSignalDetected -> "신호등이 여러 개 보여 추가 확인이 필요합니다"
                         result.needsZoomSuggestion -> "신호가 작게 보여 더 가까이 비춰주세요"
                         else -> "신호 확인이 불안정합니다"
@@ -120,6 +127,8 @@ class SignalAdvisoryEvaluator(
 
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
+                        result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
+                            "차량용 신호가 보입니다. 보행자 신호등을 화면 중앙에 맞춰주세요"
                         result.multipleSignalDetected -> "신호등이 여러 개 보입니다. 화면 중앙 하나만 비춰주세요"
                         result.needsZoomSuggestion -> "신호가 작게 보입니다. 더 가까이 비추거나 확대해 주세요"
                         result.recentMatchedClusterChangeCount > 0 -> "횡단보도 후보가 ${result.recentMatchedClusterChangeCount}번 바뀌었습니다"
@@ -138,6 +147,8 @@ class SignalAdvisoryEvaluator(
                 AdvisoryState.TRANSITION_WAIT -> "다음 신호 전환을 기다립니다"
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
+                        result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
+                            "차량 신호가 보여 보행자 신호 확인이 필요합니다"
                         result.multipleSignalDetected -> "신호등이 여러 개 보여 추가 확인이 필요합니다"
                         result.needsZoomSuggestion -> "신호가 작게 보입니다. 더 가까이 비추거나 확대해 주세요"
                         else -> "신호 확인이 불안정합니다"
