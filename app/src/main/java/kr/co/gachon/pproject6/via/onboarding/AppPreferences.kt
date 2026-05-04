@@ -53,6 +53,21 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, value).apply()
 
+    var emergencyContactName: String?
+        get() = prefs.getString(KEY_EMERGENCY_CONTACT_NAME, null)
+        set(value) = prefs.edit().putString(KEY_EMERGENCY_CONTACT_NAME, value).apply()
+
+    var emergencyContactPhone: String?
+        get() = prefs.getString(KEY_EMERGENCY_CONTACT_PHONE, null)
+        set(value) = prefs.edit().putString(KEY_EMERGENCY_CONTACT_PHONE, value).apply()
+
+    fun clearEmergencyContact() {
+        prefs.edit()
+            .remove(KEY_EMERGENCY_CONTACT_NAME)
+            .remove(KEY_EMERGENCY_CONTACT_PHONE)
+            .apply()
+    }
+
     fun saveCalibration(
         result: CalibrationProfileResult,
         deviceSummary: String,
@@ -93,5 +108,7 @@ class AppPreferences(context: Context) {
         private const val KEY_VOICE_GUIDANCE_ENABLED = "voice_guidance_enabled"
         private const val KEY_HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
         private const val KEY_SCREEN_COLOR_FEEDBACK_ENABLED = "screen_color_feedback_enabled"
+        private const val KEY_EMERGENCY_CONTACT_NAME = "emergency_contact_name"
+        private const val KEY_EMERGENCY_CONTACT_PHONE = "emergency_contact_phone"
     }
 }
