@@ -24,14 +24,24 @@ class DetectionLabelsTest {
                 listOf(
                     "best_float16_640.tflite",
                     "best_7cls_v2_float16_320.tflite",
-                    "best_7cls_v2_float16_640.tflite"
+                    "best_7cls_v2_float16_416.tflite",
+                    "best_7cls_v2_float16_448.tflite",
+                    "best_7cls_v2_float16_512.tflite",
+                    "best_7cls_v2_float16_640.tflite",
+                    "best_7cls_v2_int8_320.tflite",
+                    "best_7cls_v2_int8_640.tflite"
                 )
             )
 
         assertEquals(
             listOf(
                 "best_7cls_v2_float16_320.tflite",
-                "best_7cls_v2_float16_640.tflite"
+                "best_7cls_v2_float16_416.tflite",
+                "best_7cls_v2_float16_448.tflite",
+                "best_7cls_v2_float16_512.tflite",
+                "best_7cls_v2_float16_640.tflite",
+                "best_7cls_v2_int8_320.tflite",
+                "best_7cls_v2_int8_640.tflite"
             ),
             modelFiles
         )

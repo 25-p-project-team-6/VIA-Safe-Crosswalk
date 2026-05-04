@@ -296,7 +296,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         val profile = candidateProfiles[currentCandidateIndex]
         progressBar.progress = 0
         progressText.text = "${currentCandidateIndex + 1} / ${candidateProfiles.size}"
-        bodyText.text = "${profile.displayNameWithSize()} 측정 중"
+        bodyText.text = "${profile.fileName} 측정 중"
         detailText.text = "목표: 15 FPS 이상"
 
         val candidateUsesGpu = profile.recommendedUseGpu
@@ -321,7 +321,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 calibrationDetector = detector
                 activeRun = ActiveCalibrationRun(profile, detector.runtimeBackendLabel, detector.compatibilityReportedSupported)
                 runOnUiThread {
-                    bodyText.text = "${profile.displayNameWithSize()} 측정 중"
+                    bodyText.text = "${profile.fileName} 측정 중"
                     detailText.text = "${detector.runtimeBackendLabel} 가속"
                     bindCalibrationCamera(profile)
                 }
@@ -399,7 +399,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val result = run.toResult()
                 calibrationResults += result
                 runOnUiThread {
-                    bodyText.text = "${result.profile.displayNameWithSize()} 측정 완료"
+                    bodyText.text = "${result.profile.fileName} 측정 완료"
                     detailText.text = "${"%.1f".format(result.averageDetectFps)} FPS"
                     if (result.meetsTarget()) {
                         finalizeCalibration()
@@ -444,7 +444,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         val summaryLines = calibrationResults.joinToString("\n") { result ->
-            "${result.profile.displayNameWithSize()} / ${result.backendLabel} / ${"%.1f".format(result.averageDetectFps)} FPS"
+            "${result.profile.fileName} / ${result.backendLabel} / ${"%.1f".format(result.averageDetectFps)} FPS"
         }
         preferences.saveCalibration(
             result = bestResult,
@@ -459,7 +459,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         progressText.visibility = View.GONE
         stepLabelText.text = "완료"
         titleText.text = "설정이 완료되었습니다"
-        bodyText.text = "${bestResult.profile.displayName()} (${bestResult.profile.inputSize ?: 0}px)"
+        bodyText.text = bestResult.profile.fileName
         detailText.text = "${bestResult.backendLabel} 가속 / ${"%.1f".format(bestResult.averageDetectFps)} FPS"
         actionButton.isEnabled = true
         actionButton.text = "시작하기"

@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
         updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
-        modelNameText.text = "모델: ${currentModelProfile.displayNameWithSize()}"
+        modelNameText.text = "모델: $currentModelName"
 
         debugContainer.visibility =
             if (showDebugInfo) View.VISIBLE else View.GONE
@@ -473,11 +473,10 @@ class MainActivity : AppCompatActivity() {
             val modelFiles = availableModelFiles
 
             if (modelFiles.isNotEmpty()) {
-                val modelProfiles = modelFiles.map(InferenceModelProfile::fromFileName)
                 val adapter = android.widget.ArrayAdapter(
                     this,
                     android.R.layout.simple_spinner_item,
-                    modelProfiles.map { it.displayNameWithSize() }
+                    modelFiles
                 )
                 adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                 spinner.adapter = adapter
@@ -496,7 +495,7 @@ class MainActivity : AppCompatActivity() {
                             position: Int,
                             id: Long
                         ) {
-                            val selectedModel = modelProfiles[position].fileName
+                            val selectedModel = modelFiles[position]
                             if (selectedModel != currentModelName) {
                                 applyModelSelection(selectedModel)
                             }
@@ -590,7 +589,7 @@ class MainActivity : AppCompatActivity() {
                             "analysis=${currentModelProfile.analysisResolution.width}x" +
                             "${currentModelProfile.analysisResolution.height}"
                     modelNameText.text =
-                        "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
+                        "모델: $modelName (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
                     if (restartCameraAfterInit && hasStartedCamera) {
