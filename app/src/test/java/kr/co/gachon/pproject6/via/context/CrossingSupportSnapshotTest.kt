@@ -94,7 +94,8 @@ class CrossingSupportSnapshotTest {
             currentSignedTiltDegrees = 32f,
             currentLocationLatitude = 37.450123,
             currentLocationLongitude = 127.128456,
-            currentLocationAccuracyMeters = 5.5f
+            currentLocationAccuracyMeters = 5.5f,
+            currentHeadingDegrees = 182f
         )
 
         val summary = snapshot.toDebugSummary()
@@ -104,5 +105,6 @@ class CrossingSupportSnapshotTest {
         assertTrue(summary.contains("lat=37.450123"))
         assertTrue(summary.contains("lon=127.128456"))
         assertTrue(summary.contains("acc=5.5m"))
+        assertTrue(summary.contains("heading=182"))
     }
 }

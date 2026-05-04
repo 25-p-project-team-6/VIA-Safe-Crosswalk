@@ -20,6 +20,7 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -36,6 +37,7 @@ import java.util.concurrent.Executors
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
+import kr.co.gachon.pproject6.via.context.CrosswalkGuidanceMessageBuilder
 import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportManager
@@ -306,6 +308,7 @@ class MainActivity : AppCompatActivity() {
         tuningDebugText = findViewById(R.id.tuningDebugText)
         statusTitleText = findViewById(R.id.statusTitleText)
         statusDetailText = findViewById(R.id.statusDetailText)
+        addNearbyCrosswalkGuideButton()
         statusIconText = findViewById(R.id.statusIconText)
         statusBadgeText = findViewById(R.id.statusBadgeText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
@@ -454,6 +457,34 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupModelSpinner()
+    }
+
+    private fun addNearbyCrosswalkGuideButton(): MaterialButton {
+        val statusContent =
+            (statusPanel as? ViewGroup)?.getChildAt(0) as? LinearLayout
+                ?: error("statusPanel content must be a LinearLayout")
+        return MaterialButton(this).apply {
+            text = "주변 횡단보도 안내"
+            isAllCaps = false
+            textSize = 17f
+            minHeight = dp(56)
+            cornerRadius = dp(18)
+            layoutParams =
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(16)
+                }
+            setOnClickListener {
+                announceNearbyCrosswalk()
+            }
+            statusContent.addView(this)
+        }
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
     }
 
     override fun onResume() {
@@ -1409,6 +1440,40 @@ class MainActivity : AppCompatActivity() {
                 mapVersion = mapSnapshot.datasetVersion,
                 isNearKnownFeature = mapSnapshot.isNearKnownFeature
             )
+        )
+    }
+
+    private fun announceNearbyCrosswalk() {
+        val guidanceMessage =
+            if (!hasAnyLocationPermission()) {
+                CrosswalkGuidanceMessageBuilder.build(CrossingSupportSnapshot())
+            } else {
+                CrosswalkGuidanceMessageBuilder.build(crosswalkGuidanceSnapshot())
+            }
+        Toast.makeText(this, guidanceMessage.detail, Toast.LENGTH_LONG).show()
+        feedbackManager.speakImmediate(
+            message = guidanceMessage.speechText,
+            utteranceId = "nearby_crosswalk_guidance"
+        )
+    }
+
+    private fun crosswalkGuidanceSnapshot(): CrossingSupportSnapshot {
+        val currentSnapshot = currentCrossingSupportSnapshot()
+        if (currentSnapshot.currentLocationLatitude != null &&
+            currentSnapshot.currentLocationLongitude != null
+        ) {
+            return currentSnapshot
+        }
+
+        val fallbackLocation = bestAvailableLocation() ?: return currentSnapshot
+        return currentSnapshot.copy(
+            currentLocationLatitude = fallbackLocation.latitude,
+            currentLocationLongitude = fallbackLocation.longitude,
+            currentLocationAccuracyMeters =
+                if (fallbackLocation.hasAccuracy()) fallbackLocation.accuracy else null,
+            currentHeadingDegrees =
+                currentSnapshot.currentHeadingDegrees
+                    ?: if (fallbackLocation.hasBearing()) fallbackLocation.bearing else null
         )
     }
 
