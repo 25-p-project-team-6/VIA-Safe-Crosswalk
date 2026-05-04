@@ -14,6 +14,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import kr.co.gachon.pproject6.via.R
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
+import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
 
 class SettingsActivity : AppCompatActivity() {
     private lateinit var preferences: AppPreferences
@@ -44,7 +45,7 @@ class SettingsActivity : AppCompatActivity() {
         )
 
         findViewById<MaterialButton>(R.id.contactSettingsButton).setOnClickListener {
-            showNextIssueToast("보호자 연락처 설정은 #34에서 연결됩니다.")
+            startActivity(Intent(this, EmergencyContactActivity::class.java))
         }
         findViewById<MaterialButton>(R.id.bluetoothGuideButton).setOnClickListener {
             showNextIssueToast("블루투스 버튼 안내/테스트는 #35에서 연결됩니다.")
