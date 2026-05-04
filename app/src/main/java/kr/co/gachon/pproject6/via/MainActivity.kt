@@ -62,6 +62,7 @@ import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
+import kr.co.gachon.pproject6.via.settings.SettingsActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import kr.co.gachon.pproject6.via.util.PerformanceTracker
@@ -127,6 +128,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var trafficLogicSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var highlightTargetSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var debugContainer: View
+    private lateinit var settingsButton: android.widget.ImageButton
     private lateinit var debugToggleButton: android.widget.ImageButton
     private lateinit var buildInfoCard: View
     private lateinit var topControlCard: View
@@ -236,6 +238,16 @@ class MainActivity : AppCompatActivity() {
             startVideoReplay(uri)
         }
 
+    private val settingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            applyUserFeedbackPreferences()
+            if (result.resultCode == RESULT_OK &&
+                result.data?.getBooleanExtra(SettingsActivity.EXTRA_OPEN_DEBUG_PANEL, false) == true
+            ) {
+                setDebugPanelVisible(true)
+            }
+        }
+
     // 7-class fine-tuned model labels. Only human_* labels drive pedestrian signal guidance.
     private val finetunedLabels = DetectionLabels.sevenClassLabels
 
@@ -271,6 +283,7 @@ class MainActivity : AppCompatActivity() {
         statusTintOverlay = findViewById(R.id.statusTintOverlay)
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
+        settingsButton = findViewById(R.id.settingsButton)
         debugToggleButton = findViewById(R.id.debugToggleButton)
         buildInfoCard = findViewById(R.id.buildInfoCard)
         topControlCard = findViewById(R.id.topControlCard)
@@ -310,23 +323,22 @@ class MainActivity : AppCompatActivity() {
         highlightTargetSwitch = findViewById(R.id.swHighlightTarget)
         statusBorder = findViewById(R.id.statusBorder)
         feedbackManager = SignalFeedbackManager(this)
+        applyUserFeedbackPreferences()
         crossingSupportManager = CrossingSupportManager(this, GuidanceTuningDefaults.crossingSupportConfig)
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
         updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
         modelNameText.text = "모델: $currentModelName"
 
-        debugContainer.visibility =
-            if (showDebugInfo) View.VISIBLE else View.GONE
+        setDebugPanelVisible(showDebugInfo)
 
         applySystemBarInsets()
 
+        settingsButton.setOnClickListener {
+            settingsLauncher.launch(Intent(this, SettingsActivity::class.java))
+        }
         debugToggleButton.setOnClickListener {
-            showDebugInfo = !showDebugInfo
-            debugContainer.visibility =
-                if (showDebugInfo) View.VISIBLE else View.GONE
-            debugToggleButton.contentDescription =
-                if (showDebugInfo) "디버그 정보 닫기" else "디버그 정보 열기"
+            setDebugPanelVisible(!showDebugInfo)
         }
         videoReplayButton.setOnClickListener {
             if (videoReplayRunning.get()) {
@@ -446,6 +458,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (::feedbackManager.isInitialized) {
+            applyUserFeedbackPreferences()
+        }
         crossingSupportManager.start()
         latestCrossingSupportSnapshot = crossingSupportManager.snapshot()
         updateGpsDebugMapButtonState()
@@ -582,6 +597,18 @@ class MainActivity : AppCompatActivity() {
     private fun updateUpTiltLabel() {
         upTiltLabel.text =
             "Up Tilt Range: 90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
+    }
+
+    private fun setDebugPanelVisible(visible: Boolean) {
+        showDebugInfo = visible
+        debugContainer.visibility = if (visible) View.VISIBLE else View.GONE
+        debugToggleButton.contentDescription =
+            if (visible) "디버그 정보 닫기" else "디버그 정보 열기"
+    }
+
+    private fun applyUserFeedbackPreferences() {
+        feedbackManager.voiceEnabled = preferences.voiceGuidanceEnabled
+        feedbackManager.hapticEnabled = preferences.hapticFeedbackEnabled
     }
 
     private fun updateDebugInfo(
@@ -1479,8 +1506,10 @@ class MainActivity : AppCompatActivity() {
 
         val visualState = deriveStatusVisualState(analysisResult)
         statusBorder.setBackgroundResource(visualState.borderResId)
-        statusTintOverlay.setBackgroundColor(visualState.tintColor)
-        statusTintOverlay.alpha = if (visualState.tintColor == Color.TRANSPARENT) 0f else 1f
+        val tintColor =
+            if (preferences.screenColorFeedbackEnabled) visualState.tintColor else Color.TRANSPARENT
+        statusTintOverlay.setBackgroundColor(tintColor)
+        statusTintOverlay.alpha = if (tintColor == Color.TRANSPARENT) 0f else 1f
         statusIconText.text = visualState.iconText
         statusIconText.setTextColor(visualState.iconTextColor)
         statusIconText.backgroundTintList = ColorStateList.valueOf(visualState.iconBackgroundColor)
