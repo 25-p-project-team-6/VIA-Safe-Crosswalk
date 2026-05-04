@@ -8,13 +8,16 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
+import android.media.MediaMetadataRetriever
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -70,6 +73,8 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
+        private const val VIDEO_REPLAY_FRAME_INTERVAL_US = 200_000L
+        private const val VIDEO_REPLAY_FRAME_DELAY_MS = 200L
     }
 
     private data class StatusVisualState(
@@ -82,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     private lateinit var viewFinder: PreviewView
+    private lateinit var videoReplayFrameView: ImageView
     private lateinit var overlay: OverlayView
     private lateinit var fpsText: TextView
     private lateinit var avgFpsText: TextView
@@ -93,6 +99,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var modelNameText: TextView
     private lateinit var buildInfoText: TextView
     private lateinit var resetAppButton: MaterialButton
+    private lateinit var videoReplayButton: MaterialButton
     private lateinit var openGpsDebugMapButton: MaterialButton
     private lateinit var clearMapCacheButton: MaterialButton
     private lateinit var targetInfoText: TextView
@@ -133,6 +140,10 @@ class MainActivity : AppCompatActivity() {
     private var cameraManager: CameraManager? = null
     private var hasStartedCamera = false
     private var cameraRecoveryAttempts = 0
+    private val videoReplayRunning = AtomicBoolean(false)
+    private var videoReplayUri: Uri? = null
+    private var pendingReplayUriAfterDetectorInit: Uri? = null
+    private var inputRateLabel = "Camera FPS"
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
 
@@ -205,6 +216,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private val pickVideoReplayLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            uri ?: return@registerForActivityResult
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            startVideoReplay(uri)
+        }
+
     // 7-class fine-tuned model labels. Only human_* labels drive pedestrian signal guidance.
     private val finetunedLabels = DetectionLabels.sevenClassLabels
 
@@ -236,6 +259,7 @@ class MainActivity : AppCompatActivity() {
         viewFinder = findViewById(R.id.viewFinder)
         viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         viewFinder.scaleType = PreviewView.ScaleType.FILL_CENTER
+        videoReplayFrameView = findViewById(R.id.videoReplayFrameView)
         statusTintOverlay = findViewById(R.id.statusTintOverlay)
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
@@ -245,6 +269,7 @@ class MainActivity : AppCompatActivity() {
         statusPanel = findViewById(R.id.statusPanel)
         backendStatusText = findViewById(R.id.backendStatusText)
         resetAppButton = findViewById(R.id.resetAppButton)
+        videoReplayButton = findViewById(R.id.videoReplayButton)
         openGpsDebugMapButton = findViewById(R.id.openGpsDebugMapButton)
         clearMapCacheButton = findViewById(R.id.clearMapCacheButton)
         inputFpsText = findViewById(R.id.inputFpsText)
@@ -293,7 +318,15 @@ class MainActivity : AppCompatActivity() {
             debugToggleButton.contentDescription =
                 if (showDebugInfo) "디버그 정보 닫기" else "디버그 정보 열기"
         }
+        videoReplayButton.setOnClickListener {
+            if (videoReplayRunning.get()) {
+                stopVideoReplay(restoreCamera = true, clearSelectedVideo = true)
+            } else {
+                pickVideoReplayLauncher.launch(arrayOf("video/*"))
+            }
+        }
         resetAppButton.setOnClickListener {
+            stopVideoReplay(restoreCamera = false, clearSelectedVideo = true)
             detector?.close()
             detector = null
             cameraManager?.stopCamera()
@@ -401,6 +434,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        stopVideoReplay(restoreCamera = false, clearSelectedVideo = false)
         guidanceRuntimeResetter.resetForPause()
         viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
         crossingSupportManager.stop()
@@ -453,6 +487,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyModelSelection(selectedModel: String) {
+        val replayUriToResume = if (videoReplayRunning.get()) videoReplayUri else null
+        if (replayUriToResume != null) {
+            stopVideoReplay(restoreCamera = false, clearSelectedVideo = false)
+            pendingReplayUriAfterDetectorInit = replayUriToResume
+        }
+
         currentModelName = selectedModel
         currentModelProfile = InferenceModelProfile.fromFileName(selectedModel)
         reusableRotatedBitmap = null
@@ -529,7 +569,7 @@ class MainActivity : AppCompatActivity() {
         performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        inputFpsText.text = cameraRateTracker.rateStr
+        inputFpsText.text = cameraRateTracker.rateStr.replaceFirst("Camera FPS", inputRateLabel)
         fpsText.text = performanceTracker.currentFpsStr.replaceFirst("FPS", "Processed FPS")
         avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
@@ -592,7 +632,11 @@ class MainActivity : AppCompatActivity() {
                         "모델: $modelName (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
-                    if (restartCameraAfterInit && hasStartedCamera) {
+                    val pendingReplayUri = pendingReplayUriAfterDetectorInit
+                    if (pendingReplayUri != null) {
+                        pendingReplayUriAfterDetectorInit = null
+                        startVideoReplay(pendingReplayUri)
+                    } else if (restartCameraAfterInit && hasStartedCamera) {
                         startCamera()
                     }
                 }
@@ -619,6 +663,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCamera(isRecoveryRestart: Boolean = false) {
+        videoReplayRunning.set(false)
+        videoReplayFrameView.visibility = View.GONE
+        inputRateLabel = "Camera FPS"
+        videoReplayButton.text = "샘플 영상 선택"
         cameraManager?.stopCamera()
         hasStartedCamera = true
         if (!isRecoveryRestart) {
@@ -667,7 +715,125 @@ class MainActivity : AppCompatActivity() {
         val zoomRatio = if (zoomSwitch.isChecked && zoomSwitch.isEnabled) 2.0f else 1.0f
         cameraManager?.setZoom(zoomRatio)
     }
-    
+
+    private fun startVideoReplay(uri: Uri) {
+        val executor = processingExecutor ?: return
+        videoReplayUri = uri
+        videoReplayRunning.set(true)
+        inputRateLabel = "Replay FPS"
+        resetPerformanceStats()
+        guidanceRuntimeResetter.resetForTrafficLogicDisabled()
+        viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
+        cameraManager?.stopCamera()
+        hasStartedCamera = false
+        pendingFrame.getAndSet(null)?.close()
+
+        videoReplayFrameView.visibility = View.VISIBLE
+        videoReplayButton.text = "샘플 영상 중지"
+        publishBackendStatus("Replay: sample video")
+        zoomSwitch.isEnabled = false
+        zoomSwitch.text = "2x Zoom (Replay)"
+
+        executor.execute {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(this, uri)
+                val durationUs =
+                    retriever
+                        .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        ?.toLongOrNull()
+                        ?.times(1_000L)
+                        ?: 0L
+                var timestampUs = 0L
+
+                while (videoReplayRunning.get()) {
+                    val frameStartNs = SystemClock.elapsedRealtimeNanos()
+                    val decodeStartNs = SystemClock.elapsedRealtimeNanos()
+                    val frame =
+                        retriever.getFrameAtTime(
+                            timestampUs,
+                            MediaMetadataRetriever.OPTION_CLOSEST
+                        )
+
+                    if (frame == null) {
+                        timestampUs = 0L
+                        continue
+                    }
+
+                    val bitmap =
+                        if (frame.config == Bitmap.Config.ARGB_8888) {
+                            frame
+                        } else {
+                            frame.copy(Bitmap.Config.ARGB_8888, false)
+                        }
+                    val stageDurationsMs =
+                        linkedMapOf("decode" to elapsedMillis(decodeStartNs))
+
+                    cameraRateTracker.mark()
+                    runOnUiThread {
+                        if (videoReplayRunning.get()) {
+                            videoReplayFrameView.setImageBitmap(bitmap)
+                        }
+                    }
+                    processBitmapFrame(
+                        bitmap = bitmap,
+                        frameStartNs = frameStartNs,
+                        stageDurationsMs = stageDurationsMs,
+                        analysisOutputTransform = null,
+                        useLiveContext = false
+                    )
+
+                    timestampUs += VIDEO_REPLAY_FRAME_INTERVAL_US
+                    if (durationUs > 0L && timestampUs >= durationUs) {
+                        timestampUs = 0L
+                    }
+                    Thread.sleep(VIDEO_REPLAY_FRAME_DELAY_MS)
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Error replaying sample video", e)
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        "샘플 영상 재생 실패: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    stopVideoReplay(restoreCamera = true, clearSelectedVideo = true)
+                }
+            } finally {
+                runCatching { retriever.release() }
+            }
+        }
+    }
+
+    private fun stopVideoReplay(
+        restoreCamera: Boolean,
+        clearSelectedVideo: Boolean
+    ) {
+        videoReplayRunning.set(false)
+        if (clearSelectedVideo) {
+            videoReplayUri = null
+        }
+        pendingReplayUriAfterDetectorInit = null
+        if (!::videoReplayFrameView.isInitialized) {
+            return
+        }
+        videoReplayFrameView.visibility = View.GONE
+        videoReplayFrameView.setImageDrawable(null)
+        videoReplayButton.text = "샘플 영상 선택"
+        overlay.clear()
+        inputRateLabel = "Camera FPS"
+        resetPerformanceStats()
+        guidanceRuntimeResetter.resetForTrafficLogicDisabled()
+        publishBackendStatus("Backend: ${detector?.runtimeBackendLabel ?: "unknown"}")
+
+        if (restoreCamera &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            startCamera()
+        }
+    }
+     
     private fun enqueueFrame(imageProxy: ImageProxy) {
         lastCameraFrameAtElapsedMs = SystemClock.elapsedRealtime()
         cameraRateTracker.mark()
@@ -730,12 +896,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun processImage(imageProxy: ImageProxy) {
-        val activeDetector = detector
-        if (activeDetector == null) {
-            imageProxy.close()
-            return
-        }
-
         val stageDurationsMs = linkedMapOf<String, Long>()
         val frameStartNs = SystemClock.elapsedRealtimeNanos()
         var imageClosed = false
@@ -762,94 +922,112 @@ class MainActivity : AppCompatActivity() {
             }
             stageDurationsMs["rotate"] = elapsedMillis(rotateStartNs)
 
-            val detectStartNs = SystemClock.elapsedRealtimeNanos()
-            val result = activeDetector.detect(rotatedBitmap, confidenceThreshold)
-            stageDurationsMs["detect"] = elapsedMillis(detectStartNs)
-
-            val enableTrafficLogic = trafficLogicSwitch.isChecked
-            val crossingSupportSnapshot =
-                if (enableTrafficLogic) {
-                    crossingSupportManager.snapshot()
-                } else {
-                    CrossingSupportSnapshot()
-                }
-            val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
-            val rawAnalysisResult = signalAnalyzer.analyze(
+            processBitmapFrame(
                 bitmap = rotatedBitmap,
-                rawBoxes = result.boxes,
-                enableTrafficLogic = enableTrafficLogic,
-                enableHighlight = highlightTargetSwitch.isChecked,
-                crossingSupportSnapshot = crossingSupportSnapshot
+                frameStartNs = frameStartNs,
+                stageDurationsMs = stageDurationsMs,
+                analysisOutputTransform = analysisOutputTransform,
+                useLiveContext = true
             )
-            val stabilizedAnalysisResult =
-                if (enableTrafficLogic) {
-                    rawAnalysisResult.withGuidanceSnapshot(
-                        guidanceStateStabilizer.stabilize(rawAnalysisResult.toGuidanceSnapshot())
-                    )
-                } else {
-                    guidanceStateStabilizer.reset()
-                    rawAnalysisResult
-                }
-            val analysisResult =
-                if (enableTrafficLogic) {
-                    stabilizedAnalysisResult.withAdvisoryAssessment(
-                        advisoryEvaluator.evaluate(stabilizedAnalysisResult)
-                    )
-                } else {
-                    stabilizedAnalysisResult
-                }
-            stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
-
-            runOnUiThread {
-                val uiStartNs = SystemClock.elapsedRealtimeNanos()
-                latestCrossingSupportSnapshot = analysisResult.crossingSupportSnapshot
-                renderOverlay(
-                    bitmap = rotatedBitmap,
-                    analysisResult = analysisResult,
-                    showRawBoxes = rawDetectionSwitch.isChecked,
-                    analysisOutputTransform = analysisOutputTransform
-                )
-                updateTargetInfo(analysisResult, enableTrafficLogic)
-                updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
-                updateGpsDebugMapButtonState()
-                updateUserStatus(analysisResult, enableTrafficLogic)
-                updateStatusVisuals(analysisResult, enableTrafficLogic)
-                logDecisionIfChanged(analysisResult, enableTrafficLogic)
-                logMapIfChanged(analysisResult.crossingSupportSnapshot)
-
-                if (enableTrafficLogic) {
-                    crossingSupportManager.setCrossingWindowActive(
-                        analysisResult.guidancePhase == GuidancePhase.WALK_ALLOWED
-                    )
-                    feedbackManager.onAdvisoryChanged(
-                        AdvisoryAssessment(
-                            state = analysisResult.advisoryState,
-                            confidenceLevel = analysisResult.advisoryConfidenceLevel,
-                            confidenceScore = analysisResult.advisoryConfidenceScore,
-                            confidenceReasons = analysisResult.advisoryConfidenceReasons,
-                            titleText = analysisResult.advisoryTitleText,
-                            detailText = analysisResult.advisoryDetailText,
-                            speechText = analysisResult.advisorySpeechText
-                        )
-                    )
-                } else {
-                    crossingSupportManager.setCrossingWindowActive(false)
-                    feedbackManager.clearState()
-                }
-
-                stageDurationsMs["ui"] = elapsedMillis(uiStartNs)
-                updateDebugInfo(
-                    inferenceTime = result.inferenceTime,
-                    totalLatencyMs = elapsedMillis(frameStartNs),
-                    stageDurationsMs = stageDurationsMs
-                )
-            }
         } catch (e: Exception) {
             Log.e("MainActivity", "Error processing camera frame", e)
         } finally {
             if (!imageClosed) {
                 imageProxy.close()
             }
+        }
+    }
+
+    private fun processBitmapFrame(
+        bitmap: Bitmap,
+        frameStartNs: Long,
+        stageDurationsMs: LinkedHashMap<String, Long>,
+        analysisOutputTransform: OutputTransform?,
+        useLiveContext: Boolean
+    ) {
+        val activeDetector = detector ?: return
+
+        val detectStartNs = SystemClock.elapsedRealtimeNanos()
+        val result = activeDetector.detect(bitmap, confidenceThreshold)
+        stageDurationsMs["detect"] = elapsedMillis(detectStartNs)
+
+        val enableTrafficLogic = trafficLogicSwitch.isChecked
+        val crossingSupportSnapshot =
+            if (enableTrafficLogic && useLiveContext) {
+                crossingSupportManager.snapshot()
+            } else {
+                CrossingSupportSnapshot()
+            }
+        val analyzeStartNs = SystemClock.elapsedRealtimeNanos()
+        val rawAnalysisResult = signalAnalyzer.analyze(
+            bitmap = bitmap,
+            rawBoxes = result.boxes,
+            enableTrafficLogic = enableTrafficLogic,
+            enableHighlight = highlightTargetSwitch.isChecked,
+            crossingSupportSnapshot = crossingSupportSnapshot
+        )
+        val stabilizedAnalysisResult =
+            if (enableTrafficLogic) {
+                rawAnalysisResult.withGuidanceSnapshot(
+                    guidanceStateStabilizer.stabilize(rawAnalysisResult.toGuidanceSnapshot())
+                )
+            } else {
+                guidanceStateStabilizer.reset()
+                rawAnalysisResult
+            }
+        val analysisResult =
+            if (enableTrafficLogic) {
+                stabilizedAnalysisResult.withAdvisoryAssessment(
+                    advisoryEvaluator.evaluate(stabilizedAnalysisResult)
+                )
+            } else {
+                stabilizedAnalysisResult
+            }
+        stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
+
+        runOnUiThread {
+            val uiStartNs = SystemClock.elapsedRealtimeNanos()
+            latestCrossingSupportSnapshot = analysisResult.crossingSupportSnapshot
+            renderOverlay(
+                bitmap = bitmap,
+                analysisResult = analysisResult,
+                showRawBoxes = rawDetectionSwitch.isChecked,
+                analysisOutputTransform = analysisOutputTransform
+            )
+            updateTargetInfo(analysisResult, enableTrafficLogic)
+            updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
+            updateGpsDebugMapButtonState()
+            updateUserStatus(analysisResult, enableTrafficLogic)
+            updateStatusVisuals(analysisResult, enableTrafficLogic)
+            logDecisionIfChanged(analysisResult, enableTrafficLogic)
+            logMapIfChanged(analysisResult.crossingSupportSnapshot)
+
+            if (enableTrafficLogic) {
+                crossingSupportManager.setCrossingWindowActive(
+                    useLiveContext && analysisResult.guidancePhase == GuidancePhase.WALK_ALLOWED
+                )
+                feedbackManager.onAdvisoryChanged(
+                    AdvisoryAssessment(
+                        state = analysisResult.advisoryState,
+                        confidenceLevel = analysisResult.advisoryConfidenceLevel,
+                        confidenceScore = analysisResult.advisoryConfidenceScore,
+                        confidenceReasons = analysisResult.advisoryConfidenceReasons,
+                        titleText = analysisResult.advisoryTitleText,
+                        detailText = analysisResult.advisoryDetailText,
+                        speechText = analysisResult.advisorySpeechText
+                    )
+                )
+            } else {
+                crossingSupportManager.setCrossingWindowActive(false)
+                feedbackManager.clearState()
+            }
+
+            stageDurationsMs["ui"] = elapsedMillis(uiStartNs)
+            updateDebugInfo(
+                inferenceTime = result.inferenceTime,
+                totalLatencyMs = elapsedMillis(frameStartNs),
+                stageDurationsMs = stageDurationsMs
+            )
         }
     }
 
@@ -1224,7 +1402,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetPerformanceStats() {
         performanceTracker.clear()
         cameraRateTracker.clear()
-        inputFpsText.text = "Camera FPS: 0"
+        inputFpsText.text = "$inputRateLabel: 0"
         avgFpsText.text = "Processed Avg FPS: 0"
         avgLatencyText.text = "Avg Latency: 0ms"
         fpsText.text = "Processed FPS: 0"
@@ -1262,6 +1440,7 @@ class MainActivity : AppCompatActivity() {
         hasStartedCamera = false
         viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
         cameraRecoveryAttempts = 0
+        videoReplayRunning.set(false)
         lastCameraFrameAtElapsedMs = 0L
         pendingFrame.getAndSet(null)?.close()
         cameraExecutor?.shutdown()

@@ -14,6 +14,14 @@
         android:layout_height="match_parent"
         android:contentDescription="실시간 카메라 미리보기" />
 
+    <ImageView
+        android:id="@+id/videoReplayFrameView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="샘플 영상 리플레이 프레임"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/statusTintOverlay"
         android:layout_width="match_parent"
@@ -210,6 +218,18 @@
                     android:layout_marginTop="12dp"
                     android:minHeight="56dp"
                     android:text="앱 초기 상태로 되돌리기"
+                    android:textAllCaps="false"
+                    android:textSize="16sp"
+                    app:cornerRadius="18dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/videoReplayButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:minHeight="56dp"
+                    android:text="샘플 영상 선택"
                     android:textAllCaps="false"
                     android:textSize="16sp"
                     app:cornerRadius="18dp" />
