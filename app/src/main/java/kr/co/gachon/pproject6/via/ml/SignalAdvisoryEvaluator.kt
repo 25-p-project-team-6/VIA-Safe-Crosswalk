@@ -94,17 +94,17 @@ class SignalAdvisoryEvaluator(
 
         val titleText =
             when (state) {
-                AdvisoryState.RED_CONFIRMED -> "빨간불이 확인됩니다"
-                AdvisoryState.GREEN_CONFIRMED -> "초록불이 확인됩니다"
-                AdvisoryState.GREEN_WITH_CAUTION -> "초록불이 확인되지만 주의가 필요합니다"
-                AdvisoryState.TRANSITION_WAIT -> "다음 신호 전환을 기다립니다"
+                AdvisoryState.RED_CONFIRMED -> "보행자 신호 빨간색으로 보임"
+                AdvisoryState.GREEN_CONFIRMED -> "보행자 신호 초록으로 보임"
+                AdvisoryState.GREEN_WITH_CAUTION -> "초록으로 보이나 주의 필요"
+                AdvisoryState.TRANSITION_WAIT -> "다음 신호 대기 권장"
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
                         result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
                             "차량 신호가 보여 보행자 신호 확인이 필요합니다"
                         result.multipleSignalDetected -> "신호등이 여러 개 보여 추가 확인이 필요합니다"
                         result.needsZoomSuggestion -> "신호가 작게 보여 더 가까이 비춰주세요"
-                        else -> "신호 확인이 불안정합니다"
+                        else -> "신호 확인 불확실"
                     }
             }
 
