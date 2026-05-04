@@ -12,6 +12,7 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kr.co.gachon.pproject6.via.R
+import kr.co.gachon.pproject6.via.guide.UsageGuideActivity
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
@@ -51,7 +52,7 @@ class SettingsActivity : AppCompatActivity() {
             showNextIssueToast("Space 짧게: 횡단보도 안내 · 길게: 비상 문자 5초 유예")
         }
         findViewById<MaterialButton>(R.id.usageGuideButton).setOnClickListener {
-            showNextIssueToast("앱 사용 안내는 #38에서 정리됩니다.")
+            startActivity(Intent(this, UsageGuideActivity::class.java))
         }
         findViewById<MaterialButton>(R.id.openDebugPanelButton).setOnClickListener {
             setResult(
