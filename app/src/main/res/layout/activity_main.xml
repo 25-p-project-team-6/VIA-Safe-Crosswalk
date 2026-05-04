@@ -83,15 +83,31 @@
         app:strokeColor="@color/via_surface_outline"
         app:strokeWidth="1dp">
 
-        <ImageButton
-            android:id="@+id/debugToggleButton"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="디버그 정보 열기"
-            android:padding="14dp"
-            android:src="@android:drawable/ic_menu_info_details"
-            app:tint="@color/via_on_surface" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/settingsButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="설정 열기"
+                android:padding="14dp"
+                android:src="@android:drawable/ic_menu_manage"
+                app:tint="@color/via_on_surface" />
+
+            <ImageButton
+                android:id="@+id/debugToggleButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="디버그 정보 열기"
+                android:padding="14dp"
+                android:src="@android:drawable/ic_menu_info_details"
+                app:tint="@color/via_on_surface" />
+        </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView

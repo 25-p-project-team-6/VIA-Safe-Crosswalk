@@ -41,6 +41,18 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_MAP_INSTALLATION_ID, null)
         set(value) = prefs.edit().putString(KEY_MAP_INSTALLATION_ID, value).apply()
 
+    var voiceGuidanceEnabled: Boolean
+        get() = prefs.getBoolean(KEY_VOICE_GUIDANCE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_VOICE_GUIDANCE_ENABLED, value).apply()
+
+    var hapticFeedbackEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HAPTIC_FEEDBACK_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_HAPTIC_FEEDBACK_ENABLED, value).apply()
+
+    var screenColorFeedbackEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, value).apply()
+
     fun saveCalibration(
         result: CalibrationProfileResult,
         deviceSummary: String,
@@ -78,5 +90,8 @@ class AppPreferences(context: Context) {
         private const val KEY_MAP_DATASET_VERSION = "map_dataset_version"
         private const val KEY_MAP_LAST_DATASET_CHECK_AT = "map_last_dataset_check_at"
         private const val KEY_MAP_INSTALLATION_ID = "map_installation_id"
+        private const val KEY_VOICE_GUIDANCE_ENABLED = "voice_guidance_enabled"
+        private const val KEY_HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
+        private const val KEY_SCREEN_COLOR_FEEDBACK_ENABLED = "screen_color_feedback_enabled"
     }
 }

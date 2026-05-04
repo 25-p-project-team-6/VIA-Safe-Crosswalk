@@ -37,6 +37,10 @@
             android:exported="true"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".settings.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".DebugMapActivity"
             android:exported="false"
             android:screenOrientation="portrait" />
