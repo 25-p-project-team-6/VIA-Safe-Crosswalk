@@ -1714,6 +1714,9 @@ class MainActivity : AppCompatActivity() {
                 "reason=${analysisResult.guidanceBlockReason}," +
                 "advisory=${analysisResult.advisoryState}," +
                 "confidence=${analysisResult.advisoryConfidenceLevel}:${analysisResult.advisoryConfidenceScore}," +
+                "advisoryReasons=${analysisResult.advisoryConfidenceReasons.joinToString("|").ifBlank { "none" }}," +
+                "signals=human:${analysisResult.trafficLightCount}|vehicle:${analysisResult.vehicleTrafficLightCount}," +
+                "ambiguity=multi:${analysisResult.multipleSignalDetected}|zoom:${analysisResult.needsZoomSuggestion}|reacquire:${analysisResult.targetRecentlyReacquired}|clusterChanges:${analysisResult.recentMatchedClusterChangeCount}," +
                 "tier=${analysisResult.guidanceContinuityTier}," +
                 "handoff=${analysisResult.handoffDecision}," +
                 "caution=${analysisResult.occupancyCaution}," +
