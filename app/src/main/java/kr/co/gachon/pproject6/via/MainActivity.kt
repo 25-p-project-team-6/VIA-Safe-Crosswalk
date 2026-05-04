@@ -20,6 +20,7 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import android.view.KeyEvent
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -42,6 +43,8 @@ import kr.co.gachon.pproject6.via.feedback.SignalFeedbackManager
 import kr.co.gachon.pproject6.via.camera.CameraManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
+import kr.co.gachon.pproject6.via.input.RemoteButtonAction
+import kr.co.gachon.pproject6.via.input.RemoteButtonPressClassifier
 import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
 import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.DetectionLabels
@@ -64,6 +67,7 @@ import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.onboarding.OnboardingActivity
+import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
 import kr.co.gachon.pproject6.via.settings.SettingsActivity
 import kr.co.gachon.pproject6.via.ui.OverlayView
 import kr.co.gachon.pproject6.via.util.ImageUtils
@@ -145,6 +149,7 @@ class MainActivity : AppCompatActivity() {
     private val locationManager by lazy {
         getSystemService(LocationManager::class.java)
     }
+    private val remoteButtonClassifier = RemoteButtonPressClassifier()
     private var latestCrossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
 
     private var cameraManager: CameraManager? = null
@@ -308,7 +313,7 @@ class MainActivity : AppCompatActivity() {
         tuningDebugText = findViewById(R.id.tuningDebugText)
         statusTitleText = findViewById(R.id.statusTitleText)
         statusDetailText = findViewById(R.id.statusDetailText)
-        addNearbyCrosswalkGuideButton()
+        addMainActionButtons()
         statusIconText = findViewById(R.id.statusIconText)
         statusBadgeText = findViewById(R.id.statusBadgeText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
@@ -459,32 +464,80 @@ class MainActivity : AppCompatActivity() {
         setupModelSpinner()
     }
 
-    private fun addNearbyCrosswalkGuideButton(): MaterialButton {
+    private fun addMainActionButtons() {
         val statusContent =
             (statusPanel as? ViewGroup)?.getChildAt(0) as? LinearLayout
                 ?: error("statusPanel content must be a LinearLayout")
-        return MaterialButton(this).apply {
-            text = "주변 횡단보도 안내"
-            isAllCaps = false
-            textSize = 17f
-            minHeight = dp(56)
-            cornerRadius = dp(18)
-            layoutParams =
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    topMargin = dp(16)
-                }
-            setOnClickListener {
+        statusContent.addView(
+            mainActionButton("주변 횡단보도 안내") {
                 announceNearbyCrosswalk()
             }
-            statusContent.addView(this)
+        )
+        statusContent.addView(
+            mainActionButton("비상 문자 5초 유예") {
+                openEmergencyContact(autoStartCountdown = true)
+            }
+        )
+    }
+
+    private fun mainActionButton(
+        label: String,
+        onClick: () -> Unit
+    ): MaterialButton = MaterialButton(this).apply {
+        text = label
+        isAllCaps = false
+        textSize = 17f
+        minHeight = dp(56)
+        cornerRadius = dp(18)
+        layoutParams =
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+            }
+        setOnClickListener {
+            onClick()
         }
     }
 
     private fun dp(value: Int): Int {
         return (value * resources.displayMetrics.density).toInt()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_SPACE) {
+            return super.dispatchKeyEvent(event)
+        }
+
+        val action =
+            when (event.action) {
+                KeyEvent.ACTION_DOWN ->
+                    remoteButtonClassifier.onDown(
+                        eventTimeMs = event.eventTime,
+                        repeatCount = event.repeatCount
+                    )
+                KeyEvent.ACTION_UP ->
+                    remoteButtonClassifier.onUp(eventTimeMs = event.eventTime)
+                else -> null
+            }
+        action?.let { handleRemoteButtonAction(it) }
+        return true
+    }
+
+    private fun handleRemoteButtonAction(action: RemoteButtonAction) {
+        when (action) {
+            RemoteButtonAction.SHORT_PRESS -> {
+                Log.i("VIA_REMOTE", "Space short press: nearby crosswalk guidance")
+                Toast.makeText(this, "리모컨: 주변 횡단보도 안내", Toast.LENGTH_SHORT).show()
+                announceNearbyCrosswalk()
+            }
+            RemoteButtonAction.LONG_PRESS -> {
+                Log.i("VIA_REMOTE", "Space long press: emergency SMS countdown")
+                Toast.makeText(this, "리모컨: 비상 문자 5초 유예", Toast.LENGTH_SHORT).show()
+                openEmergencyContact(autoStartCountdown = true)
+            }
+        }
     }
 
     override fun onResume() {
@@ -1455,6 +1508,13 @@ class MainActivity : AppCompatActivity() {
             message = guidanceMessage.speechText,
             utteranceId = "nearby_crosswalk_guidance"
         )
+    }
+
+    private fun openEmergencyContact(autoStartCountdown: Boolean) {
+        val intent = Intent(this, EmergencyContactActivity::class.java).apply {
+            putExtra(EmergencyContactActivity.EXTRA_AUTO_START_COUNTDOWN, autoStartCountdown)
+        }
+        startActivity(intent)
     }
 
     private fun crosswalkGuidanceSnapshot(): CrossingSupportSnapshot {
