@@ -469,12 +469,18 @@ class MainActivity : AppCompatActivity() {
             (statusPanel as? ViewGroup)?.getChildAt(0) as? LinearLayout
                 ?: error("statusPanel content must be a LinearLayout")
         statusContent.addView(
-            mainActionButton("주변 횡단보도 안내") {
+            mainActionButton(
+                label = "주변 횡단보도 안내",
+                description = "가까운 횡단보도 거리와 방향 안내"
+            ) {
                 announceNearbyCrosswalk()
             }
         )
         statusContent.addView(
-            mainActionButton("비상 문자 5초 유예") {
+            mainActionButton(
+                label = "비상 연락",
+                description = "비상 문자 5초 유예 화면 열기"
+            ) {
                 openEmergencyContact(autoStartCountdown = true)
             }
         )
@@ -482,19 +488,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun mainActionButton(
         label: String,
+        description: String,
         onClick: () -> Unit
     ): MaterialButton = MaterialButton(this).apply {
         text = label
+        contentDescription = description
         isAllCaps = false
         textSize = 17f
-        minHeight = dp(56)
+        minHeight = dp(64)
         cornerRadius = dp(18)
         layoutParams =
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(12)
+                topMargin = dp(14)
             }
         setOnClickListener {
             onClick()
@@ -1598,6 +1606,7 @@ class MainActivity : AppCompatActivity() {
             statusTitleText.text = "분석 일시중지"
             statusTitleText.setTextColor(Color.WHITE)
             statusDetailText.text = "신호 인식이 일시중지되었습니다"
+            statusPanel.contentDescription = "현재 상태: 분석 일시중지. 신호 인식이 일시중지되었습니다."
             return
         }
         statusTitleText.text = analysisResult.advisoryTitleText
@@ -1611,6 +1620,8 @@ class MainActivity : AppCompatActivity() {
             }
         )
         statusDetailText.text = analysisResult.advisoryDetailText
+        statusPanel.contentDescription =
+            "현재 상태: ${analysisResult.advisoryTitleText}. ${analysisResult.advisoryDetailText}"
     }
 
     private fun updateStatusVisuals(
@@ -1622,6 +1633,7 @@ class MainActivity : AppCompatActivity() {
             statusTintOverlay.setBackgroundColor(Color.TRANSPARENT)
             statusTintOverlay.alpha = 0f
             statusIconText.text = "?"
+            statusIconText.contentDescription = "분석 일시중지"
             statusIconText.setTextColor(ContextCompat.getColor(this, R.color.via_on_surface))
             statusIconText.backgroundTintList =
                 ColorStateList.valueOf(ContextCompat.getColor(this, R.color.via_status_wait))
@@ -1636,10 +1648,12 @@ class MainActivity : AppCompatActivity() {
         statusTintOverlay.setBackgroundColor(tintColor)
         statusTintOverlay.alpha = if (tintColor == Color.TRANSPARENT) 0f else 1f
         statusIconText.text = visualState.iconText
+        statusIconText.contentDescription = statusTitleText.text
         statusIconText.setTextColor(visualState.iconTextColor)
         statusIconText.backgroundTintList = ColorStateList.valueOf(visualState.iconBackgroundColor)
         statusBadgeText.visibility = if (visualState.badgeText != null) View.VISIBLE else View.GONE
         statusBadgeText.text = visualState.badgeText ?: ""
+        statusBadgeText.contentDescription = visualState.badgeText ?: ""
     }
 
     private fun deriveStatusVisualState(
@@ -1658,10 +1672,10 @@ class MainActivity : AppCompatActivity() {
 
             analysisResult.advisoryState == AdvisoryState.GREEN_WITH_CAUTION ->
                 StatusVisualState(
-                    iconText = "▶",
-                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_go),
-                    iconTextColor = ContextCompat.getColor(this, R.color.via_on_primary),
-                    tintColor = Color.TRANSPARENT,
+                    iconText = "!",
+                    iconBackgroundColor = ContextCompat.getColor(this, R.color.via_status_caution),
+                    iconTextColor = ContextCompat.getColor(this, R.color.via_status_badge_on),
+                    tintColor = Color.parseColor("#3DFFC857"),
                     borderResId = R.drawable.border_green,
                     badgeText = "차량 주의"
                 )

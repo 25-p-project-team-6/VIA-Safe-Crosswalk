@@ -50,6 +50,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertEquals(AdvisoryConfidenceLevel.HIGH, advisory.confidenceLevel)
+        assertEquals("보행자 신호 초록으로 보임", advisory.titleText)
     }
 
     @Test
@@ -82,7 +83,25 @@ class SignalAdvisoryEvaluatorTest {
         val advisory = evaluator.evaluate(result)
 
         assertEquals(AdvisoryState.GREEN_WITH_CAUTION, advisory.state)
+        assertEquals("초록으로 보이나 주의 필요", advisory.titleText)
         assertTrue(advisory.detailText.contains("점유"))
+    }
+
+    @Test
+    fun lowVisionTitlesUseConsistentStateLanguage() {
+        val red = evaluator.evaluate(baseResult(trafficState = TrafficLightState.RED))
+        val wait =
+            evaluator.evaluate(
+                baseResult(
+                    trafficState = TrafficLightState.GREEN,
+                    guidanceBlockReason = GuidanceBlockReason.NEED_RED_BASELINE
+                )
+            )
+        val uncertain = evaluator.evaluate(baseResult(trafficState = TrafficLightState.UNKNOWN))
+
+        assertEquals("보행자 신호 빨간색으로 보임", red.titleText)
+        assertEquals("다음 신호 대기 권장", wait.titleText)
+        assertEquals("신호 확인 불확실", uncertain.titleText)
     }
 
     @Test
