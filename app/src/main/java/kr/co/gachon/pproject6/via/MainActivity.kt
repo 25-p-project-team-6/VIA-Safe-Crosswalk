@@ -773,7 +773,8 @@ class MainActivity : AppCompatActivity() {
                         frameStartNs = frameStartNs,
                         stageDurationsMs = stageDurationsMs,
                         analysisOutputTransform = null,
-                        useLiveContext = false
+                        useLiveContext = false,
+                        mapOverlayDirectlyToView = true
                     )
 
                     val elapsedMs = elapsedMillis(frameStartNs)
@@ -1021,7 +1022,8 @@ class MainActivity : AppCompatActivity() {
                 frameStartNs = frameStartNs,
                 stageDurationsMs = stageDurationsMs,
                 analysisOutputTransform = analysisOutputTransform,
-                useLiveContext = true
+                useLiveContext = true,
+                mapOverlayDirectlyToView = false
             )
         } catch (e: Exception) {
             Log.e("MainActivity", "Error processing camera frame", e)
@@ -1037,7 +1039,8 @@ class MainActivity : AppCompatActivity() {
         frameStartNs: Long,
         stageDurationsMs: LinkedHashMap<String, Long>,
         analysisOutputTransform: OutputTransform?,
-        useLiveContext: Boolean
+        useLiveContext: Boolean,
+        mapOverlayDirectlyToView: Boolean
     ) {
         val activeDetector = detector ?: return
 
@@ -1086,7 +1089,8 @@ class MainActivity : AppCompatActivity() {
                 bitmap = bitmap,
                 analysisResult = analysisResult,
                 showRawBoxes = rawDetectionSwitch.isChecked,
-                analysisOutputTransform = analysisOutputTransform
+                analysisOutputTransform = analysisOutputTransform,
+                mapOverlayDirectlyToView = mapOverlayDirectlyToView
             )
             updateTargetInfo(analysisResult, enableTrafficLogic)
             updateDecisionDebugInfo(analysisResult, enableTrafficLogic)
@@ -1129,16 +1133,21 @@ class MainActivity : AppCompatActivity() {
         bitmap: Bitmap,
         analysisResult: SignalAnalysisResult,
         showRawBoxes: Boolean,
-        analysisOutputTransform: OutputTransform?
+        analysisOutputTransform: OutputTransform?,
+        mapOverlayDirectlyToView: Boolean
     ) {
         if (showRawBoxes && showBBoxOverlay) {
             val mappedBoxes =
-                mapBoxesToPreviewView(
-                    boxes = analysisResult.boxesToShow,
-                    sourceWidth = bitmap.width.toFloat(),
-                    sourceHeight = bitmap.height.toFloat(),
-                    analysisOutputTransform = analysisOutputTransform
-                )
+                if (mapOverlayDirectlyToView) {
+                    mapNormalizedBoxesDirectlyToOverlay(analysisResult.boxesToShow)
+                } else {
+                    mapBoxesToPreviewView(
+                        boxes = analysisResult.boxesToShow,
+                        sourceWidth = bitmap.width.toFloat(),
+                        sourceHeight = bitmap.height.toFloat(),
+                        analysisOutputTransform = analysisOutputTransform
+                    )
+                }
             if (mappedBoxes != null) {
                 overlay.setResults(mappedBoxes, inViewCoordinates = true)
             } else {
@@ -1147,6 +1156,27 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             overlay.setResults(emptyList(), inViewCoordinates = true)
+        }
+    }
+
+    private fun mapNormalizedBoxesDirectlyToOverlay(
+        boxes: List<OverlayView.BoundingBox>
+    ): List<OverlayView.BoundingBox> {
+        val viewWidth = overlay.width.toFloat().takeIf { it > 0f } ?: videoReplayFrameView.width.toFloat()
+        val viewHeight = overlay.height.toFloat().takeIf { it > 0f } ?: videoReplayFrameView.height.toFloat()
+        return boxes.map { box ->
+            OverlayView.BoundingBox(
+                box = RectF(
+                    box.box.left * viewWidth,
+                    box.box.top * viewHeight,
+                    box.box.right * viewWidth,
+                    box.box.bottom * viewHeight
+                ),
+                clsName = box.clsName,
+                score = box.score,
+                debugRatio = box.debugRatio,
+                isTarget = box.isTarget
+            )
         }
     }
 
