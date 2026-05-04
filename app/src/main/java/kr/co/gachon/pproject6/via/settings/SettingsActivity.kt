@@ -48,7 +48,7 @@ class SettingsActivity : AppCompatActivity() {
             startActivity(Intent(this, EmergencyContactActivity::class.java))
         }
         findViewById<MaterialButton>(R.id.bluetoothGuideButton).setOnClickListener {
-            showNextIssueToast("블루투스 버튼 안내/테스트는 #35에서 연결됩니다.")
+            showNextIssueToast("Space 짧게: 횡단보도 안내 · 길게: 비상 문자 5초 유예")
         }
         findViewById<MaterialButton>(R.id.usageGuideButton).setOnClickListener {
             showNextIssueToast("앱 사용 안내는 #38에서 정리됩니다.")
