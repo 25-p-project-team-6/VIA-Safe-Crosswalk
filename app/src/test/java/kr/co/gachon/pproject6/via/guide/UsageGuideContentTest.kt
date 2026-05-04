@@ -24,10 +24,25 @@ class UsageGuideContentTest {
     @Test
     fun guideDoesNotSayCrossingIsGuaranteedSafe() {
         val content = fullGuideText()
-        val forbiddenPhrases = listOf("건너도 된다", "안전하게 건너", "무조건 건너")
+        val forbiddenPhrases = listOf("건너세요", "건너도 된다", "안전하게 건너", "무조건 건너")
 
         forbiddenPhrases.forEach { phrase ->
             assertTrue("guide should not contain '$phrase'", !content.contains(phrase))
+        }
+    }
+
+    @Test
+    fun guideExplainsFinalAdvisoryStateLabels() {
+        val content = fullGuideText()
+
+        listOf(
+            "보행자 신호 초록으로 보임",
+            "보행자 신호 빨간색으로 보임",
+            "초록으로 보이나 주의 필요",
+            "신호 확인 불확실",
+            "다음 신호 대기 권장"
+        ).forEach { label ->
+            assertTrue("guide should explain '$label'", content.contains(label))
         }
     }
 
