@@ -34,16 +34,7 @@ class SignalAdvisoryEvaluatorTest {
                 userGuidanceState = UserGuidanceState.GO,
                 targetScore = 0.88f,
                 trafficLightCount = 1,
-                crossingSupportSnapshot =
-                    CrossingSupportSnapshot(
-                        mapProximitySnapshot =
-                            MapProximitySnapshot(
-                                isNearKnownFeature = true,
-                                matchedClusterId = "cluster-a",
-                                matchedKind = MapFeatureKind.PED_SIGNAL,
-                                matchedSource = MapFeatureSource.HYBRID
-                            )
-                    )
+                crossingSupportSnapshot = matchedPedSignalSnapshot()
             )
 
         val advisory = evaluator.evaluate(result)
@@ -122,6 +113,128 @@ class SignalAdvisoryEvaluatorTest {
         assertTrue(advisory.speechText.contains("차량 신호"))
     }
 
+    @Test
+    fun greenWithVehicleSignalVisibleDoesNotBecomeConfirmedGreen() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                targetScore = 0.9f,
+                trafficLightCount = 1,
+                vehicleTrafficLightCount = 1,
+                crossingSupportSnapshot = matchedPedSignalSnapshot()
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
+    }
+
+    @Test
+    fun redCanRemainConfirmedWhileVehicleSignalReasonLowersConfidence() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.RED,
+                userGuidanceState = UserGuidanceState.STOP,
+                targetScore = 0.85f,
+                trafficLightCount = 1,
+                vehicleTrafficLightCount = 1
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.RED_CONFIRMED, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
+    }
+
+    @Test
+    fun advisoryCopyDoesNotUseCommandStyleCrossingInstructions() {
+        val assessments =
+            listOf(
+                evaluator.evaluate(baseResult(trafficState = TrafficLightState.RED)),
+                evaluator.evaluate(
+                    baseResult(
+                        trafficState = TrafficLightState.GREEN,
+                        userGuidanceState = UserGuidanceState.GO,
+                        crossingSupportSnapshot = matchedPedSignalSnapshot()
+                    )
+                ),
+                evaluator.evaluate(
+                    baseResult(
+                        trafficState = TrafficLightState.GREEN,
+                        userGuidanceState = UserGuidanceState.GO,
+                        occupancyCaution = true,
+                        occupancyCautionLabels = listOf(DetectionLabels.VEHICLE)
+                    )
+                ),
+                evaluator.evaluate(
+                    baseResult(
+                        trafficState = TrafficLightState.GREEN,
+                        guidanceBlockReason = GuidanceBlockReason.NEED_RED_BASELINE
+                    )
+                ),
+                evaluator.evaluate(baseResult(trafficState = TrafficLightState.UNKNOWN))
+            )
+        val forbiddenPhrases = listOf("건너세요", "멈추세요", "건너도", "건널 수")
+
+        assessments.forEach { assessment ->
+            val text = "${assessment.titleText}\n${assessment.detailText}\n${assessment.speechText}"
+            forbiddenPhrases.forEach { phrase ->
+                assertTrue("advisory copy should not contain '$phrase'", !text.contains(phrase))
+            }
+        }
+    }
+
+    @Test
+    fun confidenceThresholdsStayAlignedWithEvaluationPlan() {
+        val config = GuidanceTuningDefaults.advisoryConfig
+
+        assertEquals(75, config.highConfidenceMinScore)
+        assertEquals(55, config.mediumConfidenceMinScore)
+        assertTrue(config.highConfidenceMinScore > config.mediumConfidenceMinScore)
+    }
+
+    @Test
+    fun ambiguityReasonsCoverEvaluationDimensions() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                trafficLightCount = 2,
+                vehicleTrafficLightCount = 1,
+                multipleSignalDetected = true,
+                needsZoomSuggestion = true,
+                targetRecentlyReacquired = true,
+                recentMatchedClusterChangeCount = 1
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        listOf(
+            AdvisoryConfidenceReason.MULTIPLE_SIGNALS,
+            AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE,
+            AdvisoryConfidenceReason.TARGET_SMALL,
+            AdvisoryConfidenceReason.TARGET_RECENTLY_REACQUIRED,
+            AdvisoryConfidenceReason.MATCHED_CLUSTER_CHANGED
+        ).forEach { reason ->
+            assertTrue("missing $reason", advisory.confidenceReasons.contains(reason))
+        }
+        assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
+    }
+
+    private fun matchedPedSignalSnapshot(): CrossingSupportSnapshot {
+        return CrossingSupportSnapshot(
+            mapProximitySnapshot =
+                MapProximitySnapshot(
+                    isNearKnownFeature = true,
+                    matchedClusterId = "cluster-a",
+                    matchedKind = MapFeatureKind.PED_SIGNAL,
+                    matchedSource = MapFeatureSource.HYBRID
+                )
+        )
+    }
+
     private fun baseResult(
         trafficState: TrafficLightState = TrafficLightState.UNKNOWN,
         userGuidanceState: UserGuidanceState = UserGuidanceState.WAIT,
@@ -131,6 +244,8 @@ class SignalAdvisoryEvaluatorTest {
         vehicleTrafficLightCount: Int = 0,
         multipleSignalDetected: Boolean = false,
         needsZoomSuggestion: Boolean = false,
+        targetRecentlyReacquired: Boolean = false,
+        recentMatchedClusterChangeCount: Int = 0,
         occupancyCaution: Boolean = false,
         occupancyCautionLabels: List<String> = emptyList(),
         crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
@@ -144,8 +259,8 @@ class SignalAdvisoryEvaluatorTest {
             vehicleTrafficLightCount = vehicleTrafficLightCount,
             multipleSignalDetected = multipleSignalDetected,
             needsZoomSuggestion = needsZoomSuggestion,
-            targetRecentlyReacquired = false,
-            recentMatchedClusterChangeCount = 0,
+            targetRecentlyReacquired = targetRecentlyReacquired,
+            recentMatchedClusterChangeCount = recentMatchedClusterChangeCount,
             trafficState = trafficState,
             userGuidanceState = userGuidanceState,
             guidancePhase = GuidancePhase.WAITING_FOR_RED_BASELINE,
