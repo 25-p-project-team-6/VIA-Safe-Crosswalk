@@ -37,6 +37,7 @@ import kr.co.gachon.pproject6.via.context.CrossingSupportManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
 import kr.co.gachon.pproject6.via.ml.AdvisoryState
+import kr.co.gachon.pproject6.via.ml.DetectionLabels
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
 import kr.co.gachon.pproject6.via.ml.GuidancePhase
 import kr.co.gachon.pproject6.via.ml.SignalAdvisoryEvaluator
@@ -157,7 +158,7 @@ class MainActivity : AppCompatActivity() {
     // GPU Support Flag
     private var isGpuSupported = false
     
-    private var currentModelName = "best_float16_640.tflite" // Practical default for current device targets
+    private var currentModelName = "best_7cls_v2_float16_320.tflite" // Safe default for the 7-class pedestrian/vehicle signal model
     private var currentModelProfile = InferenceModelProfile.fromFileName(currentModelName)
     private var availableModelFiles: List<String> = emptyList()
     private var initialBackendPreference: String? = null
@@ -204,9 +205,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    // traffic lights fine-tuned model label
-    private val finetunedLabels =
-        listOf("bicycle", "car", "motorcycle", "bus", "train", "truck", "green", "red")
+    // 7-class fine-tuned model labels. Only human_* labels drive pedestrian signal guidance.
+    private val finetunedLabels = DetectionLabels.sevenClassLabels
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
         buildInfoText.text = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.BUILD_STAMP}"
         updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
-        modelNameText.text = "모델: ${currentModelProfile.displayNameWithSize()}"
+        modelNameText.text = "모델: $currentModelName"
 
         debugContainer.visibility =
             if (showDebugInfo) View.VISIBLE else View.GONE
@@ -414,12 +414,15 @@ class MainActivity : AppCompatActivity() {
         // Explicitly map each class to its respective slider value
         val specificMap = mutableMapOf<String, Float>()
         
-        // 1. Traffic Lights -> Traffic Slider
-        specificMap["green"] = trafficLightThreshold
-        specificMap["red"] = trafficLightThreshold
+        // 1. Human and vehicle traffic lights -> Traffic Slider.
+        // Vehicle traffic lights are detected for uncertainty/debug only and never drive GO.
+        specificMap[DetectionLabels.HUMAN_GREEN] = trafficLightThreshold
+        specificMap[DetectionLabels.HUMAN_RED] = trafficLightThreshold
+        specificMap[DetectionLabels.VEHICLE_GREEN] = trafficLightThreshold
+        specificMap[DetectionLabels.VEHICLE_RED] = trafficLightThreshold
         
         // 2. Verified Objects -> General Slider
-        val others = listOf("bicycle", "car", "motorcycle", "bus", "train", "truck")
+        val others = listOf(DetectionLabels.BICYCLE, DetectionLabels.MOTORCYCLE, DetectionLabels.VEHICLE)
         for (label in others) {
             specificMap[label] = generalObjThreshold
         }
@@ -430,8 +433,7 @@ class MainActivity : AppCompatActivity() {
     private fun discoverModelFiles(): List<String> {
         return try {
             assets.list("")
-                ?.filter { it.endsWith(".tflite", ignoreCase = true) }
-                ?.sorted()
+                ?.let { DetectionLabels.modelFilesForActiveSchema(it.toList()) }
                 ?: emptyList()
         } catch (e: Exception) {
             Log.e("MainActivity", "Error scanning model assets", e)
@@ -471,11 +473,10 @@ class MainActivity : AppCompatActivity() {
             val modelFiles = availableModelFiles
 
             if (modelFiles.isNotEmpty()) {
-                val modelProfiles = modelFiles.map(InferenceModelProfile::fromFileName)
                 val adapter = android.widget.ArrayAdapter(
                     this,
                     android.R.layout.simple_spinner_item,
-                    modelProfiles.map { it.displayNameWithSize() }
+                    modelFiles
                 )
                 adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
                 spinner.adapter = adapter
@@ -494,7 +495,7 @@ class MainActivity : AppCompatActivity() {
                             position: Int,
                             id: Long
                         ) {
-                            val selectedModel = modelProfiles[position].fileName
+                            val selectedModel = modelFiles[position]
                             if (selectedModel != currentModelName) {
                                 applyModelSelection(selectedModel)
                             }
@@ -566,7 +567,13 @@ class MainActivity : AppCompatActivity() {
                     useGpu = useGpu,
                     labels = finetunedLabels,
                     defaultIouThreshold = 0.5f,
-                    specificIouThresholds = mapOf("red" to 0.05f, "green" to 0.05f)
+                    specificIouThresholds =
+                        mapOf(
+                            DetectionLabels.HUMAN_RED to 0.05f,
+                            DetectionLabels.HUMAN_GREEN to 0.05f,
+                            DetectionLabels.VEHICLE_RED to 0.05f,
+                            DetectionLabels.VEHICLE_GREEN to 0.05f
+                        )
                 )
 
                 newDetector.setup()
@@ -582,7 +589,7 @@ class MainActivity : AppCompatActivity() {
                             "analysis=${currentModelProfile.analysisResolution.width}x" +
                             "${currentModelProfile.analysisResolution.height}"
                     modelNameText.text =
-                        "모델: ${currentModelProfile.displayNameWithSize()} (${newDetector.runtimeBackendLabel})"
+                        "모델: $modelName (${newDetector.runtimeBackendLabel})"
                     Log.i("VIA_GPU", backendStatus)
                     publishBackendStatus("Backend: ${newDetector.runtimeBackendLabel}")
                     if (restartCameraAfterInit && hasStartedCamera) {
@@ -960,7 +967,7 @@ class MainActivity : AppCompatActivity() {
                     "Context : tier=${analysisResult.guidanceContinuityTier} | handoff=${analysisResult.handoffDecision} | caution=${analysisResult.occupancyCaution}"
                 )
                 appendLine(
-                    "Advisory: ${analysisResult.advisoryState} | conf=${analysisResult.advisoryConfidenceLevel}(${analysisResult.advisoryConfidenceScore}) | signals=${analysisResult.trafficLightCount} | zoom=${analysisResult.needsZoomSuggestion} | reacquire=${analysisResult.targetRecentlyReacquired} | clusterChanges=${analysisResult.recentMatchedClusterChangeCount}"
+                    "Advisory: ${analysisResult.advisoryState} | conf=${analysisResult.advisoryConfidenceLevel}(${analysisResult.advisoryConfidenceScore}) | humanSignals=${analysisResult.trafficLightCount} | vehicleSignals=${analysisResult.vehicleTrafficLightCount} | zoom=${analysisResult.needsZoomSuggestion} | reacquire=${analysisResult.targetRecentlyReacquired} | clusterChanges=${analysisResult.recentMatchedClusterChangeCount}"
                 )
                 append(
                     "Map     : near=${map.isNearKnownFeature}, kind=${map.matchedKind?.wireName ?: "none"}, source=${map.matchedSource?.wireName ?: "none"}, dist=${map.distanceMeters?.let { String.format(Locale.US, "%.1f", it) + "m" } ?: "n/a"}, cluster=${shortMapId(map.matchedClusterId)}, members=${map.matchedMemberCount}, transition=${map.clusterTransitionKind.wireName}, ver=${map.datasetVersion ?: "none"}"
