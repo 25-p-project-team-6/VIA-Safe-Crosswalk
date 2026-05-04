@@ -85,17 +85,21 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         cancelVibration()
     }
 
+    fun speakImmediate(message: String, utteranceId: String = "manual_guidance") {
+        speak(message, utteranceId)
+    }
+
     fun release() {
         clearState()
         tts.shutdown()
     }
 
-    private fun speak(message: String) {
+    private fun speak(message: String, utteranceId: String = "traffic_light_state") {
         if (!voiceEnabled || !ttsReady) {
             return
         }
 
-        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, "traffic_light_state")
+        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 
     private fun vibrate(pattern: LongArray) {

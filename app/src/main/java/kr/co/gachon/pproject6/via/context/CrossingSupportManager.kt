@@ -203,7 +203,8 @@ class CrossingSupportManager(
             currentLocationLatitude = lastLocationSample?.latitude,
             currentLocationLongitude = lastLocationSample?.longitude,
             currentLocationAccuracyMeters =
-                if (lastLocationSample?.hasAccuracy() == true) lastLocationSample?.accuracy else null
+                if (lastLocationSample?.hasAccuracy() == true) lastLocationSample?.accuracy else null,
+            currentHeadingDegrees = lastHeadingDegrees
         )
     }
 
@@ -391,7 +392,8 @@ data class CrossingSupportSnapshot(
     val mapProximitySnapshot: MapProximitySnapshot = MapProximitySnapshot(),
     val currentLocationLatitude: Double? = null,
     val currentLocationLongitude: Double? = null,
-    val currentLocationAccuracyMeters: Float? = null
+    val currentLocationAccuracyMeters: Float? = null,
+    val currentHeadingDegrees: Float? = null
 ) {
     val supportsWalkContinuation: Boolean
         get() = hasRecentGyroMotion || hasRecentLocationMovement || isLookingDown
@@ -400,6 +402,7 @@ data class CrossingSupportSnapshot(
         val latSummary = currentLocationLatitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"
         val lonSummary = currentLocationLongitude?.let { String.format(Locale.US, "%.6f", it) } ?: "n/a"
         val accSummary = currentLocationAccuracyMeters?.let { String.format(Locale.US, "%.1f", it) } ?: "n/a"
-        return "motion=$hasRecentGyroMotion, down=$isLookingDown, up=$isLookingUp, tilt=${String.format(Locale.US, "%.0f", currentTiltDegrees)}, signedTilt=${String.format(Locale.US, "%.0f", currentSignedTiltDegrees)}, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, window=$isCrossingWindowActive, dist=${String.format(Locale.US, "%.1f", crossingWindowDistanceMeters)}, elapsed=${crossingWindowElapsedMs}ms, lat=$latSummary, lon=$lonSummary, acc=${accSummary}m, ${mapProximitySnapshot.toDebugSummary()}"
+        val headingSummary = currentHeadingDegrees?.let { String.format(Locale.US, "%.0f", it) } ?: "n/a"
+        return "motion=$hasRecentGyroMotion, down=$isLookingDown, up=$isLookingUp, tilt=${String.format(Locale.US, "%.0f", currentTiltDegrees)}, signedTilt=${String.format(Locale.US, "%.0f", currentSignedTiltDegrees)}, gps=$hasRecentLocationMovement, keep=$supportsWalkContinuation, window=$isCrossingWindowActive, dist=${String.format(Locale.US, "%.1f", crossingWindowDistanceMeters)}, elapsed=${crossingWindowElapsedMs}ms, lat=$latSummary, lon=$lonSummary, acc=${accSummary}m, heading=$headingSummary, ${mapProximitySnapshot.toDebugSummary()}"
     }
 }
