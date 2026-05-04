@@ -75,12 +75,7 @@ class EmergencyContactActivity : AppCompatActivity() {
             Toast.makeText(this, "비상 연락처를 삭제했습니다.", Toast.LENGTH_SHORT).show()
         }
         sendButton.setOnClickListener {
-            if (!ensureContactSaved()) return@setOnClickListener
-            if (hasSmsPermission()) {
-                startEmergencyCountdown()
-            } else {
-                requestSmsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
-            }
+            requestEmergencyCountdown()
         }
         cancelButton.setOnClickListener {
             cancelEmergencyCountdown()
@@ -89,6 +84,11 @@ class EmergencyContactActivity : AppCompatActivity() {
         views.openSmsAppButton.setOnClickListener {
             if (ensureContactSaved()) {
                 openSmsApp()
+            }
+        }
+        if (intent.getBooleanExtra(EXTRA_AUTO_START_COUNTDOWN, false)) {
+            views.root.post {
+                requestEmergencyCountdown()
             }
         }
     }
@@ -123,6 +123,17 @@ class EmergencyContactActivity : AppCompatActivity() {
             false
         } else {
             true
+        }
+    }
+
+    private fun requestEmergencyCountdown() {
+        if (!ensureContactSaved()) {
+            return
+        }
+        if (hasSmsPermission()) {
+            startEmergencyCountdown()
+        } else {
+            requestSmsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
         }
     }
 
@@ -401,8 +412,10 @@ class EmergencyContactActivity : AppCompatActivity() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
 
-    private companion object {
+    companion object {
         private const val AUTO_SEND_DELAY_MS = 5_000L
+        const val EXTRA_AUTO_START_COUNTDOWN =
+            "kr.co.gachon.pproject6.via.safety.AUTO_START_COUNTDOWN"
     }
 }
 
