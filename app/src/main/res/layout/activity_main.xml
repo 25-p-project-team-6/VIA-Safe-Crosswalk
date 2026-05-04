@@ -256,19 +256,12 @@
                 <Spinner
                     android:id="@+id/modelSpinner"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="52dp"
                     android:layout_marginTop="6dp"
-                    android:backgroundTint="@color/via_accent_container"
+                    android:background="@drawable/debug_spinner_outline_background"
+                    android:minHeight="52dp"
+                    android:paddingHorizontal="12dp"
                     android:importantForAccessibility="yes" />
-
-                <TextView
-                    android:id="@+id/modelSpinnerHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="눌러서 7cls_v2 해상도/INT8·float16 모델을 바꿔 테스트"
-                    android:textColor="@color/via_on_surface_variant"
-                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/inputFpsText"
@@ -473,7 +466,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="Down Tilt: 45°"
+                    android:text="Down Tilt Range: -160..-90"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
@@ -482,9 +475,28 @@
                     android:id="@+id/downTiltSlider"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:value="45"
-                    android:valueFrom="20.0"
-                    android:valueTo="90.0"
+                    android:value="90"
+                    android:valueFrom="70.0"
+                    android:valueTo="140.0"
+                    android:stepSize="1.0" />
+
+                <TextView
+                    android:id="@+id/upTiltLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Up Tilt Range: 90..120"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/upTiltSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="120"
+                    android:valueFrom="90.0"
+                    android:valueTo="170.0"
                     android:stepSize="1.0" />
             </LinearLayout>
         </ScrollView>
