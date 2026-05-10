@@ -81,15 +81,15 @@ class SignalAdvisoryEvaluatorTest {
     }
 
     @Test
-    fun vehicleSignalConflictStillSuppressesWalkAllowedGreen() {
+    fun vehicleSignalOnlyConflictStillSuppressesWalkAllowedGreen() {
         val result =
             baseResult(
                 trafficState = TrafficLightState.GREEN,
                 userGuidanceState = UserGuidanceState.GO,
-                trafficLightCount = 1,
+                trafficLightCount = 0,
                 vehicleTrafficLightCount = 1,
-                multipleSignalDetected = true,
-                needsZoomSuggestion = true
+                multipleSignalDetected = false,
+                needsZoomSuggestion = false
             )
 
         val advisory = evaluator.evaluate(result)
@@ -151,7 +151,7 @@ class SignalAdvisoryEvaluatorTest {
     }
 
     @Test
-    fun greenWithVehicleSignalVisibleDoesNotBecomeConfirmedGreen() {
+    fun pedestrianGreenTargetSurvivesVehicleSignalVisible() {
         val result =
             baseResult(
                 trafficState = TrafficLightState.GREEN,
@@ -164,8 +164,9 @@ class SignalAdvisoryEvaluatorTest {
 
         val advisory = evaluator.evaluate(result)
 
-        assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
+        assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
+        assertTrue(advisory.detailText.contains("차량 신호도 보이나"))
     }
 
     @Test

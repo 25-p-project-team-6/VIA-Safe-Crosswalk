@@ -163,6 +163,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingReplayUriAfterDetectorInit: Uri? = null
     private var videoReplayPlayer: MediaPlayer? = null
     private var videoReplaySurface: Surface? = null
+    private var zoomCheckedBeforeReplay: Boolean? = null
     private var inputRateLabel = "Camera FPS"
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
@@ -912,8 +913,12 @@ class MainActivity : AppCompatActivity() {
         videoReplayFrameView.visibility = View.VISIBLE
         videoReplayButton.text = "샘플 영상 중지"
         publishBackendStatus("Replay: preparing video input")
+        zoomCheckedBeforeReplay = zoomSwitch.isChecked
+        suppressZoomToggleCallback = true
+        zoomSwitch.isChecked = false
+        suppressZoomToggleCallback = false
         zoomSwitch.isEnabled = true
-        zoomSwitch.text = "Use 2x Zoom (Replay)"
+        zoomSwitch.text = "Use 2x Zoom (Replay, optional)"
         applySelectedZoom()
         prepareVideoReplayPlayer(uri)
 
@@ -1108,6 +1113,12 @@ class MainActivity : AppCompatActivity() {
         videoReplayFrameView.visibility = View.GONE
         viewFinder.visibility = View.VISIBLE
         videoReplayButton.text = "샘플 영상 선택"
+        zoomCheckedBeforeReplay?.let { previousZoom ->
+            suppressZoomToggleCallback = true
+            zoomSwitch.isChecked = previousZoom
+            suppressZoomToggleCallback = false
+        }
+        zoomCheckedBeforeReplay = null
         overlay.clear()
         inputRateLabel = "Camera FPS"
         resetPerformanceStats()
