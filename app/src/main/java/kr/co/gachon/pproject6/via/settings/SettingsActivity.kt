@@ -5,14 +5,16 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.View
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.switchmaterial.SwitchMaterial
 import kr.co.gachon.pproject6.via.R
-import kr.co.gachon.pproject6.via.guide.UsageGuideActivity
 import kr.co.gachon.pproject6.via.map.MapDebugCacheManager
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
 import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
@@ -24,6 +26,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         preferences = AppPreferences(this)
         setContentView(R.layout.activity_settings)
+        applySystemBarInsets()
 
         findViewById<MaterialButton>(R.id.settingsBackButton).setOnClickListener {
             finish()
@@ -47,12 +50,6 @@ class SettingsActivity : AppCompatActivity() {
 
         findViewById<MaterialButton>(R.id.contactSettingsButton).setOnClickListener {
             startActivity(Intent(this, EmergencyContactActivity::class.java))
-        }
-        findViewById<MaterialButton>(R.id.bluetoothGuideButton).setOnClickListener {
-            showNextIssueToast("Space 짧게: 횡단보도 안내 · 길게: 비상 문자 5초 유예")
-        }
-        findViewById<MaterialButton>(R.id.usageGuideButton).setOnClickListener {
-            startActivity(Intent(this, UsageGuideActivity::class.java))
         }
         findViewById<MaterialButton>(R.id.openDebugPanelButton).setOnClickListener {
             setResult(
@@ -78,6 +75,21 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.permissionStatusText).text = buildPermissionStatusText()
     }
 
+    private fun applySystemBarInsets() {
+        val content = findViewById<View>(R.id.settingsContent)
+        val baseBottomPadding = content.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.settingsRoot)) { _, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            content.setPadding(
+                content.paddingLeft,
+                content.paddingTop,
+                content.paddingRight,
+                baseBottomPadding + systemBars.bottom
+            )
+            insets
+        }
+    }
+
     private fun bindSwitch(
         switch: SwitchMaterial,
         initialValue: Boolean,
@@ -87,10 +99,6 @@ class SettingsActivity : AppCompatActivity() {
         switch.setOnCheckedChangeListener { _, isChecked ->
             onChanged(isChecked)
         }
-    }
-
-    private fun showNextIssueToast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 
     private fun buildPermissionStatusText(): String {

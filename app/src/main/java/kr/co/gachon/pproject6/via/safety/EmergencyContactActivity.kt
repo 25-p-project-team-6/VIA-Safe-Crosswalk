@@ -2,6 +2,7 @@ package kr.co.gachon.pproject6.via.safety
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
@@ -10,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
+import android.provider.ContactsContract
 import android.telephony.SmsManager
 import android.view.Gravity
 import android.view.View
@@ -46,6 +48,13 @@ class EmergencyContactActivity : AppCompatActivity() {
             }
         }
 
+    private val pickContactLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                result.data?.data?.let(::fillContactFromUri)
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = AppPreferences(this)
@@ -60,6 +69,10 @@ class EmergencyContactActivity : AppCompatActivity() {
 
         contactNameInput.setText(preferences.emergencyContactName.orEmpty())
         contactPhoneInput.setText(preferences.emergencyContactPhone.orEmpty())
+        val autoStartCountdown = intent.getBooleanExtra(EXTRA_AUTO_START_COUNTDOWN, false)
+        if (autoStartCountdown && !preferences.emergencyContactPhone.isNullOrBlank()) {
+            views.contactSettingsCard.visibility = View.GONE
+        }
         updateStatus()
 
         views.backButton.setOnClickListener { finish() }
@@ -74,6 +87,9 @@ class EmergencyContactActivity : AppCompatActivity() {
             updateStatus()
             Toast.makeText(this, "비상 연락처를 삭제했습니다.", Toast.LENGTH_SHORT).show()
         }
+        views.pickContactButton.setOnClickListener {
+            openContactPicker()
+        }
         sendButton.setOnClickListener {
             requestEmergencyCountdown()
         }
@@ -86,7 +102,7 @@ class EmergencyContactActivity : AppCompatActivity() {
                 openSmsApp()
             }
         }
-        if (intent.getBooleanExtra(EXTRA_AUTO_START_COUNTDOWN, false)) {
+        if (autoStartCountdown) {
             views.root.post {
                 requestEmergencyCountdown()
             }
@@ -111,6 +127,37 @@ class EmergencyContactActivity : AppCompatActivity() {
         updateStatus()
         Toast.makeText(this, "비상 연락처를 저장했습니다.", Toast.LENGTH_SHORT).show()
         return true
+    }
+
+    private fun openContactPicker() {
+        val intent = Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+        runCatching {
+            pickContactLauncher.launch(intent)
+        }.onFailure {
+            Toast.makeText(this, "연락처 앱을 열 수 없습니다.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun fillContactFromUri(uri: Uri) {
+        val projection =
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER
+            )
+        contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return
+            val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val phoneIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val name =
+                if (nameIndex >= 0) cursor.getString(nameIndex).orEmpty() else ""
+            val phone =
+                if (phoneIndex >= 0) cursor.getString(phoneIndex).orEmpty() else ""
+            contactNameInput.setText(name)
+            contactPhoneInput.setText(phone)
+            if (phone.isNotBlank()) {
+                saveContact()
+            }
+        } ?: Toast.makeText(this, "연락처를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
     }
 
     private fun ensureContactSaved(): Boolean {
@@ -268,7 +315,7 @@ class EmergencyContactActivity : AppCompatActivity() {
         }
         root.addView(content, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-        val backButton = textButton("← 설정으로 돌아가기")
+        val backButton = backButton()
         content.addView(backButton, matchWrap())
         content.addView(titleText("비상 연락"), matchWrap(topMargin = 8))
         content.addView(
@@ -283,15 +330,19 @@ class EmergencyContactActivity : AppCompatActivity() {
         val contactPhoneInput = editText("전화번호").apply {
             inputType = android.text.InputType.TYPE_CLASS_PHONE
         }
+        val pickContactButton = outlinedButton("연락처에서 선택")
         val saveButton = filledButton("연락처 저장")
         val deleteButton = outlinedButton("연락처 삭제")
-        content.addView(
+        val contactSettingsCard =
             card {
                 addView(contactNameInput, matchWrap())
                 addView(contactPhoneInput, matchWrap(topMargin = 12))
+                addView(pickContactButton, matchWrap(topMargin = 12))
                 addView(saveButton, matchWrap(topMargin = 18))
                 addView(deleteButton, matchWrap(topMargin = 10))
-            },
+            }
+        content.addView(
+            contactSettingsCard,
             matchWrap(topMargin = 24)
         )
 
@@ -317,8 +368,10 @@ class EmergencyContactActivity : AppCompatActivity() {
         return EmergencyContactViews(
             root = root,
             backButton = backButton,
+            contactSettingsCard = contactSettingsCard,
             contactNameInput = contactNameInput,
             contactPhoneInput = contactPhoneInput,
+            pickContactButton = pickContactButton,
             saveButton = saveButton,
             deleteButton = deleteButton,
             statusText = statusText,
@@ -389,14 +442,23 @@ class EmergencyContactActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
 
-    private fun textButton(text: String): MaterialButton =
+    private fun backButton(): MaterialButton =
         MaterialButton(this, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
-            this.text = text
+            text = "뒤로"
+            setIconResource(R.drawable.ic_arrow_back_24)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = dp(4)
+            iconTint = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(this@EmergencyContactActivity, R.color.via_on_surface)
+            )
             isAllCaps = false
             textSize = 16f
             minHeight = dp(48)
             setTextColor(ContextCompat.getColor(this@EmergencyContactActivity, R.color.via_on_surface))
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            minWidth = 0
+            setPadding(0, paddingTop, dp(12), paddingBottom)
+            textAlignment = View.TEXT_ALIGNMENT_TEXT_START
         }
 
     private fun matchWrap(topMargin: Int = 0): LinearLayout.LayoutParams =
@@ -422,8 +484,10 @@ class EmergencyContactActivity : AppCompatActivity() {
 private data class EmergencyContactViews(
     val root: View,
     val backButton: MaterialButton,
+    val contactSettingsCard: View,
     val contactNameInput: EditText,
     val contactPhoneInput: EditText,
+    val pickContactButton: MaterialButton,
     val saveButton: MaterialButton,
     val deleteButton: MaterialButton,
     val statusText: TextView,

@@ -99,15 +99,40 @@
                 app:tint="@color/via_on_surface" />
 
             <ImageButton
-                android:id="@+id/debugToggleButton"
+                android:id="@+id/usageGuideButton"
                 android:layout_width="56dp"
                 android:layout_height="56dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="디버그 정보 열기"
+                android:contentDescription="앱 사용 안내 열기"
                 android:padding="14dp"
-                android:src="@android:drawable/ic_menu_info_details"
+                android:src="@android:drawable/ic_menu_help"
                 app:tint="@color/via_on_surface" />
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/debugShortcutCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="8dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/buildInfoCard"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
+        <ImageButton
+            android:id="@+id/debugToggleButton"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="디버그 정보 열기"
+            android:padding="11dp"
+            android:src="@android:drawable/ic_menu_info_details"
+            app:tint="@color/via_on_surface_variant" />
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
@@ -158,14 +183,17 @@
                 android:textColor="@color/via_status_badge_on"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:visibility="gone" />
+                android:visibility="invisible" />
 
             <TextView
                 android:id="@+id/statusTitleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
+                android:ellipsize="end"
                 android:gravity="center"
+                android:maxLines="1"
+                android:minLines="1"
                 android:text="신호 상태 확인 중"
                 android:textColor="@color/via_on_surface"
                 android:textSize="30sp"
@@ -176,8 +204,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
+                android:ellipsize="end"
                 android:gravity="center"
                 android:lineSpacingExtra="4dp"
+                android:maxLines="2"
+                android:minLines="2"
                 android:text="카메라를 신호등 쪽으로 맞춰주세요"
                 android:textColor="@color/via_on_surface_variant"
                 android:textSize="18sp" />
@@ -195,16 +226,17 @@
         app:cardBackgroundColor="@color/via_surface_scrim"
         app:cardCornerRadius="28dp"
         app:cardElevation="0dp"
-        app:layout_constraintTop_toBottomOf="@id/topControlCard"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topControlCard"
         app:strokeColor="@color/via_surface_outline"
         app:strokeWidth="1dp">
 
         <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
             android:fillViewport="true">
 
             <LinearLayout
@@ -330,6 +362,8 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="5"
+                    android:minLines="5"
                     android:text="Stages: n/a"
                     android:textColor="@color/via_on_surface_variant"
                     android:textSize="13sp" />
@@ -341,6 +375,8 @@
                     android:layout_marginTop="12dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="4"
+                    android:minLines="4"
                     android:text="Target: None"
                     android:textColor="@color/via_accent"
                     android:textSize="15sp"
@@ -353,6 +389,8 @@
                     android:layout_marginTop="8dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="12"
+                    android:minLines="12"
                     android:text="Decision: WAIT"
                     android:textColor="@color/via_on_surface"
                     android:textSize="14sp" />
@@ -386,6 +424,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:maxLines="4"
+                    android:minLines="4"
                     android:text="Tuning: default"
                     android:textColor="@color/via_on_surface_variant"
                     android:textSize="13sp" />

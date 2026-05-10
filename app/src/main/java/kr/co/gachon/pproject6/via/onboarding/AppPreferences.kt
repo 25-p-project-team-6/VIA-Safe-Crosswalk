@@ -94,6 +94,12 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun clearAll() {
+        prefs.edit()
+            .clear()
+            .apply()
+    }
+
     companion object {
         private const val PREF_NAME = "via_onboarding_preferences"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"

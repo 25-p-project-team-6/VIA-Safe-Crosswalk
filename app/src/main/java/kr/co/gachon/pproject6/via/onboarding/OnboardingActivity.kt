@@ -30,6 +30,7 @@ import kr.co.gachon.pproject6.via.ml.DetectionLabels
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
+import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import org.tensorflow.lite.gpu.CompatibilityList
 import java.util.Locale
@@ -40,6 +41,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private enum class Step {
         INTRO,
         PERMISSION,
+        EMERGENCY_CONTACT,
         CALIBRATING,
         RESULT
     }
@@ -90,7 +92,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val locationGranted =
                 result[Manifest.permission.ACCESS_FINE_LOCATION] ?: hasLocationPermission()
             if (cameraGranted && locationGranted) {
-                startCalibration()
+                showEmergencyContactStep()
             } else {
                 showPermissionStep(
                     detailOverride = "카메라와 위치 권한이 모두 필요합니다. 다시 허용해 주세요."
@@ -135,6 +137,13 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         showIntroStep()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (currentStep == Step.EMERGENCY_CONTACT) {
+            updateEmergencyContactStep()
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status != TextToSpeech.SUCCESS) return
         val preferred = tts.setLanguage(Locale.KOREAN)
@@ -150,9 +159,16 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Step.INTRO -> showPermissionStep()
             Step.PERMISSION -> {
                 if (hasCameraPermission() && hasLocationPermission()) {
-                    startCalibration()
+                    showEmergencyContactStep()
                 } else {
                     requestOnboardingPermissions()
+                }
+            }
+            Step.EMERGENCY_CONTACT -> {
+                if (hasEmergencyContact()) {
+                    startCalibration()
+                } else {
+                    openEmergencyContactSetup(markOnboardingComplete = false)
                 }
             }
             Step.CALIBRATING -> Unit
@@ -165,9 +181,9 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun handleSecondaryAction() {
         when (currentStep) {
+            Step.EMERGENCY_CONTACT -> startCalibration()
             Step.RESULT -> {
-                preferences.clearCalibration()
-                startCalibration()
+                openEmergencyContactSetup(markOnboardingComplete = true)
             }
             else -> speakCurrentStep(forceReplay = true)
         }
@@ -180,15 +196,16 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         previewCard.visibility = View.GONE
         progressBar.visibility = View.GONE
         progressText.visibility = View.GONE
-        stepLabelText.text = "1 / 3 · 시작 안내"
+        stepLabelText.text = "1 / 4 · 시작 안내"
         titleText.text = "VIA 사용 전 안내"
         bodyText.text = "VIA는 보행자 신호와 주변 횡단보도 정보를 보조적으로 안내합니다."
-        detailText.text = "실제 이동 전에는 반드시 주변 차량과 상황을 직접 확인해야 합니다."
+        detailText.text = "앱은 최종 판단을 대신하지 않습니다. 실제 이동 전에는 차량, 자전거, 주변 사람, 노면 상태를 직접 확인해 주세요."
         actionButton.isEnabled = true
         actionButton.text = "다음"
         secondaryButton.visibility = View.VISIBLE
         secondaryButton.text = "다시 듣기"
         replayButton.visibility = View.GONE
+        applyActionButtonDensity(infoMode = true)
         speakCurrentStep(forceReplay = true)
     }
 
@@ -199,15 +216,16 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         previewCard.visibility = View.GONE
         progressBar.visibility = View.GONE
         progressText.visibility = View.GONE
-        stepLabelText.text = "2 / 3 · 권한 허용"
+        stepLabelText.text = "2 / 4 · 권한 허용"
         titleText.text = "권한이 필요합니다"
         bodyText.text = "카메라는 보행자 신호 확인, 위치는 주변 횡단보도 안내에 사용합니다."
-        detailText.text = detailOverride ?: "비상 문자는 설정에서 연락처를 등록한 뒤 SMS 권한을 요청합니다."
+        detailText.text = detailOverride ?: "비상 문자는 연락처를 저장한 뒤 실제 발송할 때 SMS 권한을 요청합니다."
         actionButton.isEnabled = true
         actionButton.text = "권한 허용"
         secondaryButton.visibility = View.VISIBLE
         secondaryButton.text = "다시 듣기"
         replayButton.visibility = View.GONE
+        applyActionButtonDensity(infoMode = true)
         speakCurrentStep(forceReplay = true)
     }
 
@@ -223,11 +241,60 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
 
         if (missingPermissions.isEmpty()) {
-            startCalibration()
+            showEmergencyContactStep()
             return
         }
 
         permissionLauncher.launch(missingPermissions.toTypedArray())
+    }
+
+    private fun showEmergencyContactStep() {
+        currentStep = Step.EMERGENCY_CONTACT
+        applyLayoutMode(infoMode = true)
+        calibrationPreview.visibility = View.GONE
+        previewCard.visibility = View.GONE
+        progressBar.visibility = View.GONE
+        progressText.visibility = View.GONE
+        stepLabelText.text = "3 / 4 · 비상 연락"
+        titleText.text = "보호자 연락처를 준비하세요"
+        updateEmergencyContactStep()
+        replayButton.visibility = View.GONE
+        applyActionButtonDensity(infoMode = true)
+        speakCurrentStep(forceReplay = true)
+    }
+
+    private fun updateEmergencyContactStep() {
+        if (!::bodyText.isInitialized || currentStep != Step.EMERGENCY_CONTACT) {
+            return
+        }
+        val savedPhone = preferences.emergencyContactPhone
+        bodyText.text =
+            if (savedPhone.isNullOrBlank()) {
+                "비상 상황에서 보낼 연락처를 미리 등록해 두면 필요할 때 빠르게 비상 문자를 보낼 수 있습니다."
+            } else {
+                "등록된 비상 연락처가 있습니다."
+            }
+        detailText.text =
+            if (savedPhone.isNullOrBlank()) {
+                "연락처 앱에서 보호자나 기관 번호를 선택할 수 있습니다. 지금 등록하지 않아도 나중에 설정에서 추가할 수 있습니다."
+            } else {
+                "${preferences.emergencyContactName ?: "비상 연락처"} · $savedPhone"
+            }
+        actionButton.isEnabled = true
+        actionButton.text = if (savedPhone.isNullOrBlank()) "연락처 설정하기" else "다음"
+        secondaryButton.visibility = View.VISIBLE
+        secondaryButton.text = "나중에 하기"
+        applyActionButtonDensity(infoMode = true)
+    }
+
+    private fun hasEmergencyContact(): Boolean =
+        !preferences.emergencyContactPhone.isNullOrBlank()
+
+    private fun openEmergencyContactSetup(markOnboardingComplete: Boolean) {
+        if (markOnboardingComplete) {
+            preferences.onboardingCompleted = true
+        }
+        startActivity(Intent(this, EmergencyContactActivity::class.java))
     }
 
     private fun hasCameraPermission(): Boolean {
@@ -262,7 +329,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         progressText.visibility = View.VISIBLE
         progressBar.max = (WARMUP_MS + MEASURE_MS).toInt()
         progressBar.progress = 0
-        stepLabelText.text = "3 / 3 · 자동 최적화"
+        stepLabelText.text = "4 / 4 · 자동 최적화"
         titleText.text = "설정을 확인하는 중입니다"
         bodyText.text = "이 기기에서 사용할 AI 모델과 실행 방식을 짧게 측정합니다."
         detailText.text = "휴대폰을 안정적으로 들고 잠시만 기다려 주세요."
@@ -271,6 +338,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         secondaryButton.visibility = View.VISIBLE
         secondaryButton.text = "다시 듣기"
         replayButton.visibility = View.GONE
+        applyActionButtonDensity(infoMode = false)
         speakCurrentStep(forceReplay = true)
         advanceCalibrationCandidate()
     }
@@ -460,13 +528,14 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stepLabelText.text = "완료"
         titleText.text = "설정이 완료되었습니다"
         bodyText.text = bestResult.profile.fileName
-        detailText.text = "${bestResult.backendLabel} / ${"%.1f".format(bestResult.averageDetectFps)} FPS · 설정에서 사용 안내를 다시 볼 수 있습니다."
+        detailText.text = "${bestResult.backendLabel} / ${"%.1f".format(bestResult.averageDetectFps)} FPS · 보호자 연락처는 설정에서 다시 수정할 수 있습니다."
         actionButton.isEnabled = true
         actionButton.text = "시작하기"
         secondaryButton.visibility = View.VISIBLE
-        secondaryButton.text = "다시 측정하기"
+        secondaryButton.text = "비상 연락처 설정"
         replayButton.visibility = View.VISIBLE
         replayButton.text = "다시 듣기"
+        applyActionButtonDensity(infoMode = true)
         speakCurrentStep(forceReplay = true)
     }
 
@@ -474,13 +543,19 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         if (!ttsReady) return
         val message = when (currentStep) {
             Step.INTRO ->
-                "VIA는 보행자 신호와 주변 횡단보도 정보를 보조적으로 안내합니다. 실제 이동 전에는 주변 상황을 반드시 확인해 주세요."
+                "VIA는 보행자 신호와 주변 횡단보도 정보를 보조적으로 안내합니다. 실제 이동 전에는 주변 상황을 직접 확인해 주세요."
             Step.PERMISSION ->
-                "카메라는 보행자 신호 확인에, 위치는 주변 횡단보도 안내에 사용합니다. 허용 버튼을 눌러 진행해 주세요."
+                "카메라는 보행자 신호 확인에, 위치는 주변 횡단보도 안내에 사용합니다. 비상 문자는 실제 발송할 때 권한을 요청합니다."
+            Step.EMERGENCY_CONTACT ->
+                if (hasEmergencyContact()) {
+                    "비상 연락처가 등록되어 있습니다. 다음 단계로 진행할 수 있습니다."
+                } else {
+                    "보호자나 기관 연락처를 미리 등록해 두면 필요할 때 비상 문자를 빠르게 보낼 수 있습니다."
+                }
             Step.CALIBRATING ->
                 "기기에서 사용할 AI 모델과 실행 방식을 측정하는 중입니다. 잠시만 기다려 주세요."
             Step.RESULT ->
-                "설정이 완료되었습니다. 설정 화면에서 사용 안내를 다시 볼 수 있습니다."
+                "설정이 완료되었습니다. 보호자 연락처는 설정에서 다시 수정할 수 있습니다."
         }
         if (!forceReplay && spokenMessage == message) return
         spokenMessage = message

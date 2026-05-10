@@ -1,6 +1,7 @@
 package kr.co.gachon.pproject6.via.guide
 
 import android.os.Bundle
+import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -28,7 +29,7 @@ class UsageGuideActivity : AppCompatActivity() {
         }
         root.addView(content, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
-        content.addView(textButton("← 설정으로 돌아가기").apply { setOnClickListener { finish() } })
+        content.addView(backButton().apply { setOnClickListener { finish() } })
         content.addView(titleText("앱 사용 안내"), matchWrap(topMargin = 8))
         content.addView(
             bodyText("VIA는 보행 판단을 대신하지 않고, 신호·횡단보도·비상 연락을 보조적으로 안내합니다."),
@@ -87,10 +88,20 @@ class UsageGuideActivity : AppCompatActivity() {
             setLineSpacing(dp(4).toFloat(), 1f)
         }
 
-    private fun textButton(text: String): MaterialButton =
+    private fun backButton(): MaterialButton =
         MaterialButton(this, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
-            this.text = text
+            text = "뒤로"
+            setIconResource(R.drawable.ic_arrow_back_24)
+            iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+            iconPadding = dp(4)
+            iconTint = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface)
+            )
             isAllCaps = false
+            gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            minWidth = 0
+            setPadding(0, paddingTop, dp(12), paddingBottom)
+            textAlignment = android.view.View.TEXT_ALIGNMENT_TEXT_START
             textSize = 16f
             minHeight = dp(48)
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))

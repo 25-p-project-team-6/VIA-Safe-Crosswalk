@@ -45,6 +45,7 @@ import kr.co.gachon.pproject6.via.context.CrossingSupportManager
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.input.RemoteButtonAction
 import kr.co.gachon.pproject6.via.input.RemoteButtonPressClassifier
+import kr.co.gachon.pproject6.via.guide.UsageGuideActivity
 import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
 import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.DetectionLabels
@@ -135,8 +136,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var highlightTargetSwitch: androidx.appcompat.widget.SwitchCompat
     private lateinit var debugContainer: View
     private lateinit var settingsButton: android.widget.ImageButton
+    private lateinit var usageGuideButton: android.widget.ImageButton
     private lateinit var debugToggleButton: android.widget.ImageButton
     private lateinit var buildInfoCard: View
+    private lateinit var debugShortcutCard: View
     private lateinit var topControlCard: View
     private lateinit var statusPanel: View
     private lateinit var statusBorder: View
@@ -291,8 +294,10 @@ class MainActivity : AppCompatActivity() {
         overlay = findViewById(R.id.overlay)
         debugContainer = findViewById(R.id.debugContainer)
         settingsButton = findViewById(R.id.settingsButton)
+        usageGuideButton = findViewById(R.id.usageGuideButton)
         debugToggleButton = findViewById(R.id.debugToggleButton)
         buildInfoCard = findViewById(R.id.buildInfoCard)
+        debugShortcutCard = findViewById(R.id.debugShortcutCard)
         topControlCard = findViewById(R.id.topControlCard)
         statusPanel = findViewById(R.id.statusPanel)
         backendStatusText = findViewById(R.id.backendStatusText)
@@ -337,6 +342,7 @@ class MainActivity : AppCompatActivity() {
         updateTuningDebugText()
         Log.i("VIA_GUIDANCE", "tuning=${GuidanceTuningDefaults.toDebugSummary()}")
         modelNameText.text = "모델: $currentModelName"
+        debugShortcutCard.visibility = if (BuildConfig.DEBUG) View.VISIBLE else View.GONE
 
         setDebugPanelVisible(showDebugInfo)
 
@@ -344,6 +350,9 @@ class MainActivity : AppCompatActivity() {
 
         settingsButton.setOnClickListener {
             settingsLauncher.launch(Intent(this, SettingsActivity::class.java))
+        }
+        usageGuideButton.setOnClickListener {
+            startActivity(Intent(this, UsageGuideActivity::class.java))
         }
         debugToggleButton.setOnClickListener {
             setDebugPanelVisible(!showDebugInfo)
@@ -360,7 +369,7 @@ class MainActivity : AppCompatActivity() {
             detector?.close()
             detector = null
             cameraManager?.stopCamera()
-            preferences.clearCalibration()
+            preferences.clearAll()
             val intent = Intent(this, OnboardingActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             }
@@ -468,41 +477,59 @@ class MainActivity : AppCompatActivity() {
         val statusContent =
             (statusPanel as? ViewGroup)?.getChildAt(0) as? LinearLayout
                 ?: error("statusPanel content must be a LinearLayout")
-        statusContent.addView(
+        val actionRow =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = dp(18)
+                    }
+            }
+        actionRow.addView(
             mainActionButton(
-                label = "주변 횡단보도 안내",
-                description = "가까운 횡단보도 거리와 방향 안내"
+                label = "횡단보도 안내",
+                description = "가까운 횡단보도 거리와 방향 안내",
+                endMargin = 6
             ) {
                 announceNearbyCrosswalk()
             }
         )
-        statusContent.addView(
+        actionRow.addView(
             mainActionButton(
                 label = "비상 연락",
-                description = "비상 문자 5초 유예 화면 열기"
+                description = "비상 문자 5초 유예 화면 열기",
+                startMargin = 6
             ) {
                 openEmergencyContact(autoStartCountdown = true)
             }
         )
+        statusContent.addView(actionRow)
     }
 
     private fun mainActionButton(
         label: String,
         description: String,
+        startMargin: Int = 0,
+        endMargin: Int = 0,
         onClick: () -> Unit
     ): MaterialButton = MaterialButton(this).apply {
         text = label
         contentDescription = description
         isAllCaps = false
-        textSize = 17f
-        minHeight = dp(64)
+        textSize = 15f
+        minHeight = dp(56)
         cornerRadius = dp(18)
         layoutParams =
             LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
             ).apply {
-                topMargin = dp(14)
+                marginStart = dp(startMargin)
+                marginEnd = dp(endMargin)
             }
         setOnClickListener {
             onClick()
@@ -1637,7 +1664,7 @@ class MainActivity : AppCompatActivity() {
             statusIconText.setTextColor(ContextCompat.getColor(this, R.color.via_on_surface))
             statusIconText.backgroundTintList =
                 ColorStateList.valueOf(ContextCompat.getColor(this, R.color.via_status_wait))
-            statusBadgeText.visibility = View.GONE
+            statusBadgeText.visibility = View.INVISIBLE
             return
         }
 
@@ -1651,7 +1678,7 @@ class MainActivity : AppCompatActivity() {
         statusIconText.contentDescription = statusTitleText.text
         statusIconText.setTextColor(visualState.iconTextColor)
         statusIconText.backgroundTintList = ColorStateList.valueOf(visualState.iconBackgroundColor)
-        statusBadgeText.visibility = if (visualState.badgeText != null) View.VISIBLE else View.GONE
+        statusBadgeText.visibility = if (visualState.badgeText != null) View.VISIBLE else View.INVISIBLE
         statusBadgeText.text = visualState.badgeText ?: ""
         statusBadgeText.contentDescription = visualState.badgeText ?: ""
     }
@@ -1760,6 +1787,7 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             updateCardMargins(buildInfoCard, top = systemBars.top + 20, bottom = 0)
+            updateCardMargins(debugShortcutCard, top = 8, bottom = 0)
             updateCardMargins(topControlCard, top = systemBars.top + 20, bottom = 0)
             updateCardMargins(debugContainer, top = 16, bottom = systemBars.bottom + 16)
             updateCardMargins(statusPanel, top = 0, bottom = systemBars.bottom + 20)
