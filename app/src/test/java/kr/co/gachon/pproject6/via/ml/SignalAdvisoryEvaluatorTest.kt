@@ -81,11 +81,11 @@ class SignalAdvisoryEvaluatorTest {
     }
 
     @Test
-    fun vehicleSignalOnlyConflictStillSuppressesWalkAllowedGreen() {
+    fun vehicleSignalOnlyWithoutWalkAllowedStaysUncertain() {
         val result =
             baseResult(
-                trafficState = TrafficLightState.GREEN,
-                userGuidanceState = UserGuidanceState.GO,
+                trafficState = TrafficLightState.UNKNOWN,
+                userGuidanceState = UserGuidanceState.WAIT,
                 trafficLightCount = 0,
                 vehicleTrafficLightCount = 1,
                 multipleSignalDetected = false,
@@ -96,6 +96,24 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
         assertTrue(advisory.speechText.contains("여러 개") || advisory.speechText.contains("차량 신호"))
+    }
+
+    @Test
+    fun walkAllowedGreenSurvivesBriefVehicleOnlyFrame() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                trafficLightCount = 0,
+                vehicleTrafficLightCount = 1,
+                targetScore = 0f
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
+        assertTrue(advisory.detailText.contains("최근 확인되어 유지"))
     }
 
     @Test

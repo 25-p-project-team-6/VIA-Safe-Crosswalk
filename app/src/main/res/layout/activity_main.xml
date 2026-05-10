@@ -136,6 +136,35 @@
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
+        android:id="@+id/zoomControlCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="20dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="0dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topControlCard"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swZoom2x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:contentDescription="2배 줌 켜기 또는 끄기"
+            android:minWidth="112dp"
+            android:minHeight="48dp"
+            android:paddingHorizontal="12dp"
+            android:text="2배 줌"
+            android:textColor="@color/via_on_surface"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/statusPanel"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -467,16 +496,6 @@
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
                     android:text="Use GPU"
-                    android:textColor="@color/via_on_surface"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/swZoom2x"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:minHeight="56dp"
-                    android:text="Use 2x Zoom"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 

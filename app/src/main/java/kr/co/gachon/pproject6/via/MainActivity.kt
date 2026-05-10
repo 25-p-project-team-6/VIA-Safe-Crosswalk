@@ -141,6 +141,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var buildInfoCard: View
     private lateinit var debugShortcutCard: View
     private lateinit var topControlCard: View
+    private lateinit var zoomControlCard: View
     private lateinit var statusPanel: View
     private lateinit var statusBorder: View
     private lateinit var statusTintOverlay: View
@@ -300,6 +301,7 @@ class MainActivity : AppCompatActivity() {
         buildInfoCard = findViewById(R.id.buildInfoCard)
         debugShortcutCard = findViewById(R.id.debugShortcutCard)
         topControlCard = findViewById(R.id.topControlCard)
+        zoomControlCard = findViewById(R.id.zoomControlCard)
         statusPanel = findViewById(R.id.statusPanel)
         backendStatusText = findViewById(R.id.backendStatusText)
         resetAppButton = findViewById(R.id.resetAppButton)
@@ -860,7 +862,7 @@ class MainActivity : AppCompatActivity() {
 
         runOnUiThread {
             zoomSwitch.isEnabled = false
-            zoomSwitch.text = "2x Zoom 확인 중"
+            zoomSwitch.text = "2배 줌 확인 중"
         }
         
         cameraManager?.startCamera { maxZoom ->
@@ -868,7 +870,7 @@ class MainActivity : AppCompatActivity() {
             if (maxZoom >= 2.0f) {
                 runOnUiThread {
                     zoomSwitch.isEnabled = true
-                    zoomSwitch.text = "Use 2x Zoom"
+                    zoomSwitch.text = "2배 줌"
                     applySelectedZoom()
                 }
             } else {
@@ -877,7 +879,7 @@ class MainActivity : AppCompatActivity() {
                     zoomSwitch.isChecked = false
                     suppressZoomToggleCallback = false
                     zoomSwitch.isEnabled = false
-                    zoomSwitch.text = "2x Zoom (Not Supported)"
+                    zoomSwitch.text = "2배 줌 미지원"
                     applySelectedZoom()
                 }
             }
@@ -918,7 +920,7 @@ class MainActivity : AppCompatActivity() {
         zoomSwitch.isChecked = false
         suppressZoomToggleCallback = false
         zoomSwitch.isEnabled = true
-        zoomSwitch.text = "Use 2x Zoom (Replay, optional)"
+        zoomSwitch.text = "2배 줌"
         applySelectedZoom()
         prepareVideoReplayPlayer(uri)
 
@@ -1800,6 +1802,7 @@ class MainActivity : AppCompatActivity() {
             updateCardMargins(buildInfoCard, top = systemBars.top + 20, bottom = 0)
             updateCardMargins(debugShortcutCard, top = 8, bottom = 0)
             updateCardMargins(topControlCard, top = systemBars.top + 20, bottom = 0)
+            updateCardMargins(zoomControlCard, top = 8, bottom = 0)
             updateCardMargins(debugContainer, top = 16, bottom = systemBars.bottom + 16)
             updateCardMargins(statusPanel, top = 0, bottom = systemBars.bottom + 20)
             insets
