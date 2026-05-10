@@ -474,6 +474,7 @@
                     android:id="@+id/swZoom2x"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:checked="true"
                     android:minHeight="56dp"
                     android:text="Use 2x Zoom"
                     android:textColor="@color/via_on_surface"

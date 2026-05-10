@@ -45,6 +45,24 @@ class SignalAdvisoryEvaluatorTest {
     }
 
     @Test
+    fun walkAllowedGreenDoesNotFallBackToZoomSuggestionOnlyBecauseTargetIsSmall() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                targetScore = 0.82f,
+                trafficLightCount = 1,
+                needsZoomSuggestion = true
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.TARGET_SMALL))
+        assertTrue(advisory.detailText.contains("신호가 작지만"))
+    }
+
+    @Test
     fun multipleSignalsTriggerUncertainView() {
         val result =
             baseResult(

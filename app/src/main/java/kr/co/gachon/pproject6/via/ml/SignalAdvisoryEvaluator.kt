@@ -77,18 +77,20 @@ class SignalAdvisoryEvaluator(
                 else -> AdvisoryConfidenceLevel.LOW
             }
 
+        val isWalkAllowedGreen =
+            result.userGuidanceState == UserGuidanceState.GO &&
+                result.trafficState == TrafficLightState.GREEN
+        val hasHardVisualConflict =
+            result.multipleSignalDetected ||
+                result.vehicleTrafficLightCount > 0 ||
+                result.recentMatchedClusterChangeCount >= config.recentClusterChangeAlertThreshold
+
         val state =
             when {
                 result.guidanceBlockReason == GuidanceBlockReason.NEED_RED_BASELINE -> AdvisoryState.TRANSITION_WAIT
                 result.trafficState == TrafficLightState.RED -> AdvisoryState.RED_CONFIRMED
-                result.trafficState == TrafficLightState.GREEN && result.occupancyCaution -> AdvisoryState.GREEN_WITH_CAUTION
-                result.trafficState == TrafficLightState.GREEN &&
-                    confidenceLevel != AdvisoryConfidenceLevel.LOW &&
-                    !result.multipleSignalDetected &&
-                    result.vehicleTrafficLightCount == 0 &&
-                    !result.needsZoomSuggestion &&
-                    result.recentMatchedClusterChangeCount == 0 &&
-                    !result.targetRecentlyReacquired -> AdvisoryState.GREEN_CONFIRMED
+                isWalkAllowedGreen && result.occupancyCaution -> AdvisoryState.GREEN_WITH_CAUTION
+                isWalkAllowedGreen && !hasHardVisualConflict -> AdvisoryState.GREEN_CONFIRMED
                 else -> AdvisoryState.UNCERTAIN_VIEW
             }
 
@@ -114,7 +116,7 @@ class SignalAdvisoryEvaluator(
                     "${confidenceLabel(confidenceLevel)} · ${clusterSummary(result)}"
 
                 AdvisoryState.GREEN_CONFIRMED ->
-                    "${confidenceLabel(confidenceLevel)} · ${clusterSummary(result)}"
+                    greenConfirmedDetail(result, confidenceLevel)
 
                 AdvisoryState.GREEN_WITH_CAUTION ->
                     "차량이 횡단보도를 점유하고 있을 수 있습니다"
@@ -171,6 +173,18 @@ class SignalAdvisoryEvaluator(
             AdvisoryConfidenceLevel.HIGH -> "신뢰 높음"
             AdvisoryConfidenceLevel.MEDIUM -> "신뢰 보통"
             AdvisoryConfidenceLevel.LOW -> "신뢰 낮음"
+        }
+    }
+
+    private fun greenConfirmedDetail(
+        result: SignalAnalysisResult,
+        level: AdvisoryConfidenceLevel
+    ): String {
+        val confidence = confidenceLabel(level)
+        return when {
+            result.needsZoomSuggestion -> "$confidence · 신호가 작지만 초록으로 확인됩니다"
+            result.targetRecentlyReacquired -> "$confidence · 초록 신호를 다시 확인했습니다"
+            else -> "$confidence · ${clusterSummary(result)}"
         }
     }
 
