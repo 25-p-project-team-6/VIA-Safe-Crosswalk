@@ -41,7 +41,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertEquals(AdvisoryConfidenceLevel.HIGH, advisory.confidenceLevel)
-        assertEquals("보행자 신호 초록으로 보임", advisory.titleText)
+        assertEquals("초록불", advisory.titleText)
     }
 
     @Test
@@ -129,7 +129,7 @@ class SignalAdvisoryEvaluatorTest {
         val advisory = evaluator.evaluate(result)
 
         assertEquals(AdvisoryState.GREEN_WITH_CAUTION, advisory.state)
-        assertEquals("초록으로 보이나 주의 필요", advisory.titleText)
+        assertEquals("초록불 주의", advisory.titleText)
         assertTrue(advisory.detailText.contains("점유"))
     }
 
@@ -145,9 +145,9 @@ class SignalAdvisoryEvaluatorTest {
             )
         val uncertain = evaluator.evaluate(baseResult(trafficState = TrafficLightState.UNKNOWN))
 
-        assertEquals("보행자 신호 빨간색으로 보임", red.titleText)
-        assertEquals("다음 신호 대기 권장", wait.titleText)
-        assertEquals("신호 확인 불확실", uncertain.titleText)
+        assertEquals("빨간불", red.titleText)
+        assertEquals("대기 중", wait.titleText)
+        assertEquals("확인 중", uncertain.titleText)
     }
 
     @Test

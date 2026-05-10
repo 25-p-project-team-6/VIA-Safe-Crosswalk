@@ -86,12 +86,6 @@ class TrafficLightStateTrackerTest {
         assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
 
         currentTime += 100
-        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
-
-        currentTime += 100
-        assertEquals(TrafficLightState.RED, tracker.update(TrafficLightState.GREEN, false))
-
-        currentTime += 100
         assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))
     }
 
@@ -106,10 +100,8 @@ class TrafficLightStateTrackerTest {
         currentTime += 125
         assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))
 
-        repeat(3) {
-            currentTime += 100
-            assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.RED, false))
-        }
+        currentTime += 100
+        assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.RED, false))
 
         currentTime += 100
         assertEquals(TrafficLightState.GREEN, tracker.update(TrafficLightState.GREEN, false))

@@ -39,12 +39,7 @@ class TrafficLightStateTracker(
         }
 
         val isReadyByFastTrack = config.allowHighConfidenceImmediateCommit && isHighConfidence
-        val requiredDurationMs =
-            if (acceptedState == TrafficLightState.UNKNOWN) {
-                config.confirmDurationMs
-            } else {
-                config.switchConfirmDurationMs
-            }
+        val requiredDurationMs = requiredDurationFor(currentState)
         val candidateObservedMs =
             if (candidateStateSince == Long.MIN_VALUE) {
                 0L
@@ -80,6 +75,17 @@ class TrafficLightStateTracker(
         }
     }
 
+    private fun requiredDurationFor(currentState: TrafficLightState): Long {
+        return when {
+            acceptedState == TrafficLightState.UNKNOWN -> config.confirmDurationMs
+            acceptedState == TrafficLightState.RED && currentState == TrafficLightState.GREEN ->
+                config.redToGreenSwitchConfirmDurationMs
+            acceptedState == TrafficLightState.GREEN && currentState == TrafficLightState.RED ->
+                config.greenToRedSwitchConfirmDurationMs
+            else -> config.switchConfirmDurationMs
+        }
+    }
+
     private fun clearAcceptedState() {
         acceptedState = TrafficLightState.UNKNOWN
         lastEvidenceTime = Long.MIN_VALUE
@@ -94,6 +100,8 @@ class TrafficLightStateTracker(
 data class TrafficLightStateTrackingConfig(
     val confirmDurationMs: Long = 250L,
     val switchConfirmDurationMs: Long = 400L,
+    val redToGreenSwitchConfirmDurationMs: Long = 200L,
+    val greenToRedSwitchConfirmDurationMs: Long = 400L,
     // Red can stay sticky longer for stop stability, but green should expire fast so
     // the next intersection requires a fresh red baseline after the previous signal is lost.
     val redPersistenceDurationMs: Long = 5_000L,

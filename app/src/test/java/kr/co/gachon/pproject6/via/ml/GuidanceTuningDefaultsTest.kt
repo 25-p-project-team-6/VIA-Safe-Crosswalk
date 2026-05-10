@@ -10,8 +10,10 @@ class GuidanceTuningDefaultsTest {
 
         assertTrue(summary.contains("signal hold=250ms"))
         assertTrue(summary.contains("switch hold=400ms"))
+        assertTrue(summary.contains("red→green=200ms"))
+        assertTrue(summary.contains("green→red=400ms"))
         assertTrue(summary.contains("green keep=2500ms"))
-        assertTrue(summary.contains("go confirm=250ms"))
+        assertTrue(summary.contains("go confirm=100ms"))
         assertTrue(summary.contains("stop confirm=150ms"))
         assertTrue(summary.contains("wait confirm=350ms"))
         assertTrue(summary.contains("caution confirm=400ms"))

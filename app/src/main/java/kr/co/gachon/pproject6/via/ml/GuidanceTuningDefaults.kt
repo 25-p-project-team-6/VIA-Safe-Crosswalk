@@ -7,6 +7,8 @@ object GuidanceTuningDefaults {
     val signalStateTrackingConfig = TrafficLightStateTrackingConfig(
         confirmDurationMs = 250L,
         switchConfirmDurationMs = 400L,
+        redToGreenSwitchConfirmDurationMs = 200L,
+        greenToRedSwitchConfirmDurationMs = 400L,
         redPersistenceDurationMs = 5_000L,
         greenPersistenceDurationMs = 2_500L,
         allowHighConfidenceImmediateCommit = false
@@ -39,7 +41,7 @@ object GuidanceTuningDefaults {
     )
 
     val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
-        goConfirmDurationMs = 250L,
+        goConfirmDurationMs = 100L,
         stopConfirmDurationMs = 150L,
         waitConfirmDurationMs = 350L,
         cautionConfirmDurationMs = 400L,
@@ -73,6 +75,12 @@ object GuidanceTuningDefaults {
             append("ms")
             append(", switch hold=")
             append(signalStateTrackingConfig.switchConfirmDurationMs)
+            append("ms")
+            append(", red→green=")
+            append(signalStateTrackingConfig.redToGreenSwitchConfirmDurationMs)
+            append("ms")
+            append(", green→red=")
+            append(signalStateTrackingConfig.greenToRedSwitchConfirmDurationMs)
             append("ms")
             append(", green keep=")
             append(signalStateTrackingConfig.greenPersistenceDurationMs)
