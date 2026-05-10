@@ -63,7 +63,7 @@ class SignalAdvisoryEvaluatorTest {
     }
 
     @Test
-    fun multipleSignalsTriggerUncertainView() {
+    fun multiplePedestrianSignalsDoNotSuppressWalkAllowedGreen() {
         val result =
             baseResult(
                 trafficState = TrafficLightState.GREEN,
@@ -75,8 +75,27 @@ class SignalAdvisoryEvaluatorTest {
 
         val advisory = evaluator.evaluate(result)
 
+        assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.MULTIPLE_SIGNALS))
+        assertTrue(advisory.detailText.contains("여러 보행자 신호"))
+    }
+
+    @Test
+    fun vehicleSignalConflictStillSuppressesWalkAllowedGreen() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                trafficLightCount = 1,
+                vehicleTrafficLightCount = 1,
+                multipleSignalDetected = true,
+                needsZoomSuggestion = true
+            )
+
+        val advisory = evaluator.evaluate(result)
+
         assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
-        assertTrue(advisory.speechText.contains("여러 개") || advisory.speechText.contains("가까이"))
+        assertTrue(advisory.speechText.contains("여러 개") || advisory.speechText.contains("차량 신호"))
     }
 
     @Test

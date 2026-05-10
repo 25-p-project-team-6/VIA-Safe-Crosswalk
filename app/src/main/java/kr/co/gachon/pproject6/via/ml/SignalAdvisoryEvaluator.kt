@@ -81,8 +81,7 @@ class SignalAdvisoryEvaluator(
             result.userGuidanceState == UserGuidanceState.GO &&
                 result.trafficState == TrafficLightState.GREEN
         val hasHardVisualConflict =
-            result.multipleSignalDetected ||
-                result.vehicleTrafficLightCount > 0 ||
+            result.vehicleTrafficLightCount > 0 ||
                 result.recentMatchedClusterChangeCount >= config.recentClusterChangeAlertThreshold
 
         val state =
@@ -182,6 +181,7 @@ class SignalAdvisoryEvaluator(
     ): String {
         val confidence = confidenceLabel(level)
         return when {
+            result.multipleSignalDetected -> "$confidence · 여러 보행자 신호 중 추적 대상은 초록으로 확인됩니다"
             result.needsZoomSuggestion -> "$confidence · 신호가 작지만 초록으로 확인됩니다"
             result.targetRecentlyReacquired -> "$confidence · 초록 신호를 다시 확인했습니다"
             else -> "$confidence · ${clusterSummary(result)}"
