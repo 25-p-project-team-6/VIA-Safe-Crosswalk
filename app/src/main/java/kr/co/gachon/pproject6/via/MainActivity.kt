@@ -47,6 +47,7 @@ import kr.co.gachon.pproject6.via.input.RemoteButtonAction
 import kr.co.gachon.pproject6.via.input.RemoteButtonPressClassifier
 import kr.co.gachon.pproject6.via.guide.UsageGuideActivity
 import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
+import kr.co.gachon.pproject6.via.ml.AdvisoryAssessmentStabilizer
 import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.DetectionLabels
 import kr.co.gachon.pproject6.via.ml.GuidanceBlockReason
@@ -213,6 +214,7 @@ class MainActivity : AppCompatActivity() {
 
     private val signalAnalyzer = SignalAnalyzer()
     private val advisoryEvaluator = SignalAdvisoryEvaluator(GuidanceTuningDefaults.advisoryConfig)
+    private val advisoryAssessmentStabilizer = AdvisoryAssessmentStabilizer()
     private val guidanceStateStabilizer =
         GuidanceStateStabilizer(GuidanceTuningDefaults.guidanceStabilizerConfig)
     private lateinit var crossingSupportManager: CrossingSupportManager
@@ -220,7 +222,10 @@ class MainActivity : AppCompatActivity() {
     private val guidanceRuntimeResetter by lazy {
         GuidanceRuntimeResetter(
             resetAnalyzer = { signalAnalyzer.reset() },
-            resetStabilizer = { guidanceStateStabilizer.reset() },
+            resetStabilizer = {
+                guidanceStateStabilizer.reset()
+                advisoryAssessmentStabilizer.reset()
+            },
             resetCrossingSupport = { crossingSupportManager.reset() },
             clearFeedback = { feedbackManager.clearState() },
             afterReset = {
@@ -1283,10 +1288,13 @@ class MainActivity : AppCompatActivity() {
             }
         val analysisResult =
             if (enableTrafficLogic) {
-                stabilizedAnalysisResult.withAdvisoryAssessment(
-                    advisoryEvaluator.evaluate(stabilizedAnalysisResult)
-                )
+                val advisoryAssessment =
+                    advisoryAssessmentStabilizer.stabilize(
+                        advisoryEvaluator.evaluate(stabilizedAnalysisResult)
+                    )
+                stabilizedAnalysisResult.withAdvisoryAssessment(advisoryAssessment)
             } else {
+                advisoryAssessmentStabilizer.reset()
                 stabilizedAnalysisResult
             }
         stageDurationsMs["analyze"] = elapsedMillis(analyzeStartNs)
