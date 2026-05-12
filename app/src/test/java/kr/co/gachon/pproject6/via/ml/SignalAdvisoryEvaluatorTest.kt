@@ -45,7 +45,7 @@ class SignalAdvisoryEvaluatorTest {
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertEquals(AdvisoryConfidenceLevel.HIGH, advisory.confidenceLevel)
         assertEquals("초록불", advisory.titleText)
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
         assertEquals("초록불.", advisory.speechText)
     }
 
@@ -64,7 +64,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.TARGET_SMALL))
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
         assertTrue(!advisory.detailText.contains("신호가 작"))
     }
 
@@ -83,7 +83,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.MULTIPLE_SIGNALS))
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
     }
 
     @Test
@@ -100,7 +100,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.TARGET_RECENTLY_REACQUIRED))
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
     }
 
     @Test
@@ -136,7 +136,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
     }
 
     @Test
@@ -226,7 +226,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
-        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불 확인.", advisory.detailText)
     }
 
     @Test

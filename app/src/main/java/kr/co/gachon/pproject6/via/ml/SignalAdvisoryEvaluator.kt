@@ -115,10 +115,10 @@ class SignalAdvisoryEvaluator(
         val detailText =
             when (state) {
                 AdvisoryState.RED_CONFIRMED ->
-                    "빨간 확인."
+                    "빨간불 확인."
 
                 AdvisoryState.GREEN_CONFIRMED ->
-                    "초록 확인."
+                    "초록불 확인."
 
                 AdvisoryState.GREEN_WITH_CAUTION ->
                     "차량 주의."
