@@ -105,9 +105,10 @@ class SettingsActivity : AppCompatActivity() {
         val camera = permissionSummary(Manifest.permission.CAMERA)
         val fineLocation = permissionSummary(Manifest.permission.ACCESS_FINE_LOCATION)
         val coarseLocation = permissionSummary(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val sms = permissionSummary(Manifest.permission.SEND_SMS)
         val location =
             if (fineLocation == "허용" || coarseLocation == "허용") "허용" else "미허용"
-        return "권한 상태: 카메라 $camera · 위치 $location"
+        return "권한 상태: 카메라 $camera · 위치 $location · SMS $sms"
     }
 
     private fun permissionSummary(permission: String): String {

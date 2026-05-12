@@ -87,15 +87,22 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-            val cameraGranted =
-                result[Manifest.permission.CAMERA] ?: hasCameraPermission()
+            val cameraGranted = result[Manifest.permission.CAMERA] == true || hasCameraPermission()
             val locationGranted =
-                result[Manifest.permission.ACCESS_FINE_LOCATION] ?: hasLocationPermission()
-            if (cameraGranted && locationGranted) {
+                result[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    result[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                    hasLocationPermission()
+            val smsGranted = result[Manifest.permission.SEND_SMS] == true || hasSmsPermission()
+            if (OnboardingPermissionPolicy.hasRequiredPermissions(
+                    hasCameraPermission = cameraGranted,
+                    hasLocationPermission = locationGranted,
+                    hasSmsPermission = smsGranted
+                )
+            ) {
                 showEmergencyContactStep()
             } else {
                 showPermissionStep(
-                    detailOverride = "카메라와 위치 권한이 모두 필요합니다. 다시 허용해 주세요."
+                    detailOverride = "카메라, 위치, SMS 권한이 필요합니다. 다시 허용해 주세요."
                 )
             }
         }
@@ -158,7 +165,12 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         when (currentStep) {
             Step.INTRO -> showPermissionStep()
             Step.PERMISSION -> {
-                if (hasCameraPermission() && hasLocationPermission()) {
+                if (OnboardingPermissionPolicy.hasRequiredPermissions(
+                        hasCameraPermission = hasCameraPermission(),
+                        hasLocationPermission = hasLocationPermission(),
+                        hasSmsPermission = hasSmsPermission()
+                    )
+                ) {
                     showEmergencyContactStep()
                 } else {
                     requestOnboardingPermissions()
@@ -219,7 +231,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         stepLabelText.text = "2 / 4 · 권한 허용"
         titleText.text = "권한이 필요합니다"
         bodyText.text = "카메라는 보행자 신호 확인, 위치는 주변 횡단보도 안내에 사용합니다."
-        detailText.text = detailOverride ?: "비상 문자는 연락처를 저장한 뒤 실제 발송할 때 SMS 권한을 요청합니다."
+        detailText.text = detailOverride ?: "SMS 권한은 등록한 보호자나 기관에 비상 문자를 자동 발송할 때만 사용합니다."
         actionButton.isEnabled = true
         actionButton.text = "권한 허용"
         secondaryButton.visibility = View.VISIBLE
@@ -230,15 +242,12 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestOnboardingPermissions() {
-        val missingPermissions = buildList {
-            if (!hasCameraPermission()) {
-                add(Manifest.permission.CAMERA)
-            }
-            if (!hasLocationPermission()) {
-                add(Manifest.permission.ACCESS_FINE_LOCATION)
-                add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            }
-        }
+        val missingPermissions =
+            OnboardingPermissionPolicy.missingPermissions(
+                hasCameraPermission = hasCameraPermission(),
+                hasLocationPermission = hasLocationPermission(),
+                hasSmsPermission = hasSmsPermission()
+            )
 
         if (missingPermissions.isEmpty()) {
             showEmergencyContactStep()
@@ -310,6 +319,11 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
         return hasFine || hasCoarse
+    }
+
+    private fun hasSmsPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) ==
+            PackageManager.PERMISSION_GRANTED
     }
 
     private fun startCalibration() {
@@ -545,7 +559,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Step.INTRO ->
                 "VIA는 보행자 신호와 주변 횡단보도 정보를 보조적으로 안내합니다. 실제 이동 전에는 주변 상황을 직접 확인해 주세요."
             Step.PERMISSION ->
-                "카메라는 보행자 신호 확인에, 위치는 주변 횡단보도 안내에 사용합니다. 비상 문자는 실제 발송할 때 권한을 요청합니다."
+                "카메라는 보행자 신호 확인에, 위치는 주변 횡단보도 안내에 사용합니다. SMS 권한은 비상 문자 자동 발송에만 사용합니다."
             Step.EMERGENCY_CONTACT ->
                 if (hasEmergencyContact()) {
                     "비상 연락처가 등록되어 있습니다. 다음 단계로 진행할 수 있습니다."
