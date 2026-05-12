@@ -1,9 +1,11 @@
 package kr.co.gachon.pproject6.via.ml
 
+import android.graphics.RectF
 import kr.co.gachon.pproject6.via.context.CrossingSupportSnapshot
 import kr.co.gachon.pproject6.via.context.MapFeatureKind
 import kr.co.gachon.pproject6.via.context.MapFeatureSource
 import kr.co.gachon.pproject6.via.context.MapProximitySnapshot
+import kr.co.gachon.pproject6.via.ui.OverlayView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,7 +25,8 @@ class SignalAdvisoryEvaluatorTest {
         val advisory = evaluator.evaluate(result)
 
         assertEquals(AdvisoryState.TRANSITION_WAIT, advisory.state)
-        assertTrue(advisory.detailText.contains("다음 신호 전환"))
+        assertEquals("전환 대기.", advisory.detailText)
+        assertEquals("대기.", advisory.speechText)
     }
 
     @Test
@@ -42,6 +45,8 @@ class SignalAdvisoryEvaluatorTest {
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertEquals(AdvisoryConfidenceLevel.HIGH, advisory.confidenceLevel)
         assertEquals("초록불", advisory.titleText)
+        assertEquals("초록 확인.", advisory.detailText)
+        assertEquals("초록불.", advisory.speechText)
     }
 
     @Test
@@ -59,7 +64,8 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.TARGET_SMALL))
-        assertTrue(advisory.detailText.contains("신호가 작지만"))
+        assertEquals("초록 확인.", advisory.detailText)
+        assertTrue(!advisory.detailText.contains("신호가 작"))
     }
 
     @Test
@@ -77,7 +83,24 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.MULTIPLE_SIGNALS))
-        assertTrue(advisory.detailText.contains("여러 보행자 신호"))
+        assertEquals("초록 확인.", advisory.detailText)
+    }
+
+    @Test
+    fun reacquiredTargetDoesNotDestabilizeWalkAllowedGreenCopy() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.GREEN,
+                userGuidanceState = UserGuidanceState.GO,
+                trafficLightCount = 1,
+                targetRecentlyReacquired = true
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
+        assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.TARGET_RECENTLY_REACQUIRED))
+        assertEquals("초록 확인.", advisory.detailText)
     }
 
     @Test
@@ -113,7 +136,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
-        assertTrue(advisory.detailText.contains("최근 확인되어 유지"))
+        assertEquals("초록 확인.", advisory.detailText)
     }
 
     @Test
@@ -130,7 +153,8 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_WITH_CAUTION, advisory.state)
         assertEquals("초록불 주의", advisory.titleText)
-        assertTrue(advisory.detailText.contains("점유"))
+        assertEquals("차량 주의.", advisory.detailText)
+        assertEquals("차량 주의.", advisory.speechText)
     }
 
     @Test
@@ -165,7 +189,25 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
-        assertTrue(advisory.speechText.contains("차량 신호"))
+        assertEquals("차량 신호.", advisory.detailText)
+        assertEquals("차량 신호.", advisory.speechText)
+    }
+
+    @Test
+    fun uncertainCopyUsesConciseCrosswalkMissingTextWhenSignalExistsButMapDoesNot() {
+        val result =
+            baseResult(
+                trafficState = TrafficLightState.UNKNOWN,
+                userGuidanceState = UserGuidanceState.WAIT,
+                targetBox = sampleTargetBox(),
+                crossingSupportSnapshot = CrossingSupportSnapshot()
+            )
+
+        val advisory = evaluator.evaluate(result)
+
+        assertEquals(AdvisoryState.UNCERTAIN_VIEW, advisory.state)
+        assertEquals("횡단보도 미탐지.", advisory.detailText)
+        assertTrue(!advisory.detailText.contains("기준이 아직 약합니다"))
     }
 
     @Test
@@ -184,7 +226,7 @@ class SignalAdvisoryEvaluatorTest {
 
         assertEquals(AdvisoryState.GREEN_CONFIRMED, advisory.state)
         assertTrue(advisory.confidenceReasons.contains(AdvisoryConfidenceReason.VEHICLE_SIGNAL_VISIBLE))
-        assertTrue(advisory.detailText.contains("차량 신호도 보이나"))
+        assertEquals("초록 확인.", advisory.detailText)
     }
 
     @Test
@@ -304,11 +346,12 @@ class SignalAdvisoryEvaluatorTest {
         recentMatchedClusterChangeCount: Int = 0,
         occupancyCaution: Boolean = false,
         occupancyCautionLabels: List<String> = emptyList(),
-        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
+        crossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot(),
+        targetBox: OverlayView.BoundingBox? = null
     ): SignalAnalysisResult {
         return SignalAnalysisResult(
             boxesToShow = emptyList(),
-            targetBox = null,
+            targetBox = targetBox,
             targetScore = targetScore,
             targetClassName = DetectionLabels.HUMAN_GREEN,
             trafficLightCount = trafficLightCount,
@@ -326,6 +369,14 @@ class SignalAdvisoryEvaluatorTest {
             crossingSupportSnapshot = crossingSupportSnapshot,
             occupancyCaution = occupancyCaution,
             occupancyCautionLabels = occupancyCautionLabels
+        )
+    }
+
+    private fun sampleTargetBox(): OverlayView.BoundingBox {
+        return OverlayView.BoundingBox(
+            box = RectF(0.4f, 0.2f, 0.6f, 0.4f),
+            clsName = DetectionLabels.HUMAN_GREEN,
+            score = 0.75f
         )
     }
 }

@@ -115,47 +115,47 @@ class SignalAdvisoryEvaluator(
         val detailText =
             when (state) {
                 AdvisoryState.RED_CONFIRMED ->
-                    "${confidenceLabel(confidenceLevel)} · ${clusterSummary(result)}"
+                    "빨간 확인."
 
                 AdvisoryState.GREEN_CONFIRMED ->
-                    greenConfirmedDetail(result, confidenceLevel)
+                    "초록 확인."
 
                 AdvisoryState.GREEN_WITH_CAUTION ->
-                    "차량이 횡단보도를 점유하고 있을 수 있습니다"
+                    "차량 주의."
 
                 AdvisoryState.TRANSITION_WAIT ->
                     when {
-                        result.recentMatchedClusterChangeCount > 0 -> "횡단보도 후보가 바뀌어 새 신호 전환을 기다립니다"
-                        else -> "현재 초록은 이 횡단보도 신호로 확정되지 않아 다음 신호 전환을 기다립니다"
+                        result.recentMatchedClusterChangeCount > 0 -> "대상 변경."
+                        else -> "전환 대기."
                     }
 
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
                         result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
-                            "차량용 신호가 보입니다. 보행자 신호등을 화면 중앙에 맞춰주세요"
-                        result.multipleSignalDetected -> "신호등이 여러 개 보입니다. 화면 중앙 하나만 비춰주세요"
-                        result.needsZoomSuggestion -> "신호가 작게 보입니다. 더 가까이 비추거나 확대해 주세요"
-                        result.recentMatchedClusterChangeCount > 0 -> "횡단보도 후보가 ${result.recentMatchedClusterChangeCount}번 바뀌었습니다"
+                            "차량 신호."
+                        result.multipleSignalDetected -> "여러 신호."
+                        result.needsZoomSuggestion -> "신호 작음."
+                        result.recentMatchedClusterChangeCount > 0 -> "대상 변경."
                         result.trafficState == TrafficLightState.UNKNOWN && result.userGuidanceState == UserGuidanceState.GO ->
-                            "초록 신호를 다시 확인하는 중입니다"
-                        result.targetBox == null -> "신호등을 화면 중앙에 맞춰주세요"
-                        else -> "${confidenceLabel(confidenceLevel)} · 추가 확인이 필요합니다"
+                            "초록 재확인."
+                        result.targetBox == null -> "신호 미탐지."
+                        else -> clusterSummary(result)
                     }
             }
 
         val speechText =
             when (state) {
-                AdvisoryState.RED_CONFIRMED -> "빨간불이 확인됩니다"
-                AdvisoryState.GREEN_CONFIRMED -> "초록불이 확인됩니다"
-                AdvisoryState.GREEN_WITH_CAUTION -> "초록불이 확인되지만 차량 점유 가능성이 있습니다"
-                AdvisoryState.TRANSITION_WAIT -> "다음 신호 전환을 기다립니다"
+                AdvisoryState.RED_CONFIRMED -> "빨간불."
+                AdvisoryState.GREEN_CONFIRMED -> "초록불."
+                AdvisoryState.GREEN_WITH_CAUTION -> "차량 주의."
+                AdvisoryState.TRANSITION_WAIT -> "대기."
                 AdvisoryState.UNCERTAIN_VIEW ->
                     when {
                         result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
-                            "차량 신호가 보여 보행자 신호 확인이 필요합니다"
-                        result.multipleSignalDetected -> "신호등이 여러 개 보여 추가 확인이 필요합니다"
-                        result.needsZoomSuggestion -> "신호가 작게 보입니다. 더 가까이 비추거나 확대해 주세요"
-                        else -> "신호 확인이 불안정합니다"
+                            "차량 신호."
+                        result.multipleSignalDetected -> "여러 신호."
+                        result.needsZoomSuggestion -> "신호 작음."
+                        else -> "확인 필요."
                     }
             }
 
@@ -170,36 +170,12 @@ class SignalAdvisoryEvaluator(
         )
     }
 
-    private fun confidenceLabel(level: AdvisoryConfidenceLevel): String {
-        return when (level) {
-            AdvisoryConfidenceLevel.HIGH -> "신뢰 높음"
-            AdvisoryConfidenceLevel.MEDIUM -> "신뢰 보통"
-            AdvisoryConfidenceLevel.LOW -> "신뢰 낮음"
-        }
-    }
-
-    private fun greenConfirmedDetail(
-        result: SignalAnalysisResult,
-        level: AdvisoryConfidenceLevel
-    ): String {
-        val confidence = confidenceLabel(level)
-        return when {
-            result.vehicleTrafficLightCount > 0 && result.trafficLightCount == 0 ->
-                "$confidence · 보행자 초록 신호가 최근 확인되어 유지됩니다"
-            result.vehicleTrafficLightCount > 0 -> "$confidence · 차량 신호도 보이나 보행자 초록 신호를 추적 중입니다"
-            result.multipleSignalDetected -> "$confidence · 여러 보행자 신호 중 추적 대상은 초록으로 확인됩니다"
-            result.needsZoomSuggestion -> "$confidence · 신호가 작지만 초록으로 확인됩니다"
-            result.targetRecentlyReacquired -> "$confidence · 초록 신호를 다시 확인했습니다"
-            else -> "$confidence · ${clusterSummary(result)}"
-        }
-    }
-
     private fun clusterSummary(result: SignalAnalysisResult): String {
         val map = result.crossingSupportSnapshot.mapProximitySnapshot
         return when {
-            map.matchedClusterId == null -> "횡단보도 기준이 아직 약합니다"
-            result.recentMatchedClusterChangeCount > 0 -> "횡단보도 후보가 최근 바뀌었습니다"
-            else -> "같은 횡단보도 기준이 유지됩니다"
+            map.matchedClusterId == null -> "횡단보도 미탐지."
+            result.recentMatchedClusterChangeCount > 0 -> "대상 변경."
+            else -> "기준 유지."
         }
     }
 }
