@@ -12,6 +12,10 @@ import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
 
 class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
+    private companion object {
+        private const val MANUAL_GUIDANCE_OVERRIDE_MS = 2_500L
+    }
+
     private val appContext = context.applicationContext
     private val tts = TextToSpeech(appContext, this)
     private val feedbackPolicy =
@@ -25,6 +29,7 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         }
 
     private var ttsReady = false
+    private var manualGuidanceOverrideUntilMs = Long.MIN_VALUE
     var voiceEnabled = true
     var hapticEnabled = true
 
@@ -43,6 +48,10 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
     fun onAdvisoryChanged(
         assessment: AdvisoryAssessment
     ) {
+        if (System.currentTimeMillis() < manualGuidanceOverrideUntilMs) {
+            return
+        }
+
         val family =
             when (assessment.state) {
                 AdvisoryState.RED_CONFIRMED,
@@ -81,11 +90,15 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
 
     fun clearState() {
         feedbackPolicy.clear()
+        manualGuidanceOverrideUntilMs = Long.MIN_VALUE
         tts.stop()
         cancelVibration()
     }
 
     fun speakImmediate(message: String, utteranceId: String = "manual_guidance") {
+        manualGuidanceOverrideUntilMs = System.currentTimeMillis() + MANUAL_GUIDANCE_OVERRIDE_MS
+        feedbackPolicy.clear()
+        cancelVibration()
         speak(message, utteranceId)
     }
 

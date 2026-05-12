@@ -87,6 +87,7 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
         private const val VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS = 33L
         private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L
+        private const val CROSSWALK_GUIDANCE_STATUS_OVERRIDE_MS = 4_000L
     }
 
     private data class StatusVisualState(
@@ -155,6 +156,8 @@ class MainActivity : AppCompatActivity() {
     }
     private val remoteButtonClassifier = RemoteButtonPressClassifier()
     private var latestCrossingSupportSnapshot: CrossingSupportSnapshot = CrossingSupportSnapshot()
+    private var manualStatusDetailText: String? = null
+    private var manualStatusDetailUntilElapsedMs = Long.MIN_VALUE
 
     private var cameraManager: CameraManager? = null
     private var hasStartedCamera = false
@@ -1552,6 +1555,7 @@ class MainActivity : AppCompatActivity() {
                 CrosswalkGuidanceMessageBuilder.build(crosswalkGuidanceSnapshot())
             }
         Toast.makeText(this, guidanceMessage.detail, Toast.LENGTH_LONG).show()
+        showManualStatusDetail(guidanceMessage.detail)
         feedbackManager.speakImmediate(
             message = guidanceMessage.speechText,
             utteranceId = "nearby_crosswalk_guidance"
@@ -1638,6 +1642,25 @@ class MainActivity : AppCompatActivity() {
         return hasFine || hasCoarse
     }
 
+    private fun showManualStatusDetail(detail: String) {
+        manualStatusDetailText = detail
+        manualStatusDetailUntilElapsedMs =
+            SystemClock.elapsedRealtime() + CROSSWALK_GUIDANCE_STATUS_OVERRIDE_MS
+        if (::statusDetailText.isInitialized) {
+            statusDetailText.text = detail
+        }
+    }
+
+    private fun activeManualStatusDetail(): String? {
+        val detail = manualStatusDetailText ?: return null
+        if (SystemClock.elapsedRealtime() <= manualStatusDetailUntilElapsedMs) {
+            return detail
+        }
+        manualStatusDetailText = null
+        manualStatusDetailUntilElapsedMs = Long.MIN_VALUE
+        return null
+    }
+
     private fun updateUserStatus(
         analysisResult: SignalAnalysisResult,
         enableTrafficLogic: Boolean
@@ -1659,9 +1682,10 @@ class MainActivity : AppCompatActivity() {
                 AdvisoryState.UNCERTAIN_VIEW -> Color.WHITE
             }
         )
-        statusDetailText.text = analysisResult.advisoryDetailText
+        val detailText = activeManualStatusDetail() ?: analysisResult.advisoryDetailText
+        statusDetailText.text = detailText
         statusPanel.contentDescription =
-            "현재 상태: ${analysisResult.advisoryTitleText}. ${analysisResult.advisoryDetailText}"
+            "현재 상태: ${analysisResult.advisoryTitleText}. $detailText"
     }
 
     private fun updateStatusVisuals(

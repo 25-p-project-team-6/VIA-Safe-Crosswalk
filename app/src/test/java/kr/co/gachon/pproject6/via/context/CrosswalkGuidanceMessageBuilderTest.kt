@@ -21,8 +21,8 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
         )
 
-        assertTrue(message.detail.contains("약 10미터"))
-        assertTrue(message.detail.contains("전방에"))
+        assertTrue(message.detail.contains("10미터"))
+        assertTrue(message.detail.contains("전방"))
     }
 
     @Test
@@ -42,7 +42,7 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
             )
 
-        assertTrue(message.detail.contains("오른쪽 방향"))
+        assertTrue(message.detail.contains("오른쪽"))
     }
 
     @Test
@@ -62,8 +62,8 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
             )
 
-        assertTrue(message.detail.contains("약 10미터 거리에 있습니다"))
-        assertTrue(message.detail.contains("방향 안내는 생략합니다"))
+        assertTrue(message.detail.contains("10미터"))
+        assertTrue(message.detail.contains("GPS 불안정"))
     }
 
     @Test
@@ -83,9 +83,8 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
             )
 
-        assertTrue(message.detail.contains("약 10미터 거리에 있습니다"))
-        assertTrue(message.detail.contains("이동 방향을 아직 확인하지 못해"))
-        assertTrue(message.detail.contains("방향 안내는 생략합니다"))
+        assertTrue(message.detail.contains("10미터"))
+        assertTrue(message.detail.contains("방향 확인 중"))
     }
 
     @Test
@@ -102,7 +101,7 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
             )
 
-        assertTrue(message.detail.contains("현재 위치를 확인하지 못했습니다"))
+        assertTrue(message.detail.contains("위치 확인 필요"))
     }
 
     @Test
@@ -116,7 +115,7 @@ class CrosswalkGuidanceMessageBuilderTest {
                 )
             )
 
-        assertTrue(message.detail.contains("횡단보도 정보가 없습니다"))
+        assertTrue(message.detail.contains("근처 횡단보도 없음"))
     }
 
     @Test

@@ -13,20 +13,20 @@ data class CrosswalkGuidanceMessage(
 
 object CrosswalkGuidanceMessageBuilder {
     private const val UNRELIABLE_LOCATION_ACCURACY_METERS = 35f
-    private const val DEFAULT_TITLE = "주변 횡단보도 안내"
+    private const val DEFAULT_TITLE = "횡단보도 안내"
 
     fun build(snapshot: CrossingSupportSnapshot): CrosswalkGuidanceMessage {
         val currentLatitude = snapshot.currentLocationLatitude
         val currentLongitude = snapshot.currentLocationLongitude
         if (currentLatitude == null || currentLongitude == null) {
-            return unavailable("현재 위치를 확인하지 못했습니다. 위치 권한과 GPS 상태를 확인해 주세요.")
+            return unavailable("위치 확인 필요.")
         }
 
         val mapSnapshot = snapshot.mapProximitySnapshot
         val matchedLatitude = mapSnapshot.matchedLatitude
         val matchedLongitude = mapSnapshot.matchedLongitude
         if (matchedLatitude == null || matchedLongitude == null) {
-            return unavailable("주변에서 확인된 횡단보도 정보가 없습니다. 잠시 이동한 뒤 다시 시도해 주세요.")
+            return unavailable("근처 횡단보도 없음.")
         }
 
         val distanceMeters =
@@ -52,15 +52,15 @@ object CrosswalkGuidanceMessageBuilder {
                     targetBearingDegrees = bearingToCrosswalk,
                     headingDegrees = headingDegrees
                 )
-                "가까운 횡단보도는 약 ${distanceText} ${directionSuffix(direction)} 있습니다."
+                "횡단보도 ${distanceText} ${direction}."
             } else {
                 val reason =
                     if (hasUnreliableLocation) {
-                        "현재 위치 정확도가 낮아 방향 안내는 생략합니다."
+                        "GPS 불안정."
                     } else {
-                        "이동 방향을 아직 확인하지 못해 방향 안내는 생략합니다."
+                        "방향 확인 중."
                     }
-                "가까운 횡단보도는 약 ${distanceText} 거리에 있습니다. $reason"
+                "횡단보도 ${distanceText}. $reason"
             }
 
         return CrosswalkGuidanceMessage(
@@ -117,11 +117,4 @@ object CrosswalkGuidanceMessageBuilder {
         }
     }
 
-    private fun directionSuffix(direction: String): String {
-        return if (direction == "전방" || direction == "뒤쪽") {
-            "${direction}에"
-        } else {
-            "${direction} 방향에"
-        }
-    }
 }

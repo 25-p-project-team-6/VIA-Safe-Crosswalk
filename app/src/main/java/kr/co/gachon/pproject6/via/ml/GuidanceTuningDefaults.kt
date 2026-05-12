@@ -41,11 +41,11 @@ object GuidanceTuningDefaults {
     )
 
     val guidanceStabilizerConfig = GuidanceStateStabilizerConfig(
-        goConfirmDurationMs = 100L,
+        goConfirmDurationMs = 250L,
         stopConfirmDurationMs = 150L,
         waitConfirmDurationMs = 350L,
         cautionConfirmDurationMs = 400L,
-        goMinimumHoldMs = 500L
+        goMinimumHoldMs = 1_200L
     )
 
     val occupancyConfig = CrosswalkOccupancyConfig(
