@@ -9,6 +9,7 @@ object GuidanceTuningDefaults {
         switchConfirmDurationMs = 400L,
         redToGreenSwitchConfirmDurationMs = 200L,
         greenToRedSwitchConfirmDurationMs = 400L,
+        redCandidateUnknownBridgeDurationMs = 150L,
         redPersistenceDurationMs = 5_000L,
         greenPersistenceDurationMs = 2_500L,
         allowHighConfidenceImmediateCommit = false
@@ -81,6 +82,9 @@ object GuidanceTuningDefaults {
             append("ms")
             append(", green→red=")
             append(signalStateTrackingConfig.greenToRedSwitchConfirmDurationMs)
+            append("ms")
+            append(", red flicker bridge=")
+            append(signalStateTrackingConfig.redCandidateUnknownBridgeDurationMs)
             append("ms")
             append(", green keep=")
             append(signalStateTrackingConfig.greenPersistenceDurationMs)

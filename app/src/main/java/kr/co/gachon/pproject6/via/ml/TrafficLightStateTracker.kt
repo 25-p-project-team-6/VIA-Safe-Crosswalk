@@ -8,6 +8,7 @@ class TrafficLightStateTracker(
     private var lastEvidenceTime: Long = Long.MIN_VALUE
     private var candidateState: TrafficLightState = TrafficLightState.UNKNOWN
     private var candidateStateSince: Long = Long.MIN_VALUE
+    private var candidateLastEvidenceTime: Long = Long.MIN_VALUE
 
     fun update(
         currentState: TrafficLightState,
@@ -16,7 +17,9 @@ class TrafficLightStateTracker(
         val currentTime = timeProvider()
 
         if (currentState == TrafficLightState.UNKNOWN) {
-            clearCandidate()
+            if (!shouldBridgeUnknownForRedCandidate(currentTime)) {
+                clearCandidate()
+            }
             return if (isAcceptedFresh(currentTime)) {
                 acceptedState
             } else {
@@ -37,6 +40,7 @@ class TrafficLightStateTracker(
         } else {
             candidateStateSince = minOf(candidateStateSince, currentTime)
         }
+        candidateLastEvidenceTime = currentTime
 
         val isReadyByFastTrack = config.allowHighConfidenceImmediateCommit && isHighConfidence
         val requiredDurationMs = requiredDurationFor(currentState)
@@ -86,6 +90,12 @@ class TrafficLightStateTracker(
         }
     }
 
+    private fun shouldBridgeUnknownForRedCandidate(currentTime: Long): Boolean {
+        return candidateState == TrafficLightState.RED &&
+            candidateLastEvidenceTime != Long.MIN_VALUE &&
+            currentTime - candidateLastEvidenceTime <= config.redCandidateUnknownBridgeDurationMs
+    }
+
     private fun clearAcceptedState() {
         acceptedState = TrafficLightState.UNKNOWN
         lastEvidenceTime = Long.MIN_VALUE
@@ -94,6 +104,7 @@ class TrafficLightStateTracker(
     private fun clearCandidate() {
         candidateState = TrafficLightState.UNKNOWN
         candidateStateSince = Long.MIN_VALUE
+        candidateLastEvidenceTime = Long.MIN_VALUE
     }
 }
 
@@ -102,6 +113,10 @@ data class TrafficLightStateTrackingConfig(
     val switchConfirmDurationMs: Long = 400L,
     val redToGreenSwitchConfirmDurationMs: Long = 200L,
     val greenToRedSwitchConfirmDurationMs: Long = 400L,
+    // Bridge only red candidates through very short unknown gaps caused by LED PWM /
+    // shutter sampling. Do not bridge green candidates; sparse green evidence must
+    // remain conservative because it can produce a walk permission after red.
+    val redCandidateUnknownBridgeDurationMs: Long = 150L,
     // Red can stay sticky longer for stop stability, but green should expire fast so
     // the next intersection requires a fresh red baseline after the previous signal is lost.
     val redPersistenceDurationMs: Long = 5_000L,

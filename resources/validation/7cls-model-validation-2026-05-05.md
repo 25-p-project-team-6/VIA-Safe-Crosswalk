@@ -23,6 +23,7 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 | 차량 신호 억제 | `vehicle_green`, `vehicle_red`는 보행자 신호 색으로 쓰지 않고 `UNKNOWN` | `PostProcessor.observedTrafficLightState()` |
 | 차량 신호만 보이는 경우 | `UNCERTAIN_VIEW` + 보행자 신호 확인 요청 | `SignalAdvisoryEvaluator` |
 | 차량 신호가 함께 보이는 green | `GREEN_CONFIRMED` 차단 | `SignalAdvisoryEvaluator` tests |
+| S25+ red LED missing frame | 확정된 red는 UNKNOWN에서 유지하고, 확정 전 red 후보도 짧은 UNKNOWN gap을 bridge | `TrafficLightStateTracker`, Issue #53 |
 | 7cls 모델 우선 목록 | 7cls 파일이 있으면 기존 모델 숨김 | `DetectionLabelsTest.activeSchemaPrefersSevenClassModelsWhenPresent` |
 | NMS | 기본 IoU 0.5, 신호 클래스는 0.05로 더 엄격하게 중복 제거 | `YoloDetector` 생성부 |
 | confidence threshold | 런타임은 신호등용 `trafficLightThreshold`와 일반 객체용 `generalObjThreshold`를 분리해 적용하고, calibration은 0.15 고정값으로 측정 | `MainActivity`, `OnboardingActivity` 호출부 |
@@ -50,6 +51,15 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 - **C. 신호등 아닌 물체 → 신호 오검출**: score, 크기, 중앙성, 지속시간 조건을 함께 확인한다.
 - **D. 작은/가린 신호**: `needsZoomSuggestion` 또는 `UNCERTAIN_VIEW`로 빠지는지 확인한다.
 - **E. 복수 신호**: `multipleSignalDetected`와 `UNCERTAIN_VIEW`가 나오는지 확인한다.
+- **F. S25+ red LED flicker artifact**: 실제 red가 켜져 있지만 카메라 프레임에서 빨간 LED가 순간적으로 missing되는 경우. 전후 red가 유지되고 green이 등장하지 않으면 `off`가 아니라 transient unknown/flicker artifact로 기록한다.
+
+## 라벨링 주의: camera-induced missing red
+S25+ 또는 유사 스마트폰 영상에서 빨간 보행자 신호가 일부 프레임만 사라지는 경우, 단일 프레임 기준으로 `off` 라벨을 주지 않는다.
+
+- 전후 프레임과 실제 현장 상태를 함께 확인한다.
+- red가 몇 프레임 missing되어도 green이 명확히 등장하지 않았다면 `camera-induced missing red` 또는 `transient unknown`으로 분리한다.
+- 촬영 조건(fps, HDR/HLG, codec, 자동 FPS, 노출)을 기록한다.
+- 상세 QA 표는 `resources/validation/s25-red-led-flicker-artifact-2026-05-13.md`를 사용한다.
 
 ## 완료 판정 기준
 #40을 닫으려면 최소한 다음을 채운다.
