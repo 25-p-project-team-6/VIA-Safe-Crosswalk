@@ -25,10 +25,14 @@
 ## 앱 런타임 대응
 현재 앱은 단일 프레임 판단 대신 시간축 안정화를 사용한다.
 
+- `CameraManager`는 Camera2 interop으로 가능한 경우 60Hz AE anti-banding과 30fps 이하 AE target range를 적용한다.
+- 이 설정은 짧은 셔터/60fps 샘플링이 LED off 구간만 잡는 빈도를 줄이기 위한 카메라 단계 완화책이다.
 - `TrafficLightStateTracker`는 확정된 red를 `5,000ms` 동안 UNKNOWN에서 유지한다.
 - #53 대응으로 확정 전 red 후보도 `150ms` 이하의 짧은 UNKNOWN gap을 bridge한다.
 - 이 bridge는 **red 후보에만** 적용한다. Sparse green evidence가 GO 허가로 이어질 수 있으므로 green 후보는 UNKNOWN gap에서 계속 리셋한다.
 - red가 일시적으로 missing되어도 green이 지속 확인되지 않으면 off/GO로 바꾸지 않고 red 또는 unknown으로 보수 처리한다.
+
+카메라 설정만으로 완전 제거된다고 가정하지 않는다. LED PWM 주기와 신호등 컨트롤러, 센서 readout, 주변 밝기, 기기별 ISP가 다르면 anti-banding/FPS 제한 후에도 일부 missing frame은 남을 수 있다. 따라서 카메라 mitigation과 temporal state machine을 함께 사용한다.
 
 ## 현장 QA 체크리스트
 아래 항목을 S25+ 영상별로 기록한다.
