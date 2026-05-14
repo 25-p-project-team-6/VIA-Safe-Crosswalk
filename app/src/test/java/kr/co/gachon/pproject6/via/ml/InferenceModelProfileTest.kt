@@ -54,6 +54,21 @@ class InferenceModelProfileTest {
     }
 
     @Test
+    fun recommendKeepsRawOutputYolo26n640AsHighResolutionCandidate() {
+        val profile = InferenceModelProfile.recommend(
+            modelFiles = listOf(
+                "best_yolo26n_7cls_v2_raw_int8_320.tflite",
+                "best_yolo26n_7cls_v2_raw_float16_416.tflite",
+                "best_yolo26n_7cls_v2_raw_float16_640.tflite"
+            ),
+            gpuSupported = true
+        )
+
+        assertNotNull(profile)
+        assertEquals("best_yolo26n_7cls_v2_raw_float16_640.tflite", profile?.fileName)
+    }
+
+    @Test
     fun recommendStillStartsFromFloatProfileWhenGpuCompatibilityIsUnavailable() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(

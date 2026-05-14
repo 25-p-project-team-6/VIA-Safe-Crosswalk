@@ -82,12 +82,53 @@ Conclusion: lowering the automatic startup profile to `int8_320` would only hide
 
 The evidence points back to the export contract: the YOLO26n 640 file is a NMS/top-k TFLite graph (`[1, 300, 6]`) rather than the older raw class-score graph (`[1, 11, 8400]`). Recovering high-resolution throughput likely requires a NMS-free/raw-output YOLO26n export, or another export/runtime change that removes the detection-postprocess bottleneck.
 
-## Retest plan
-1. Run the same realtime route with YOLO26n float16 320/416/448/512/640.
-2. Record Camera FPS, Processed FPS, latency, model name, backend, analysis resolution, and the new `model_io` log line.
-3. Compare YOLO26n NMS-included 640 against a future NMS-free YOLO26n 640 export if available.
-4. Do not use 320/int8 as the automatic fix for this issue; keep it as a diagnostic/manual fallback only.
-5. If NMS-free YOLO26n restores expected throughput, prefer raw-output export plus app-side NMS for Android delivery.
+
+## Raw-output delivery received — 2026-05-15
+A follow-up package `android_delivery_yolo26n_7cls_v2_raw_output.zip` was received and preserved under `resources/models/yolo26n_7cls_v2_raw_output/`. Its handoff explains that the previous YOLO26n TFLite files were exported with `nms=False` but still followed the YOLO26 `end2end=True` branch, producing `[1, 300, 6]` and postprocess-like operators.
+
+The new package forces `end2end=False` and exports raw tensors. Local flatbuffer inspection confirms `best_yolo26n_7cls_v2_raw_float16_640.tflite` has `output=[1, 11, 8400]` and `TOPK_V2/GATHER_ND/TILE/FLOOR_MOD/GATHER = 0`, matching the previous YOLO11n 7cls raw-output contract.
+
+## Raw-output realtime retest — 2026-05-15
+The app was rebuilt with the raw-output assets and installed for a live-camera check. The 640 float16/GPU candidate now reports the raw parser path:
+
+```text
+model_io model=best_yolo26n_7cls_v2_raw_float16_640.tflite backend=GPU requestedGpu=true compat=true input=[1, 640, 640, 3] output=[1, 11, 8400] rows=8400 cols=11 transposed=false layout=class_score_cxcywh labels=7
+```
+
+Compared with the NMS-included 640 result above, the raw-output 640 result confirms the export-contract diagnosis:
+
+| Model | Backend | Analysis | Output | Processed FPS | Detect stage |
+| --- | --- | --- | --- | ---: | ---: |
+| `best_yolo26n_7cls_v2_float16_640.tflite` | GPU | 960x720 | `[1, 300, 6]` | 4.87 | ~204ms |
+| `best_yolo26n_7cls_v2_raw_float16_640.tflite` | GPU | 960x720 | `[1, 11, 8400]` | 20.06..21.24 in the first stable window | ~43ms |
+
+After continued running on the same warmed device, thermal service reported `Thermal Status: 2`; the 640 raw path then fell to roughly 9..12 processed FPS with detect around 90ms. That later drop is a device/thermal-state observation, not evidence that the raw-output export still contains the previous NMS/TopK bottleneck.
+
+Follow-up spot checks under the same warmed state:
+
+| Model | Backend | Analysis | Processed FPS | Detect stage |
+| --- | --- | --- | ---: | ---: |
+| `best_yolo26n_7cls_v2_raw_float16_512.tflite` | GPU | 768x576 | 13.4..13.8 | ~59..62ms |
+| `best_yolo26n_7cls_v2_raw_float16_416.tflite` | GPU | 640x480 | 17.0..17.5 | ~46..48ms |
+
+Conclusion: Android delivery should use the raw-output export plus app-side confidence/NMS. Do not lower the automatic recommendation to 320/int8 merely to hide a high-resolution regression; low-resolution/int8 remains a diagnostic/manual fallback only. Sustained outdoor FPS should be interpreted together with thermal state.
+
+## Input-rate metric correction — 2026-05-15
+One measurement caveat from the raw-output retest was fixed before using the debug UI for further FPS decisions. The previous Camera FPS label was marked from the CameraX `ImageAnalysis` callback. Since that callback held the current `ImageProxy` open until processing copied and closed it, slow inference could backpressure the analyzer and make the input label fall with Processed FPS. Replay FPS had a similar issue because it was marked only when the processing loop captured a replay bitmap.
+
+The input-rate label now uses source-frame events:
+
+- live camera: Camera2 preview session capture callback
+- replay: `TextureView.onSurfaceTextureUpdated`
+- analyzer callback: fallback only until the first preview capture callback is observed
+
+Post-fix live-camera evidence with raw 640/GPU while processing was thermally slow:
+
+| Input label | Processed label | Interpretation |
+| ---: | ---: | --- |
+| Camera FPS 29.82 | Processed FPS 9.67 | Camera capture still near 30fps; inference path is saturated |
+| Camera FPS 29.85 | Processed FPS 9.52 | Input metric no longer follows model latency |
+| Camera FPS 29.98 | Processed FPS 9.57 | Debug UI now separates capture cadence from throughput |
 
 ## Acceptance criteria for closing #58
 - The 640 FPS regression is attributed to either export layout/delegate compatibility, analysis resolution cost, or model compute cost with evidence.

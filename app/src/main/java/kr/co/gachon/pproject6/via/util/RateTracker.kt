@@ -11,9 +11,11 @@ class RateTracker(
     private var sampleCount = 0
     private var currentRate = 0.0
 
+    @get:Synchronized
     var rateStr: String = formatRate(label, currentRate)
-        private set
+        @Synchronized private set
 
+    @Synchronized
     fun mark() {
         sampleCount++
         val currentTime = timeProvider()
@@ -26,9 +28,11 @@ class RateTracker(
         }
     }
 
+    @Synchronized
     fun displayString(labelOverride: String = label): String =
         formatRate(labelOverride, currentRate)
 
+    @Synchronized
     fun clear() {
         sampleCount = 0
         windowStartedAt = timeProvider()
