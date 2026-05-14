@@ -15,18 +15,11 @@ data class ParsedYoloDetection(
 
 object YoloOutputParser {
     fun layoutName(outputCols: Int, labels: List<String>): String {
-        return if (usesBatchedNmsLayout(outputCols, labels)) {
+        return if (isBatchedNmsLayout(outputCols, labels)) {
             "batched_nms_xyxy_score_class"
         } else {
             "class_score_cxcywh"
         }
-    }
-
-    fun usesBatchedNmsLayout(outputCols: Int, labels: List<String>): Boolean {
-        // Ultralytics TFLite NMS exports commonly emit [x1, y1, x2, y2, score, class].
-        // Legacy/class-score outputs with two labels can also have 6 columns
-        // ([cx, cy, w, h, class0, class1]), so require more labels than score columns.
-        return outputCols == 6 && labels.size > outputCols - 4
     }
 
     fun parse(
@@ -52,7 +45,7 @@ object YoloOutputParser {
 
         for (row in 0 until outputRows) {
             val detection =
-                if (usesBatchedNmsLayout(outputCols, labels)) {
+                if (isBatchedNmsLayout(outputCols, labels)) {
                     parseBatchedNmsRow(
                         row = row,
                         get = ::get,
@@ -78,6 +71,13 @@ object YoloOutputParser {
         }
 
         return detections
+    }
+
+    private fun isBatchedNmsLayout(outputCols: Int, labels: List<String>): Boolean {
+        // Ultralytics TFLite NMS exports commonly emit [x1, y1, x2, y2, score, class].
+        // Legacy/class-score outputs with two labels can also have 6 columns
+        // ([cx, cy, w, h, class0, class1]), so require more labels than score columns.
+        return outputCols == 6 && labels.size > outputCols - 4
     }
 
     private fun parseBatchedNmsRow(

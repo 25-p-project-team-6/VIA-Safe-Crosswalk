@@ -466,11 +466,8 @@ class MainActivity : AppCompatActivity() {
         val shouldUseSavedBackend =
             initialBackendPreference?.contains("GPU") == true &&
                 currentModelProfile.recommendedUseGpu
-        val shouldUseRecommendedBackend =
-            initialBackendPreference == null &&
-                currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
-            checked = shouldUseSavedBackend || shouldUseRecommendedBackend,
+            checked = shouldUseSavedBackend || currentModelProfile.recommendedUseGpu,
             enabled = currentModelProfile.recommendedUseGpu
         )
         publishBackendStatus("Initializing…")
