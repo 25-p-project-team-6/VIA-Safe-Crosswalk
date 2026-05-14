@@ -182,6 +182,15 @@ class YoloDetector(
         outputIsTransposed = outputShape[1] > outputShape[2]
         outputRows = if (outputIsTransposed) outputShape[1] else outputShape[2]
         outputCols = if (outputIsTransposed) outputShape[2] else outputShape[1]
+        Log.i(
+            TAG,
+            "model_io model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu " +
+                "compat=$compatibilityReportedSupported input=${inputShape.contentToString()} " +
+                "inputType=$inputDataType output=${outputShape.contentToString()} " +
+                "outputType=$outputDataType rows=$outputRows cols=$outputCols " +
+                "transposed=$outputIsTransposed " +
+                "layout=${YoloOutputParser.layoutName(outputCols, labels)} labels=${labels.size}"
+        )
         inputBuffer =
             ByteBuffer.allocateDirect(inputShape.product() * inputDataType.byteSize())
                 .order(ByteOrder.nativeOrder())

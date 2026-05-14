@@ -14,6 +14,14 @@ data class ParsedYoloDetection(
 )
 
 object YoloOutputParser {
+    fun layoutName(outputCols: Int, labels: List<String>): String {
+        return if (isBatchedNmsLayout(outputCols, labels)) {
+            "batched_nms_xyxy_score_class"
+        } else {
+            "class_score_cxcywh"
+        }
+    }
+
     fun parse(
         output: FloatArray,
         outputRows: Int,
