@@ -57,6 +57,10 @@ data class InferenceModelProfile(
             profile: InferenceModelProfile,
             gpuSupported: Boolean
         ): Int {
+            if (isYolo26nNmsExport(profile.fileName)) {
+                return yolo26nNmsExportPreferenceRank(profile)
+            }
+
             val quantizationRank = when (profile.quantization) {
                 ModelQuantization.FLOAT16 -> 0
                 ModelQuantization.FLOAT32 -> if (gpuSupported) 1 else 2
@@ -65,6 +69,27 @@ data class InferenceModelProfile(
             }
 
             val targetInput = if (profile.recommendedUseGpu) 640 else 448
+            val sizeRank = profile.inputSize?.let { kotlin.math.abs(it - targetInput) } ?: 10_000
+            return quantizationRank * 10_000 + sizeRank
+        }
+
+        private fun isYolo26nNmsExport(fileName: String): Boolean {
+            return "yolo26n_7cls_v2" in fileName.lowercase()
+        }
+
+        private fun yolo26nNmsExportPreferenceRank(profile: InferenceModelProfile): Int {
+            // The delivered YOLO26n Android TFLite files emit [1, 300, 6], which means
+            // post-processing/NMS is part of the TFLite graph. On the S25+ field path,
+            // 640/512/448/416 float16 candidates saturate the frame pipeline even though
+            // the model files are smaller than the older raw-output export. Prefer the
+            // measured realtime candidate until a NMS-free export is available.
+            val quantizationRank = when (profile.quantization) {
+                ModelQuantization.INT8 -> 0
+                ModelQuantization.FLOAT16 -> 1
+                ModelQuantization.FLOAT32 -> 2
+                ModelQuantization.UNKNOWN -> 3
+            }
+            val targetInput = 320
             val sizeRank = profile.inputSize?.let { kotlin.math.abs(it - targetInput) } ?: 10_000
             return quantizationRank * 10_000 + sizeRank
         }

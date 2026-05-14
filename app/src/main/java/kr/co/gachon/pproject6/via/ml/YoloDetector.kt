@@ -129,6 +129,7 @@ class YoloDetector(
     private var outputRows = 0
     private var outputCols = 0
     private var outputIsTransposed = false
+    private var outputUsesBatchedNmsLayout = false
     private var inputDataType: DataType = DataType.FLOAT32
     private var outputDataType: DataType = DataType.FLOAT32
     private var inputQuantization = Tensor.QuantizationParams(0f, 0)
@@ -182,6 +183,7 @@ class YoloDetector(
         outputIsTransposed = outputShape[1] > outputShape[2]
         outputRows = if (outputIsTransposed) outputShape[1] else outputShape[2]
         outputCols = if (outputIsTransposed) outputShape[2] else outputShape[1]
+        outputUsesBatchedNmsLayout = YoloOutputParser.usesBatchedNmsLayout(outputCols, labels)
         Log.i(
             TAG,
             "model_io model=$modelPath backend=$runtimeBackendLabel requestedGpu=$useGpu " +
@@ -219,8 +221,10 @@ class YoloDetector(
         val outputArray = outputBufferToFloatArray(activeOutputBuffer)
         val results = postProcess(outputArray, confidenceThreshold)
 
-        // Apply strict NMS first to reduce boxes
-        val nmsResults = nms(results)
+        // NMS-included TFLite exports already emit a top-k detection tensor. Running the
+        // app's class-agnostic NMS again can remove legitimate neighboring classes and
+        // adds avoidable work on the realtime path. Raw YOLO tensors still need app NMS.
+        val nmsResults = if (outputUsesBatchedNmsLayout) results else nms(results)
 
         // Return raw NMS results (no color correction inside detector)
         return DetectionResult(nmsResults, inferenceTime)

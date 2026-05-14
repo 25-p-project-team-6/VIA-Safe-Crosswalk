@@ -204,6 +204,7 @@ class MainActivity : AppCompatActivity() {
     // Performance Tracker
     private val performanceTracker = PerformanceTracker()
     private val cameraRateTracker = RateTracker(label = "Camera FPS")
+    private var lastPerformanceLogAtElapsedMs = 0L
     private val pendingFrame = AtomicReference<ImageProxy?>(null)
     private val processingScheduled = AtomicBoolean(false)
     private val imageProxyTransformFactory =
@@ -465,8 +466,11 @@ class MainActivity : AppCompatActivity() {
         val shouldUseSavedBackend =
             initialBackendPreference?.contains("GPU") == true &&
                 currentModelProfile.recommendedUseGpu
+        val shouldUseRecommendedBackend =
+            initialBackendPreference == null &&
+                currentModelProfile.recommendedUseGpu
         configureGpuSwitch(
-            checked = shouldUseSavedBackend || currentModelProfile.recommendedUseGpu,
+            checked = shouldUseSavedBackend || shouldUseRecommendedBackend,
             enabled = currentModelProfile.recommendedUseGpu
         )
         publishBackendStatus("Initializing…")
@@ -757,6 +761,26 @@ class MainActivity : AppCompatActivity() {
         avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
         stageBreakdownText.text = performanceTracker.stageBreakdownStr
+        logPerformanceSnapshotIfDue(totalLatencyMs)
+    }
+
+    private fun logPerformanceSnapshotIfDue(totalLatencyMs: Long) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastPerformanceLogAtElapsedMs < 1_000L) {
+            return
+        }
+        lastPerformanceLogAtElapsedMs = now
+
+        Log.i(
+            "VIA_PERF",
+            "model=$currentModelName backend=${detector?.runtimeBackendLabel ?: "unknown"} " +
+                "analysis=${currentModelProfile.analysisResolution.width}x" +
+                "${currentModelProfile.analysisResolution.height} " +
+                "input=\"${inputFpsText.text}\" processed=\"${fpsText.text}\" " +
+                "processedAvg=\"${avgFpsText.text}\" detect=\"${latencyText.text}\" " +
+                "avg=\"${avgLatencyText.text}\" total=${totalLatencyMs}ms " +
+                "stages=\"${stageBreakdownText.text}\""
+        )
     }
 
     private fun initDetector(

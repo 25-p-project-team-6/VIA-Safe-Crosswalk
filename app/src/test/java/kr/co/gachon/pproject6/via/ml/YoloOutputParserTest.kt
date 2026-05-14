@@ -7,6 +7,12 @@ import org.junit.Test
 class YoloOutputParserTest {
     @Test
     fun layoutNameDescribesYolo26nBatchedNmsOutput() {
+        assertTrue(
+            YoloOutputParser.usesBatchedNmsLayout(
+                outputCols = 6,
+                labels = DetectionLabels.sevenClassLabels
+            )
+        )
         assertEquals(
             "batched_nms_xyxy_score_class",
             YoloOutputParser.layoutName(
@@ -18,6 +24,12 @@ class YoloOutputParserTest {
 
     @Test
     fun layoutNameKeepsSixColumnTwoClassOutputAsClassScore() {
+        assertTrue(
+            !YoloOutputParser.usesBatchedNmsLayout(
+                outputCols = 6,
+                labels = listOf(DetectionLabels.HUMAN_RED, DetectionLabels.HUMAN_GREEN)
+            )
+        )
         assertEquals(
             "class_score_cxcywh",
             YoloOutputParser.layoutName(
