@@ -752,7 +752,7 @@ class MainActivity : AppCompatActivity() {
         performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        inputFpsText.text = cameraRateTracker.rateStr.replaceFirst("Camera FPS", inputRateLabel)
+        inputFpsText.text = cameraRateTracker.displayString(inputRateLabel)
         fpsText.text = performanceTracker.currentFpsStr.replaceFirst("FPS", "Processed FPS")
         avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
@@ -1816,7 +1816,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetPerformanceStats() {
         performanceTracker.clear()
         cameraRateTracker.clear()
-        inputFpsText.text = "$inputRateLabel: 0"
+        inputFpsText.text = cameraRateTracker.displayString(inputRateLabel)
         avgFpsText.text = "Processed Avg FPS: 0"
         avgLatencyText.text = "Avg Latency: 0ms"
         fpsText.text = "Processed FPS: 0"

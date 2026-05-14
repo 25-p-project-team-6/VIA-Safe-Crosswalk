@@ -21,6 +21,22 @@ class RateTrackerTest {
     }
 
     @Test
+    fun displayStringCanOverrideLabelWithoutChangingTrackedRate() {
+        var currentTime = 0L
+        val tracker = RateTracker(label = "Camera FPS", timeProvider = { currentTime })
+
+        tracker.mark()
+        currentTime = 500L
+        tracker.mark()
+        currentTime = 1_000L
+        tracker.mark()
+
+        assertEquals("Camera FPS: 3.00", tracker.rateStr)
+        assertEquals("Replay FPS: 3.00", tracker.displayString("Replay FPS"))
+        assertEquals("Camera FPS: 3.00", tracker.rateStr)
+    }
+
+    @Test
     fun clearResetsRateLabel() {
         var currentTime = 0L
         val tracker = RateTracker(label = "Input FPS", timeProvider = { currentTime })
@@ -30,6 +46,7 @@ class RateTrackerTest {
         tracker.mark()
         tracker.clear()
 
-        assertEquals("Input FPS: 0", tracker.rateStr)
+        assertEquals("Input FPS: 0.00", tracker.rateStr)
+        assertEquals("Replay FPS: 0.00", tracker.displayString("Replay FPS"))
     }
 }
