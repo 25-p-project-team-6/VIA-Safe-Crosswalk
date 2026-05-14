@@ -18,7 +18,7 @@ class DetectionLabelsTest {
     }
 
     @Test
-    fun activeSchemaPrefersSevenClassModelsWhenPresent() {
+    fun activeSchemaPrefersYolo26nSevenClassModelsWhenPresent() {
         val modelFiles =
             DetectionLabels.modelFilesForActiveSchema(
                 listOf(
@@ -29,19 +29,48 @@ class DetectionLabelsTest {
                     "best_7cls_v2_float16_512.tflite",
                     "best_7cls_v2_float16_640.tflite",
                     "best_7cls_v2_int8_320.tflite",
-                    "best_7cls_v2_int8_640.tflite"
+                    "best_7cls_v2_int8_640.tflite",
+                    "best_yolo26n_7cls_v2_float16_320.tflite",
+                    "best_yolo26n_7cls_v2_float16_416.tflite",
+                    "best_yolo26n_7cls_v2_float16_448.tflite",
+                    "best_yolo26n_7cls_v2_float16_512.tflite",
+                    "best_yolo26n_7cls_v2_float16_640.tflite",
+                    "best_yolo26n_7cls_v2_int8_320.tflite",
+                    "best_yolo26n_7cls_v2_int8_640.tflite"
+                )
+            )
+
+        assertEquals(
+            listOf(
+                "best_yolo26n_7cls_v2_float16_320.tflite",
+                "best_yolo26n_7cls_v2_float16_416.tflite",
+                "best_yolo26n_7cls_v2_float16_448.tflite",
+                "best_yolo26n_7cls_v2_float16_512.tflite",
+                "best_yolo26n_7cls_v2_float16_640.tflite",
+                "best_yolo26n_7cls_v2_int8_320.tflite",
+                "best_yolo26n_7cls_v2_int8_640.tflite"
+            ),
+            modelFiles
+        )
+    }
+
+    @Test
+    fun activeSchemaFallsBackToPreviousSevenClassModelsWhenYolo26nAbsent() {
+        val modelFiles =
+            DetectionLabels.modelFilesForActiveSchema(
+                listOf(
+                    "best_float16_640.tflite",
+                    "best_7cls_v2_float16_320.tflite",
+                    "best_7cls_v2_float16_640.tflite",
+                    "best_7cls_v2_int8_320.tflite"
                 )
             )
 
         assertEquals(
             listOf(
                 "best_7cls_v2_float16_320.tflite",
-                "best_7cls_v2_float16_416.tflite",
-                "best_7cls_v2_float16_448.tflite",
-                "best_7cls_v2_float16_512.tflite",
                 "best_7cls_v2_float16_640.tflite",
-                "best_7cls_v2_int8_320.tflite",
-                "best_7cls_v2_int8_640.tflite"
+                "best_7cls_v2_int8_320.tflite"
             ),
             modelFiles
         )

@@ -10,36 +10,36 @@ class CalibrationSelectorTest {
     fun calibrationCandidatesPreferLargeFloatModelsFirst() {
         val candidates = CalibrationSelector.calibrationCandidates(
             listOf(
-                "best_int8_320.tflite",
-                "best_float16_448.tflite",
+                "best_yolo26n_7cls_v2_int8_320.tflite",
+                "best_yolo26n_7cls_v2_float16_448.tflite",
                 "best_float32_640.tflite",
-                "best_float16_640.tflite"
+                "best_yolo26n_7cls_v2_float16_640.tflite"
             )
         )
 
-        assertEquals("best_float16_640.tflite", candidates.first().fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", candidates.first().fileName)
     }
 
     @Test
     fun chooseBestPicksHighestResolutionMeetingTarget() {
-        val low = result("best_float16_512.tflite", 18.0)
-        val high = result("best_float16_640.tflite", 15.1)
+        val low = result("best_yolo26n_7cls_v2_float16_512.tflite", 18.0)
+        val high = result("best_yolo26n_7cls_v2_float16_640.tflite", 15.1)
 
         val best = CalibrationSelector.chooseBest(listOf(low, high))
 
         assertNotNull(best)
-        assertEquals("best_float16_640.tflite", best?.profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", best?.profile?.fileName)
     }
 
     @Test
     fun chooseBestFallsBackToFastestWhenNothingMeetsTarget() {
-        val faster = result("best_float16_512.tflite", 12.0)
-        val slower = result("best_float16_640.tflite", 10.0)
+        val faster = result("best_yolo26n_7cls_v2_float16_512.tflite", 12.0)
+        val slower = result("best_yolo26n_7cls_v2_float16_640.tflite", 10.0)
 
         val best = CalibrationSelector.chooseBest(listOf(slower, faster))
 
         assertNotNull(best)
-        assertEquals("best_float16_512.tflite", best?.profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_512.tflite", best?.profile?.fileName)
     }
 
     private fun result(fileName: String, fps: Double): CalibrationProfileResult {

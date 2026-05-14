@@ -29,7 +29,9 @@ object DetectionLabels {
             .filter { it.endsWith(".tflite", ignoreCase = true) }
             .sorted()
         val sevenClassFiles = tfliteFiles.filter { it.contains("7cls", ignoreCase = true) }
-        return sevenClassFiles.ifEmpty { tfliteFiles }
+        val yolo26nSevenClassFiles =
+            sevenClassFiles.filter { it.contains("yolo26n", ignoreCase = true) }
+        return yolo26nSevenClassFiles.ifEmpty { sevenClassFiles.ifEmpty { tfliteFiles } }
     }
 
     fun isPedestrianSignal(label: String): Boolean =

@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
     // GPU Support Flag
     private var isGpuSupported = false
     
-    private var currentModelName = "best_7cls_v2_float16_320.tflite" // Safe default for the 7-class pedestrian/vehicle signal model
+    private var currentModelName = "best_yolo26n_7cls_v2_float16_320.tflite" // Safe default for the 7-class pedestrian/vehicle signal model
     private var currentModelProfile = InferenceModelProfile.fromFileName(currentModelName)
     private var availableModelFiles: List<String> = emptyList()
     private var initialBackendPreference: String? = null

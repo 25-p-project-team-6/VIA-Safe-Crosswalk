@@ -9,7 +9,7 @@ import org.junit.Test
 class InferenceModelProfileTest {
     @Test
     fun parsesQuantizationAndResolutionHintsFromFilename() {
-        val profile = InferenceModelProfile.fromFileName("best_float16_416.tflite")
+        val profile = InferenceModelProfile.fromFileName("best_yolo26n_7cls_v2_float16_416.tflite")
 
         assertEquals(ModelQuantization.FLOAT16, profile.quantization)
         assertEquals(416, profile.inputSize)
@@ -20,7 +20,7 @@ class InferenceModelProfileTest {
 
     @Test
     fun int8ProfilesPreferCpuAndSmallerAnalysisResolution() {
-        val profile = InferenceModelProfile.fromFileName("best_int8_320.tflite")
+        val profile = InferenceModelProfile.fromFileName("best_yolo26n_7cls_v2_int8_320.tflite")
 
         assertEquals(ModelQuantization.INT8, profile.quantization)
         assertFalse(profile.recommendedUseGpu)
@@ -31,7 +31,7 @@ class InferenceModelProfileTest {
 
     @Test
     fun displayNameMapsHighEndFloat16ToUserFriendlyAlias() {
-        val profile = InferenceModelProfile.fromFileName("best_float16_640.tflite")
+        val profile = InferenceModelProfile.fromFileName("best_yolo26n_7cls_v2_float16_640.tflite")
 
         assertEquals("최고 성능 모델", profile.displayName())
         assertEquals("최고 성능 모델 · 640px", profile.displayNameWithSize())
@@ -41,31 +41,31 @@ class InferenceModelProfileTest {
     fun recommendPrefersBalancedGpuProfileWhenGpuIsAvailable() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
-                "best_float16_640.tflite",
-                "best_float16_448.tflite",
-                "best_float16_416.tflite",
-                "best_int8_320.tflite"
+                "best_yolo26n_7cls_v2_float16_640.tflite",
+                "best_yolo26n_7cls_v2_float16_448.tflite",
+                "best_yolo26n_7cls_v2_float16_416.tflite",
+                "best_yolo26n_7cls_v2_int8_320.tflite"
             ),
             gpuSupported = true
         )
 
         assertNotNull(profile)
-        assertEquals("best_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
     }
 
     @Test
     fun recommendStillStartsFromFloatProfileWhenGpuCompatibilityIsUnavailable() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
-                "best_float16_640.tflite",
-                "best_float16_416.tflite",
-                "best_int8_320.tflite",
+                "best_yolo26n_7cls_v2_float16_640.tflite",
+                "best_yolo26n_7cls_v2_float16_416.tflite",
+                "best_yolo26n_7cls_v2_int8_320.tflite",
                 "best_float32_448.tflite"
             ),
             gpuSupported = false
         )
 
         assertNotNull(profile)
-        assertEquals("best_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
     }
 }

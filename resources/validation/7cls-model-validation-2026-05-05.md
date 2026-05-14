@@ -6,15 +6,15 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 ## 현재 앱에 포함된 7cls 후보
 | 모델 파일 | 용도 | 비고 |
 | --- | --- | --- |
-| `best_7cls_v2_float16_640.tflite` | 정확도 우선 | GPU/고성능 기기 우선 후보 |
-| `best_7cls_v2_float16_512.tflite` | 정확도-속도 중간 | 640이 15 FPS 미만일 때 비교 |
-| `best_7cls_v2_float16_448.tflite` | 균형형 | 중간 해상도 비교 |
-| `best_7cls_v2_float16_416.tflite` | 균형/속도형 | 640보다 빠른 후보 |
-| `best_7cls_v2_float16_320.tflite` | 속도 우선 | 저성능/리플레이 빠른 점검 후보 |
-| `best_7cls_v2_int8_640.tflite` | CPU/경량 비교 | INT8 calibration 품질 확인 필요 |
-| `best_7cls_v2_int8_320.tflite` | CPU/저사양 비교 | 속도 우선 후보 |
+| `best_yolo26n_7cls_v2_float16_640.tflite` | 정확도 우선 | GPU/고성능 기기 우선 후보 |
+| `best_yolo26n_7cls_v2_float16_512.tflite` | 정확도-속도 중간 | 640이 15 FPS 미만일 때 비교 |
+| `best_yolo26n_7cls_v2_float16_448.tflite` | 균형형 | 중간 해상도 비교 |
+| `best_yolo26n_7cls_v2_float16_416.tflite` | 균형/속도형 | 640보다 빠른 후보 |
+| `best_yolo26n_7cls_v2_float16_320.tflite` | 속도 우선 | 저성능/리플레이 빠른 점검 후보 |
+| `best_yolo26n_7cls_v2_int8_640.tflite` | CPU/경량 비교 | INT8 calibration 품질 확인 필요 |
+| `best_yolo26n_7cls_v2_int8_320.tflite` | CPU/저사양 비교 | 속도 우선 후보 |
 
-`DetectionLabels.modelFilesForActiveSchema()`는 7cls 파일이 있으면 기존 `best_float16_*`/`best_int8_*` 모델을 목록에서 제외한다. 따라서 현재 앱 모델 선택 목록에는 7cls v2 후보만 노출되는 것이 정상이다.
+`DetectionLabels.modelFilesForActiveSchema()`는 `yolo26n_7cls_v2` 파일이 있으면 기존 `best_7cls_v2_*` 및 `best_float16_*`/`best_int8_*` 모델을 목록에서 제외한다. 따라서 현재 앱 모델 선택 목록에는 YOLO26n 7cls v2 후보만 노출되는 것이 정상이다.
 
 ## 현재 안전장치 확인
 | 검증 항목 | 현재 앱 동작 | 근거 |
@@ -24,12 +24,12 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 | 차량 신호만 보이는 경우 | `UNCERTAIN_VIEW` + 보행자 신호 확인 요청 | `SignalAdvisoryEvaluator` |
 | 차량 신호가 함께 보이는 green | `GREEN_CONFIRMED` 차단 | `SignalAdvisoryEvaluator` tests |
 | S25+ red LED missing frame | 확정된 red는 UNKNOWN에서 유지하고, 확정 전 red 후보도 짧은 UNKNOWN gap을 bridge | `TrafficLightStateTracker`, Issue #53 |
-| 7cls 모델 우선 목록 | 7cls 파일이 있으면 기존 모델 숨김 | `DetectionLabelsTest.activeSchemaPrefersSevenClassModelsWhenPresent` |
+| 7cls 모델 우선 목록 | YOLO26n 7cls 파일이 있으면 기존 7cls/legacy 모델 숨김 | `DetectionLabelsTest.activeSchemaPrefersYolo26nSevenClassModelsWhenPresent` |
 | NMS | 기본 IoU 0.5, 신호 클래스는 0.05로 더 엄격하게 중복 제거 | `YoloDetector` 생성부 |
 | confidence threshold | 런타임은 신호등용 `trafficLightThreshold`와 일반 객체용 `generalObjThreshold`를 분리해 적용하고, calibration은 0.15 고정값으로 측정 | `MainActivity`, `OnboardingActivity` 호출부 |
 
 ## 기본 추천/튜닝 판단
-현재 기본 정책은 **자동 측정 우선**이다.
+현재 기본 정책은 **YOLO26n 후보군 안에서 자동 측정 우선**이다.
 
 1. 온보딩 calibration은 후보 모델을 측정한다.
 2. 15 FPS 이상을 만족하는 후보 중 해상도가 가장 높은 모델을 선택한다.
