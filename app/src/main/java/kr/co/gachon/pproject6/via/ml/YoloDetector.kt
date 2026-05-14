@@ -328,69 +328,23 @@ class YoloDetector(
     }
 
     private fun postProcess(output: FloatArray, threshold: Float): List<OverlayView.BoundingBox> {
-        val boundingBoxes = mutableListOf<OverlayView.BoundingBox>()
-
-        // Helper to access data handling both NCHW and NHWC formats
-        fun get(row: Int, col: Int): Float {
-            return if (outputIsTransposed) {
-                output[row * outputCols + col]
-            } else {
-                output[col * outputRows + row]
-            }
+        return YoloOutputParser.parse(
+            output = output,
+            outputRows = outputRows,
+            outputCols = outputCols,
+            outputIsTransposed = outputIsTransposed,
+            inputImageWidth = inputImageWidth,
+            inputImageHeight = inputImageHeight,
+            labels = labels,
+            threshold = threshold,
+            specificConfidenceThresholds = specificConfidenceThresholds
+        ).map { detection ->
+            OverlayView.BoundingBox(
+                box = RectF(detection.left, detection.top, detection.right, detection.bottom),
+                clsName = detection.clsName,
+                score = detection.score
+            )
         }
-
-        for (i in 0 until outputRows) {
-            // Find max score class
-            var maxScore = 0f
-            var maxClassIndex = -1
-
-            // Classes start at index 4
-            val numClasses = outputCols - 4
-            for (c in 0 until numClasses) {
-                val score = get(i, 4 + c)
-                if (score > maxScore) {
-                    maxScore = score
-                    maxClassIndex = c
-                }
-            }
-
-            // Optimization: Skip obvious background (score < 0.1)
-            if (maxScore > 0.1f) {
-                val clsName = labels.getOrElse(maxClassIndex) { "Unknown" }
-                val confThreshold = specificConfidenceThresholds[clsName] ?: threshold
-
-                if (maxScore > confThreshold) {
-                    var cx = get(i, 0)
-                    var cy = get(i, 1)
-                    var w = get(i, 2)
-                    var h = get(i, 3)
-
-                    // Normalize coordinates if they are in pixels
-                    if (cx > 1.0f || cy > 1.0f || w > 1.0f || h > 1.0f) {
-                        cx /= inputImageWidth
-                        cy /= inputImageHeight
-                        w /= inputImageWidth
-                        h /= inputImageHeight
-                    }
-
-                    val left = cx - w / 2
-                    val top = cy - h / 2
-                    val right = cx + w / 2
-                    val bottom = cy + h / 2
-
-                    val rect = RectF(
-                        max(0f, left),
-                        max(0f, top),
-                        min(1f, right),
-                        min(1f, bottom)
-                    )
-
-                    boundingBoxes.add(OverlayView.BoundingBox(rect, clsName, maxScore))
-                }
-            }
-        }
-
-        return boundingBoxes // nms is called in detect now
     }
 
     private fun nms(boxes: List<OverlayView.BoundingBox>): List<OverlayView.BoundingBox> {
