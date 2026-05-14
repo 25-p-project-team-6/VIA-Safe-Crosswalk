@@ -6,6 +6,28 @@ import org.junit.Test
 
 class YoloOutputParserTest {
     @Test
+    fun layoutNameDescribesYolo26nBatchedNmsOutput() {
+        assertEquals(
+            "batched_nms_xyxy_score_class",
+            YoloOutputParser.layoutName(
+                outputCols = 6,
+                labels = DetectionLabels.sevenClassLabels
+            )
+        )
+    }
+
+    @Test
+    fun layoutNameKeepsSixColumnTwoClassOutputAsClassScore() {
+        assertEquals(
+            "class_score_cxcywh",
+            YoloOutputParser.layoutName(
+                outputCols = 6,
+                labels = listOf(DetectionLabels.HUMAN_RED, DetectionLabels.HUMAN_GREEN)
+            )
+        )
+    }
+
+    @Test
     fun yolo26nBatchedNmsLayoutUsesScoreAndClassIdColumns() {
         val detections =
             YoloOutputParser.parse(

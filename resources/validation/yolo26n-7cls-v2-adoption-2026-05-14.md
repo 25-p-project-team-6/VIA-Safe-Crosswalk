@@ -28,7 +28,7 @@
 - Android asset의 기존 `best_7cls_v2_*` TFLite 후보를 `best_yolo26n_7cls_v2_*` 후보로 교체한다.
 - `DetectionLabels.modelFilesForActiveSchema()`는 YOLO26n 7cls 후보가 있으면 해당 파일만 모델 선택/온보딩 calibration에 노출한다.
 - Class id 순서는 기존 7cls와 동일하므로 detector 후처리/label mapping은 변경하지 않는다.
-- 출력 shape도 `[1, 300, 6]`로 기존 TFLite parser를 그대로 사용한다.
+- 출력 shape `[1, 300, 6]`은 NMS 포함 layout으로 보고 `score, classId` 컬럼을 분기 파싱한다.
 
 ## 포함 모델
 | 파일 | 입력 크기 | 용도 |
@@ -40,6 +40,11 @@
 | `best_yolo26n_7cls_v2_float16_320.tflite` | 320 | 속도 우선 float16 |
 | `best_yolo26n_7cls_v2_int8_640.tflite` | 640 | 경량/정확도 절충 int8 |
 | `best_yolo26n_7cls_v2_int8_320.tflite` | 320 | 최경량/속도 우선 int8 |
+
+## 후속 런타임 주의사항
+- GitHub Issue #58에서 YOLO26n 640 float16 처리 FPS 저하를 별도로 추적한다.
+- 전달된 YOLO26n TFLite 출력 `[1, 300, 6]`은 앱에서 `x1, y1, x2, y2, score, classId` 형태의 NMS 포함 export로 해석한다.
+- 이 layout은 class id가 confidence처럼 표시되는 문제는 해결됐지만, Android TFLite GPU delegate에서는 NMS 포함 그래프가 raw-output export보다 느릴 수 있으므로 실측 비교가 필요하다.
 
 ## 검증 체크리스트
 - [ ] 온보딩 calibration에서 YOLO26n 후보만 측정되는지 확인
