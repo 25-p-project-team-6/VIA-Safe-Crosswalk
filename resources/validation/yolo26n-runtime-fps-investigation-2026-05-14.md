@@ -65,14 +65,33 @@ layout=batched_nms_xyxy_score_class labels=7 output=[1, 300, 6]
 
 A raw YOLO export should instead show a class-score layout such as `layout=class_score_cxcywh` with columns equal to `4 + classCount` after normalization.
 
+## S25+ realtime retest — 2026-05-15
+After adding `VIA_PERF` logging, the installed debug build was tested with the delivered YOLO26n exports. The camera was running live, GPU was used for float16 profiles, and int8 profiles used CPU. Results below use the stable samples after warmup.
+
+| Model | Backend | Analysis | Processed FPS | Avg latency | Detect stage |
+| --- | --- | --- | ---: | ---: | ---: |
+| `best_yolo26n_7cls_v2_float16_640.tflite` | GPU | 960x720 | 4.87 | 204ms | ~204ms |
+| `best_yolo26n_7cls_v2_float16_512.tflite` | GPU | 768x576 | 7.45 | 130ms | ~130ms |
+| `best_yolo26n_7cls_v2_float16_448.tflite` | GPU | 640x480 | 9.61 | 99ms | ~99ms |
+| `best_yolo26n_7cls_v2_float16_416.tflite` | GPU | 640x480 | 10.93 | 86ms | ~86ms |
+| `best_yolo26n_7cls_v2_float16_320.tflite` | GPU | 480x360 | 16.61 | 51ms | ~51ms |
+| `best_yolo26n_7cls_v2_int8_640.tflite` | CPU | 960x720 | 6.00 | 161ms | ~162ms |
+| `best_yolo26n_7cls_v2_int8_320.tflite` | CPU | 480x360 | 20.07 | 38ms | ~38ms |
+
+Decision for this branch: prefer `best_yolo26n_7cls_v2_int8_320.tflite` as the automatic YOLO26n startup profile so the live pipeline is no longer pinned to the slow NMS-included 640 export. Keep float16 320 as the fallback if the int8 realtime profile is missing.
+
+The detector also skips the app-side class-agnostic NMS pass for NMS-included `[1, 300, 6]` exports because the model has already emitted top-k detections; raw class-score exports still use app-side NMS. Final default-retained install verified `best_yolo26n_7cls_v2_int8_320.tflite` on CPU at ~19.9 processed FPS after warmup.
+
+This is a runtime workaround, not the final model-delivery answer. The 640 float16 candidate still needs a NMS-free/raw-output export to recover high-resolution throughput.
+
 ## Retest plan
 1. Run the same realtime route with YOLO26n float16 320/416/448/512/640.
 2. Record Camera FPS, Processed FPS, latency, model name, backend, analysis resolution, and the new `model_io` log line.
 3. Compare YOLO26n NMS-included 640 against a future NMS-free YOLO26n 640 export if available.
-4. Keep the 320 candidate as a temporary field-test workaround only; do not permanently lower the default until the export/runtime cause is decided.
+4. Treat the 320 int8 candidate as the current realtime default until a NMS-free high-resolution export proves it can restore throughput.
 5. If NMS-free YOLO26n restores expected throughput, prefer raw-output export plus app-side NMS for Android delivery.
 
 ## Acceptance criteria for closing #58
 - The 640 FPS regression is attributed to either export layout/delegate compatibility, analysis resolution cost, or model compute cost with evidence.
 - The team decides whether Android should use NMS-included or NMS-free TFLite exports.
-- Default model recommendation is updated only after measured FPS and detection stability are compared across candidate resolutions.
+- Default model recommendation is backed by measured FPS and can be revised when a NMS-free high-resolution export is available.

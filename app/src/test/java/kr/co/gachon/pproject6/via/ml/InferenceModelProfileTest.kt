@@ -38,7 +38,7 @@ class InferenceModelProfileTest {
     }
 
     @Test
-    fun recommendPrefersBalancedGpuProfileWhenGpuIsAvailable() {
+    fun recommendPrefersMeasuredRealtimeYolo26nProfileWhenGpuIsAvailable() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
                 "best_yolo26n_7cls_v2_float16_640.tflite",
@@ -50,11 +50,41 @@ class InferenceModelProfileTest {
         )
 
         assertNotNull(profile)
-        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_int8_320.tflite", profile?.fileName)
     }
 
     @Test
-    fun recommendStillStartsFromFloatProfileWhenGpuCompatibilityIsUnavailable() {
+    fun recommendFallsBackToFloat16Yolo26n320WhenInt8RealtimeProfileIsMissing() {
+        val profile = InferenceModelProfile.recommend(
+            modelFiles = listOf(
+                "best_yolo26n_7cls_v2_float16_640.tflite",
+                "best_yolo26n_7cls_v2_float16_320.tflite",
+                "best_yolo26n_7cls_v2_float16_416.tflite"
+            ),
+            gpuSupported = true
+        )
+
+        assertNotNull(profile)
+        assertEquals("best_yolo26n_7cls_v2_float16_320.tflite", profile?.fileName)
+    }
+
+    @Test
+    fun legacyRecommendationStillTargetsHighResolutionFloatWhenGpuIsAvailable() {
+        val profile = InferenceModelProfile.recommend(
+            modelFiles = listOf(
+                "best_float16_640.tflite",
+                "best_float16_416.tflite",
+                "best_int8_320.tflite"
+            ),
+            gpuSupported = true
+        )
+
+        assertNotNull(profile)
+        assertEquals("best_float16_640.tflite", profile?.fileName)
+    }
+
+    @Test
+    fun yolo26nRealtimeRecommendationDoesNotDependOnGpuCompatibility() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
                 "best_yolo26n_7cls_v2_float16_640.tflite",
@@ -66,6 +96,6 @@ class InferenceModelProfileTest {
         )
 
         assertNotNull(profile)
-        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_int8_320.tflite", profile?.fileName)
     }
 }
