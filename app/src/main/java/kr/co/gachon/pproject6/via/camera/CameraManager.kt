@@ -2,8 +2,10 @@ package kr.co.gachon.pproject6.via.camera
 
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
 import android.util.Range
 import android.util.Log
 import android.util.Size
@@ -30,6 +32,7 @@ class CameraManager(
     private val viewFinder: PreviewView,
     private val executor: ExecutorService,
     private val analysisTargetResolution: Size,
+    private val sourceFrameCallback: () -> Unit = {},
     private val imageAnalyzerCallback: (ImageProxy) -> Unit
 ) {
     private companion object {
@@ -59,6 +62,7 @@ class CameraManager(
 
             val previewBuilder = Preview.Builder()
             applyFlickerMitigation(previewBuilder, flickerMitigationSettings)
+            applySourceFrameCallback(previewBuilder)
             val preview = previewBuilder
                 .build()
                 .also {
@@ -177,6 +181,22 @@ class CameraManager(
     ) {
         val extender = Camera2Interop.Extender(previewBuilder)
         applyFlickerMitigation(extender, settings)
+    }
+
+    @AndroidXOptIn(ExperimentalCamera2Interop::class)
+    private fun applySourceFrameCallback(previewBuilder: Preview.Builder) {
+        Camera2Interop.Extender(previewBuilder)
+            .setSessionCaptureCallback(
+                object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(
+                        session: CameraCaptureSession,
+                        request: CaptureRequest,
+                        result: TotalCaptureResult
+                    ) {
+                        sourceFrameCallback()
+                    }
+                }
+            )
     }
 
     @AndroidXOptIn(ExperimentalCamera2Interop::class)

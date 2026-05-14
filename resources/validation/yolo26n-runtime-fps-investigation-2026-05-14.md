@@ -113,6 +113,23 @@ Follow-up spot checks under the same warmed state:
 
 Conclusion: Android delivery should use the raw-output export plus app-side confidence/NMS. Do not lower the automatic recommendation to 320/int8 merely to hide a high-resolution regression; low-resolution/int8 remains a diagnostic/manual fallback only. Sustained outdoor FPS should be interpreted together with thermal state.
 
+## Input-rate metric correction — 2026-05-15
+One measurement caveat from the raw-output retest was fixed before using the debug UI for further FPS decisions. The previous Camera FPS label was marked from the CameraX `ImageAnalysis` callback. Since that callback held the current `ImageProxy` open until processing copied and closed it, slow inference could backpressure the analyzer and make the input label fall with Processed FPS. Replay FPS had a similar issue because it was marked only when the processing loop captured a replay bitmap.
+
+The input-rate label now uses source-frame events:
+
+- live camera: Camera2 preview session capture callback
+- replay: `TextureView.onSurfaceTextureUpdated`
+- analyzer callback: fallback only until the first preview capture callback is observed
+
+Post-fix live-camera evidence with raw 640/GPU while processing was thermally slow:
+
+| Input label | Processed label | Interpretation |
+| ---: | ---: | --- |
+| Camera FPS 29.82 | Processed FPS 9.67 | Camera capture still near 30fps; inference path is saturated |
+| Camera FPS 29.85 | Processed FPS 9.52 | Input metric no longer follows model latency |
+| Camera FPS 29.98 | Processed FPS 9.57 | Debug UI now separates capture cadence from throughput |
+
 ## Acceptance criteria for closing #58
 - The 640 FPS regression is attributed to either export layout/delegate compatibility, analysis resolution cost, or model compute cost with evidence.
 - The team decides whether Android should use NMS-included or NMS-free TFLite exports.

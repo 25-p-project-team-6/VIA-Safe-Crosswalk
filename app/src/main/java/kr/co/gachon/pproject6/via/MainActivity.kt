@@ -161,6 +161,7 @@ class MainActivity : AppCompatActivity() {
     private var manualStatusDetailUntilElapsedMs = Long.MIN_VALUE
 
     private var cameraManager: CameraManager? = null
+    @Volatile
     private var hasStartedCamera = false
     private var cameraRecoveryAttempts = 0
     private val videoReplayRunning = AtomicBoolean(false)
@@ -172,6 +173,8 @@ class MainActivity : AppCompatActivity() {
     private var inputRateLabel = "Camera FPS"
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
+    @Volatile
+    private var cameraSourceFramesObserved = false
 
     // Set this to false to hide debug info (FPS, Latency, Hardware, Slider)
     private var showDebugInfo = false
@@ -878,13 +881,15 @@ class MainActivity : AppCompatActivity() {
             cameraRecoveryAttempts = 0
         }
         lastCameraFrameAtElapsedMs = 0L
+        cameraSourceFramesObserved = false
         val resolution = currentModelProfile.analysisResolution
         cameraManager = CameraManager(
             this,
             this,
             viewFinder,
             cameraExecutor!!,
-            android.util.Size(resolution.width, resolution.height)
+            android.util.Size(resolution.width, resolution.height),
+            sourceFrameCallback = ::markCameraSourceFrame
         ) { image ->
             enqueueFrame(image)
         }
@@ -914,6 +919,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         scheduleCameraColdStartRecovery()
+    }
+
+    private fun markCameraSourceFrame() {
+        if (!hasStartedCamera || videoReplayRunning.get()) {
+            return
+        }
+        cameraSourceFramesObserved = true
+        cameraRateTracker.mark()
     }
 
     private fun applySelectedZoom() {
@@ -977,7 +990,6 @@ class MainActivity : AppCompatActivity() {
                     val stageDurationsMs =
                         linkedMapOf("capture" to elapsedMillis(captureStartNs))
 
-                    cameraRateTracker.mark()
                     processBitmapFrame(
                         bitmap = bitmap,
                         frameStartNs = frameStartNs,
@@ -1045,34 +1057,43 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (videoReplayFrameView.isAvailable) {
+            videoReplayFrameView.surfaceTextureListener = replaySurfaceTextureListener(::attach)
             videoReplayFrameView.surfaceTexture?.let(::attach)
         } else {
-            videoReplayFrameView.surfaceTextureListener =
-                object : TextureView.SurfaceTextureListener {
-                    override fun onSurfaceTextureAvailable(
-                        surface: SurfaceTexture,
-                        width: Int,
-                        height: Int
-                    ) {
-                        attach(surface)
-                    }
-
-                    override fun onSurfaceTextureSizeChanged(
-                        surface: SurfaceTexture,
-                        width: Int,
-                        height: Int
-                    ) = Unit
-
-                    override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                        videoReplayRunning.set(false)
-                        releaseVideoReplayPlayer()
-                        return true
-                    }
-
-                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) = Unit
-                }
+            videoReplayFrameView.surfaceTextureListener = replaySurfaceTextureListener(::attach)
         }
     }
+
+    private fun replaySurfaceTextureListener(
+        attach: (SurfaceTexture) -> Unit
+    ): TextureView.SurfaceTextureListener =
+        object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
+                attach(surface)
+            }
+
+            override fun onSurfaceTextureSizeChanged(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) = Unit
+
+            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
+                videoReplayRunning.set(false)
+                releaseVideoReplayPlayer()
+                return true
+            }
+
+            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+                if (videoReplayRunning.get()) {
+                    cameraRateTracker.mark()
+                }
+            }
+        }
 
     private fun captureReplayBitmap(width: Int, height: Int): Bitmap? {
         if (!videoReplayRunning.get()) {
@@ -1166,7 +1187,9 @@ class MainActivity : AppCompatActivity() {
      
     private fun enqueueFrame(imageProxy: ImageProxy) {
         lastCameraFrameAtElapsedMs = SystemClock.elapsedRealtime()
-        cameraRateTracker.mark()
+        if (!cameraSourceFramesObserved) {
+            cameraRateTracker.mark()
+        }
         val previousFrame = pendingFrame.getAndSet(imageProxy)
         previousFrame?.close()
         scheduleFrameProcessing()

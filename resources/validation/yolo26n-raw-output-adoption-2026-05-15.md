@@ -63,9 +63,30 @@ model=best_yolo26n_7cls_v2_raw_float16_640.tflite backend=GPU requestedGpu=true 
 
 During the later drop, Android thermal service reported `Thermal Status: 2` and skin temperature status `2`. The FPS decline therefore should not be interpreted as the raw-output export still containing the old NMS/TopK bottleneck. The raw 640 export removes the `[1, 300, 6]` postprocess graph and restores the expected app-side NMS parser path; sustained FPS still depends on device thermal state.
 
+## Input FPS label correction — 2026-05-15
+The first live retest exposed a measurement bug: the debug UI's Camera FPS was being marked from the `ImageAnalysis` analyzer callback. Because the analyzer retained an `ImageProxy` until the slower processing executor copied and closed it, CameraX backpressure could make the "Camera FPS" label follow model latency instead of the actual camera capture cadence. Replay had the same class of bug: "Replay FPS" was marked in the processing loop rather than from rendered video-frame updates.
+
+The debug input-rate source was changed as follows:
+
+- Live camera input FPS is now marked from a Camera2 session capture callback on the preview stream.
+- The analyzer callback remains a fallback until the first capture callback is observed.
+- Replay input FPS is now marked from `TextureView.onSurfaceTextureUpdated`.
+- `RateTracker` methods are synchronized because camera/replay input ticks can arrive off the UI thread.
+
+Post-fix live log with raw 640/GPU under warmed/slow processing:
+
+```text
+input="Camera FPS: 29.82" processed="Processed FPS: 9.67"
+input="Camera FPS: 29.85" processed="Processed FPS: 9.52"
+input="Camera FPS: 29.98" processed="Processed FPS: 9.57"
+```
+
+This confirms the input label is no longer a proxy for inference throughput. The processed FPS can still drop with thermal/inference cost, but Camera FPS stays near the requested 30fps capture range.
+
 ## 로컬 검증
 - `./gradlew testDebugUnitTest --tests 'kr.co.gachon.pproject6.via.ml.DetectionLabelsTest' --tests 'kr.co.gachon.pproject6.via.ml.InferenceModelProfileTest' --tests 'kr.co.gachon.pproject6.via.ml.YoloOutputParserTest'` ✅
 - `./gradlew testDebugUnitTest` ✅
 - `./gradlew lintDebug` ✅
 - `./gradlew assembleDebug` ✅
 - Debug APK install and live-camera log capture ✅
+- Debug APK reinstall after input-FPS label fix; live-camera logs show Camera FPS ~30 while Processed FPS ~9..10 ✅
