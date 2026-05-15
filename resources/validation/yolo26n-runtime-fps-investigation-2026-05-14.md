@@ -130,7 +130,17 @@ Post-fix live-camera evidence with raw 640/GPU while processing was thermally sl
 | Camera FPS 29.85 | Processed FPS 9.52 | Input metric no longer follows model latency |
 | Camera FPS 29.98 | Processed FPS 9.57 | Debug UI now separates capture cadence from throughput |
 
+## 30fps-first runtime policy — 2026-05-15
+Further field observation showed raw 640 float16/GPU tends to process around the 20fps range, while raw 512 float16/GPU can reach the 30fps target. Because signal continuity is more important than maximum input resolution for this guidance path, startup recommendation and onboarding calibration now prioritize the highest candidate that can meet a 30fps target.
+
+Applied policy:
+
+- GPU float16 startup recommendation target input is 512.
+- Legacy/saved GPU selections above the new frame-priority recommendation are replaced at startup.
+- Onboarding calibration target is 30fps, so a 640 result around 20fps no longer passes.
+- Replay input display is capped to the app target, `Replay FPS: 30.00`, even when the source video is 60fps; `Processed FPS` remains the model throughput metric.
+
 ## Acceptance criteria for closing #58
 - The 640 FPS regression is attributed to either export layout/delegate compatibility, analysis resolution cost, or model compute cost with evidence.
 - The team decides whether Android should use NMS-included or NMS-free TFLite exports.
-- Default model recommendation is not lowered merely to hide the 640 regression.
+- Default model recommendation is frame-priority based rather than lowered blindly: raw 512 is preferred because raw 640 was observed around 20fps while 512 can meet the 30fps target.

@@ -64,7 +64,7 @@ data class InferenceModelProfile(
                 ModelQuantization.UNKNOWN -> 4
             }
 
-            val targetInput = if (profile.recommendedUseGpu) 640 else 448
+            val targetInput = if (profile.recommendedUseGpu) 512 else 448
             val sizeRank = profile.inputSize?.let { kotlin.math.abs(it - targetInput) } ?: 10_000
             return quantizationRank * 10_000 + sizeRank
         }

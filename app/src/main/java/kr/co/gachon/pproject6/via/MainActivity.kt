@@ -12,9 +12,7 @@ import android.graphics.SurfaceTexture
 import android.location.Location
 import android.location.LocationManager
 import android.media.MediaPlayer
-import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -88,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
+        private const val VIDEO_REPLAY_TARGET_FPS = 30.0
         private const val VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS = 33L
         private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L
         private const val CROSSWALK_GUIDANCE_STATUS_OVERRIDE_MS = 4_000L
@@ -464,7 +463,18 @@ class MainActivity : AppCompatActivity() {
 
         availableModelFiles = discoverModelFiles()
         InferenceModelProfile.recommend(availableModelFiles, isGpuSupported)?.let { recommendedProfile ->
-            if (preferences.selectedModelName == null || preferences.selectedModelName !in availableModelFiles) {
+            val savedModelName = preferences.selectedModelName
+            val savedProfile = savedModelName?.let(InferenceModelProfile::fromFileName)
+            val shouldUseFramePriorityRecommendation =
+                savedProfile != null &&
+                    savedProfile.recommendedUseGpu &&
+                    (savedProfile.inputSize ?: 0) > (recommendedProfile.inputSize ?: Int.MAX_VALUE)
+
+            if (
+                savedModelName == null ||
+                savedModelName !in availableModelFiles ||
+                shouldUseFramePriorityRecommendation
+            ) {
                 currentModelName = recommendedProfile.fileName
                 currentModelProfile = recommendedProfile
             }
@@ -953,7 +963,7 @@ class MainActivity : AppCompatActivity() {
         videoReplayUri = uri
         videoReplayRunning.set(true)
         inputRateLabel = "Replay FPS"
-        fixedInputRateText = replaySourceFpsDisplayString(uri)
+        fixedInputRateText = replayTargetFpsDisplayString()
         resetPerformanceStats()
         guidanceRuntimeResetter.resetForTrafficLogicDisabled()
         viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
@@ -1072,53 +1082,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun replaySourceFpsDisplayString(uri: Uri): String? {
-        val fps = runCatching {
-            val retriever = MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(this, uri)
-                val captureFps =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        retriever
-                            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
-                            ?.toDoubleOrNull()
-                    } else {
-                        null
-                    }
-
-                captureFps
-                    ?.takeIf { it.isFinite() && it > 0.0 }
-                    ?: estimateReplayFpsFromMetadata(retriever)
-            } finally {
-                retriever.release()
-            }
-        }.getOrNull() ?: return null
-
-        return String.format(Locale.US, "Replay FPS: %.2f", fps)
-    }
-
-    private fun estimateReplayFpsFromMetadata(
-        retriever: MediaMetadataRetriever
-    ): Double? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            return null
-        }
-
-        val frameCount =
-            retriever
-                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
-                ?.toLongOrNull()
-                ?.takeIf { it > 0L }
-                ?: return null
-        val durationMs =
-            retriever
-                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                ?.toLongOrNull()
-                ?.takeIf { it > 0L }
-                ?: return null
-
-        return frameCount * 1_000.0 / durationMs
-    }
+    private fun replayTargetFpsDisplayString(): String =
+        String.format(Locale.US, "Replay FPS: %.2f", VIDEO_REPLAY_TARGET_FPS)
 
     private fun replaySurfaceTextureListener(
         attach: (SurfaceTexture) -> Unit

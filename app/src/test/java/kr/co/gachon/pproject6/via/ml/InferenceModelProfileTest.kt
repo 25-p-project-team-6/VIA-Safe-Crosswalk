@@ -38,7 +38,7 @@ class InferenceModelProfileTest {
     }
 
     @Test
-    fun recommendPrefersBalancedGpuProfileWhenGpuIsAvailable() {
+    fun recommendPrefersThirtyFpsGpuProfileWhenGpuIsAvailable() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
                 "best_yolo26n_7cls_v2_float16_640.tflite",
@@ -50,22 +50,23 @@ class InferenceModelProfileTest {
         )
 
         assertNotNull(profile)
-        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_448.tflite", profile?.fileName)
     }
 
     @Test
-    fun recommendKeepsRawOutputYolo26n640AsHighResolutionCandidate() {
+    fun recommendKeepsRawOutputYolo26n512AsThirtyFpsCandidate() {
         val profile = InferenceModelProfile.recommend(
             modelFiles = listOf(
                 "best_yolo26n_7cls_v2_raw_int8_320.tflite",
                 "best_yolo26n_7cls_v2_raw_float16_416.tflite",
+                "best_yolo26n_7cls_v2_raw_float16_512.tflite",
                 "best_yolo26n_7cls_v2_raw_float16_640.tflite"
             ),
             gpuSupported = true
         )
 
         assertNotNull(profile)
-        assertEquals("best_yolo26n_7cls_v2_raw_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_raw_float16_512.tflite", profile?.fileName)
     }
 
     @Test
@@ -81,6 +82,6 @@ class InferenceModelProfileTest {
         )
 
         assertNotNull(profile)
-        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_416.tflite", profile?.fileName)
     }
 }

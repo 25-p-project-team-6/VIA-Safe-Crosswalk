@@ -24,7 +24,8 @@ Local flatbuffer metadata check:
 - App assets의 NMS-included `best_yolo26n_7cls_v2_*` 파일을 raw-output `best_yolo26n_7cls_v2_raw_*` 파일로 교체한다.
 - `DetectionLabels.modelFilesForActiveSchema()`는 raw YOLO26n 파일이 있으면 raw 파일만 노출한다.
 - 기존 non-raw YOLO26n 파일이 남아 있더라도 모델 spinner/온보딩 calibration이 raw 후보를 우선 사용하게 한다.
-- 앱 기본 안전 fallback 파일명도 raw-output 320 float16 후보로 갱신한다. 실제 자동 추천은 raw 640 float16을 우선 선택한다.
+- 앱 기본 안전 fallback 파일명도 raw-output 320 float16 후보로 갱신한다.
+- 2026-05-15 후속 튜닝 이후 실제 자동 추천/온보딩 기준은 최대 해상도보다 30fps 유지에 우선순위를 두며, raw 512 float16/GPU를 우선 후보로 사용한다. raw 640은 수동 디버그 비교 후보로 남긴다.
 
 ## 포함 모델
 | 파일 | 입력 크기 | 출력 shape | 용도 |
@@ -82,6 +83,15 @@ input="Camera FPS: 29.98" processed="Processed FPS: 9.57"
 ```
 
 This confirms the input label is no longer a proxy for inference throughput. The processed FPS can still drop with thermal/inference cost, but Camera FPS stays near the requested 30fps capture range.
+
+## 30fps 우선 추천 정책 — 2026-05-15
+현장 관찰상 raw 640 float16/GPU는 대략 20fps대 처리, raw 512 float16/GPU는 30fps 근처 처리가 가능했다. 보행 신호 안내는 최고 해상도보다 프레임 연속성이 더 중요하므로 자동 추천과 온보딩 calibration 기준을 30fps 우선으로 조정했다.
+
+- GPU float16 자동 추천 target input을 640에서 512로 낮췄다.
+- 기존 저장값이 640처럼 새 30fps 추천 후보보다 높은 GPU 해상도이면 시작 시 30fps 우선 추천 후보로 교체한다.
+- 온보딩 calibration 통과 기준을 15fps에서 30fps로 올렸다. 640이 30fps를 못 넘고 512가 넘으면 512가 선택된다.
+- Live camera는 이미 AE target range를 30fps로 제한한다.
+- Replay도 원본 영상이 60fps여도 앱 입력 목표 표시를 `Replay FPS: 30.00`으로 고정하고, 처리량은 `Processed FPS`에서 별도 확인한다.
 
 ## 로컬 검증
 - `./gradlew testDebugUnitTest --tests 'kr.co.gachon.pproject6.via.ml.DetectionLabelsTest' --tests 'kr.co.gachon.pproject6.via.ml.InferenceModelProfileTest' --tests 'kr.co.gachon.pproject6.via.ml.YoloOutputParserTest'` ✅

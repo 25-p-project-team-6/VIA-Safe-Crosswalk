@@ -6,8 +6,8 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 ## 현재 앱에 포함된 7cls 후보
 | 모델 파일 | 용도 | 비고 |
 | --- | --- | --- |
-| `best_yolo26n_7cls_v2_float16_640.tflite` | 정확도 우선 | GPU/고성능 기기 우선 후보 |
-| `best_yolo26n_7cls_v2_float16_512.tflite` | 정확도-속도 중간 | 640이 15 FPS 미만일 때 비교 |
+| `best_yolo26n_7cls_v2_float16_640.tflite` | 정확도 우선 | 수동 고해상도 비교 후보 |
+| `best_yolo26n_7cls_v2_float16_512.tflite` | 30fps 우선 | GPU/고성능 기기 우선 후보 |
 | `best_yolo26n_7cls_v2_float16_448.tflite` | 균형형 | 중간 해상도 비교 |
 | `best_yolo26n_7cls_v2_float16_416.tflite` | 균형/속도형 | 640보다 빠른 후보 |
 | `best_yolo26n_7cls_v2_float16_320.tflite` | 속도 우선 | 저성능/리플레이 빠른 점검 후보 |
@@ -32,8 +32,8 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 현재 기본 정책은 **YOLO26n 후보군 안에서 자동 측정 우선**이다.
 
 1. 온보딩 calibration은 후보 모델을 측정한다.
-2. 15 FPS 이상을 만족하는 후보 중 해상도가 가장 높은 모델을 선택한다.
-3. 어떤 모델도 15 FPS를 만족하지 못하면 실제 측정 FPS가 가장 높은 모델을 선택한다.
+2. 30 FPS 이상을 만족하는 후보 중 해상도가 가장 높은 모델을 선택한다.
+3. 어떤 모델도 30 FPS를 만족하지 못하면 실제 측정 FPS가 가장 높은 모델을 선택한다.
 4. 사용자는 디버그 패널에서 모델 파일명을 직접 선택해 320/416/448/512/640 및 float16/int8을 비교할 수 있다.
 
 현재 코드 기준으로는 field/replay 혼동 사례가 더 쌓이기 전까지 traffic-light/general-object threshold와 NMS 기본값을 추가로 낮추거나 높이지 않는다. 특히 차량 신호가 보행자 신호로 이어지는 문제는 threshold보다 label 분리와 advisory gate에서 먼저 차단한다.
@@ -80,3 +80,6 @@ S25+ 또는 유사 스마트폰 영상에서 빨간 보행자 신호가 일부 �
 
 ## raw-output update — 2026-05-15
 Issue #58 이후 현재 앱 모델 선택 목록은 NMS-free raw-output YOLO26n 후보(`best_yolo26n_7cls_v2_raw_*`)를 우선 노출한다. 기존 NMS 포함 `[1, 300, 6]` YOLO26n 파일은 640 FPS 저하 원인 비교용 기록으로만 유지한다.
+
+## 30fps 우선 update — 2026-05-15
+raw 640 float16/GPU는 처리 FPS가 20fps대, raw 512 float16/GPU는 30fps 근처로 관찰되어 기본 자동 추천과 온보딩 calibration 기준을 30fps 우선으로 조정했다. Replay도 원본 영상 fps가 60fps여도 앱 입력 목표는 30fps로 고정 표시하고, 모델 처리량은 `Processed FPS`로 분리해서 확인한다.

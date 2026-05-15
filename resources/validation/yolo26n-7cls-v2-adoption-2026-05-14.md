@@ -53,6 +53,7 @@
 - Raw-output 640 float16은 `[1, 11, 8400]`으로 기존 YOLO11n 7cls v2와 같은 앱-side confidence/NMS 경로에서 비교한다.
 - 실기기 로그에서 raw 640/GPU는 `layout=class_score_cxcywh`, `analysis=960x720`로 초기화되며, 초반 안정 구간에서 20fps대 처리까지 회복했다.
 - 장시간/고온 상태에서는 Android thermal status 2에서 detect stage가 증가해 FPS가 다시 떨어질 수 있으므로, 이후 야외 검증에서는 모델명/해상도뿐 아니라 thermal state도 함께 기록한다.
+- 후속 실측에서 raw 512 float16/GPU가 30fps 목표에 더 적합하다고 판단되어, 자동 추천/온보딩 기준은 raw 512를 우선하고 raw 640은 수동 비교 후보로 남긴다.
 
 ## 검증 체크리스트
 - [x] 온보딩 calibration에서 raw YOLO26n 후보를 우선 노출하도록 로직/테스트 확인
