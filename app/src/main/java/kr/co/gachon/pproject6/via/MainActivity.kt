@@ -86,8 +86,9 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
-        private const val VIDEO_REPLAY_TARGET_FPS = 30.0
-        private const val VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS = 33L
+        private const val DEFAULT_MAX_PROCESSED_FPS = 20.0
+        private const val MIN_MAX_PROCESSED_FPS = 10.0
+        private const val MAX_MAX_PROCESSED_FPS = 30.0
         private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L
         private const val CROSSWALK_GUIDANCE_STATUS_OVERRIDE_MS = 4_000L
     }
@@ -126,10 +127,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusBadgeText: TextView
     private lateinit var confidenceSliderLabel: TextView
     private lateinit var trafficConfidenceLabel: TextView
+    private lateinit var maxProcessedFpsLabel: TextView
     private lateinit var downTiltLabel: TextView
     private lateinit var upTiltLabel: TextView
     private lateinit var confidenceSlider: Slider
     private lateinit var trafficConfidenceSlider: Slider
+    private lateinit var maxProcessedFpsSlider: Slider
     private lateinit var downTiltSlider: Slider
     private lateinit var upTiltSlider: Slider
     private lateinit var gpuSwitch: com.google.android.material.switchmaterial.SwitchMaterial
@@ -141,6 +144,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsButton: android.widget.ImageButton
     private lateinit var usageGuideButton: android.widget.ImageButton
     private lateinit var debugToggleButton: android.widget.ImageButton
+    private lateinit var debugCloseButton: MaterialButton
     private lateinit var buildInfoCard: View
     private lateinit var debugShortcutCard: View
     private lateinit var topControlCard: View
@@ -173,6 +177,10 @@ class MainActivity : AppCompatActivity() {
     private var zoomCheckedBeforeReplay: Boolean? = null
     private var inputRateLabel = "Camera FPS"
     private var fixedInputRateText: String? = null
+    @Volatile
+    private var maxProcessedFps = DEFAULT_MAX_PROCESSED_FPS
+    private val framePacingLock = Object()
+    private var nextProcessFrameAtElapsedMs = 0L
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
     @Volatile
@@ -312,6 +320,7 @@ class MainActivity : AppCompatActivity() {
         settingsButton = findViewById(R.id.settingsButton)
         usageGuideButton = findViewById(R.id.usageGuideButton)
         debugToggleButton = findViewById(R.id.debugToggleButton)
+        debugCloseButton = findViewById(R.id.debugCloseButton)
         buildInfoCard = findViewById(R.id.buildInfoCard)
         debugShortcutCard = findViewById(R.id.debugShortcutCard)
         topControlCard = findViewById(R.id.topControlCard)
@@ -340,10 +349,12 @@ class MainActivity : AppCompatActivity() {
         statusBadgeText = findViewById(R.id.statusBadgeText)
         confidenceSliderLabel = findViewById(R.id.confidenceSliderLabel)
         trafficConfidenceLabel = findViewById(R.id.trafficConfidenceLabel)
+        maxProcessedFpsLabel = findViewById(R.id.maxProcessedFpsLabel)
         downTiltLabel = findViewById(R.id.downTiltLabel)
         upTiltLabel = findViewById(R.id.upTiltLabel)
         confidenceSlider = findViewById(R.id.confidenceSlider)
         trafficConfidenceSlider = findViewById(R.id.trafficConfidenceSlider)
+        maxProcessedFpsSlider = findViewById(R.id.maxProcessedFpsSlider)
         downTiltSlider = findViewById(R.id.downTiltSlider)
         upTiltSlider = findViewById(R.id.upTiltSlider)
         gpuSwitch = findViewById(R.id.gpuSwitch)
@@ -373,6 +384,9 @@ class MainActivity : AppCompatActivity() {
         }
         debugToggleButton.setOnClickListener {
             setDebugPanelVisible(!showDebugInfo)
+        }
+        debugCloseButton.setOnClickListener {
+            setDebugPanelVisible(false)
         }
         videoReplayButton.setOnClickListener {
             if (videoReplayRunning.get()) {
@@ -414,6 +428,16 @@ class MainActivity : AppCompatActivity() {
             updateDetectorThresholds()
         }
 
+        maxProcessedFpsSlider.addOnChangeListener { _, value, _ ->
+            maxProcessedFps = value.toDouble()
+            resetFramePacing()
+            updateMaxProcessedFpsLabel()
+            if (videoReplayRunning.get()) {
+                fixedInputRateText = replayTargetFpsDisplayString()
+                inputFpsText.text = currentInputRateDisplayString()
+            }
+        }
+
         downTiltSlider.addOnChangeListener { _, value, _ ->
             crossingSupportManager.updateLookingDownThresholdDegrees(value)
             updateDownTiltLabel()
@@ -427,10 +451,12 @@ class MainActivity : AppCompatActivity() {
 
         confidenceSlider.value = 0.5f
         trafficConfidenceSlider.value = 0.15f
+        maxProcessedFpsSlider.value = DEFAULT_MAX_PROCESSED_FPS.toFloat()
         downTiltSlider.value = crossingSupportManager.currentLookingDownThresholdDegrees()
         upTiltSlider.value = crossingSupportManager.currentLookingUpThresholdDegrees()
         downTiltSlider.isEnabled = true
         upTiltSlider.isEnabled = true
+        updateMaxProcessedFpsLabel()
         updateDownTiltLabel()
         updateUpTiltLabel()
 
@@ -746,6 +772,11 @@ class MainActivity : AppCompatActivity() {
             "Up Tilt Range: 90..${String.format(Locale.US, "%.0f", crossingSupportManager.currentLookingUpThresholdDegrees())}"
     }
 
+    private fun updateMaxProcessedFpsLabel() {
+        maxProcessedFpsLabel.text =
+            "Max Processed FPS: ${String.format(Locale.US, "%.0f", maxProcessedFps)}"
+    }
+
     private fun setDebugPanelVisible(visible: Boolean) {
         showDebugInfo = visible
         debugContainer.visibility = if (visible) View.VISIBLE else View.GONE
@@ -798,6 +829,30 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentInputRateDisplayString(): String =
         fixedInputRateText ?: cameraRateTracker.displayString(inputRateLabel)
+
+    private fun processedFrameIntervalMs(): Long {
+        val boundedFps =
+            maxProcessedFps.coerceIn(MIN_MAX_PROCESSED_FPS, MAX_MAX_PROCESSED_FPS)
+        return kotlin.math.ceil(1_000.0 / boundedFps).toLong()
+    }
+
+    private fun reserveNextProcessingFrameAt(nowMs: Long = SystemClock.elapsedRealtime()) {
+        synchronized(framePacingLock) {
+            nextProcessFrameAtElapsedMs = nowMs + processedFrameIntervalMs()
+        }
+    }
+
+    private fun millisUntilNextProcessingFrame(nowMs: Long = SystemClock.elapsedRealtime()): Long {
+        synchronized(framePacingLock) {
+            return (nextProcessFrameAtElapsedMs - nowMs).coerceAtLeast(0L)
+        }
+    }
+
+    private fun resetFramePacing() {
+        synchronized(framePacingLock) {
+            nextProcessFrameAtElapsedMs = 0L
+        }
+    }
 
     private fun initDetector(
         useGpu: Boolean,
@@ -891,6 +946,7 @@ class MainActivity : AppCompatActivity() {
         viewFinder.visibility = View.VISIBLE
         inputRateLabel = "Camera FPS"
         fixedInputRateText = null
+        resetFramePacing()
         videoReplayButton.text = "샘플 영상 선택"
         cameraManager?.stopCamera()
         hasStartedCamera = true
@@ -964,6 +1020,7 @@ class MainActivity : AppCompatActivity() {
         videoReplayRunning.set(true)
         inputRateLabel = "Replay FPS"
         fixedInputRateText = replayTargetFpsDisplayString()
+        resetFramePacing()
         resetPerformanceStats()
         guidanceRuntimeResetter.resetForTrafficLogicDisabled()
         viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
@@ -1017,9 +1074,10 @@ class MainActivity : AppCompatActivity() {
                         mapOverlayDirectlyToView = true
                     )
 
-                    val elapsedMs = elapsedMillis(frameStartNs)
-                    val remainingFrameBudgetMs =
-                        VIDEO_REPLAY_TARGET_FRAME_INTERVAL_MS - elapsedMs
+                    reserveNextProcessingFrameAt(
+                        SystemClock.elapsedRealtime() - elapsedMillis(frameStartNs)
+                    )
+                    val remainingFrameBudgetMs = millisUntilNextProcessingFrame()
                     if (remainingFrameBudgetMs > 0L) {
                         Thread.sleep(remainingFrameBudgetMs)
                     }
@@ -1083,7 +1141,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun replayTargetFpsDisplayString(): String =
-        String.format(Locale.US, "Replay FPS: %.2f", VIDEO_REPLAY_TARGET_FPS)
+        String.format(Locale.US, "Replay FPS: %.2f", maxProcessedFps)
 
     private fun replaySurfaceTextureListener(
         attach: (SurfaceTexture) -> Unit
@@ -1195,6 +1253,7 @@ class MainActivity : AppCompatActivity() {
         overlay.clear()
         inputRateLabel = "Camera FPS"
         fixedInputRateText = null
+        resetFramePacing()
         resetPerformanceStats()
         guidanceRuntimeResetter.resetForTrafficLogicDisabled()
         publishBackendStatus("Backend: ${detector?.runtimeBackendLabel ?: "unknown"}")
@@ -1259,13 +1318,31 @@ class MainActivity : AppCompatActivity() {
             try {
                 while (true) {
                     val nextFrame = pendingFrame.getAndSet(null) ?: break
-                    processImage(nextFrame)
+                    processImage(waitForProcessingFrameSlot(nextFrame))
                 }
             } finally {
                 processingScheduled.set(false)
                 if (pendingFrame.get() != null) {
                     scheduleFrameProcessing()
                 }
+            }
+        }
+    }
+
+    private fun waitForProcessingFrameSlot(initialFrame: ImageProxy): ImageProxy {
+        var frameToProcess = initialFrame
+        while (true) {
+            val delayMs = millisUntilNextProcessingFrame()
+            if (delayMs <= 0L) {
+                reserveNextProcessingFrameAt()
+                return frameToProcess
+            }
+
+            Thread.sleep(delayMs)
+            val newerFrame = pendingFrame.getAndSet(null)
+            if (newerFrame != null) {
+                frameToProcess.close()
+                frameToProcess = newerFrame
             }
         }
     }

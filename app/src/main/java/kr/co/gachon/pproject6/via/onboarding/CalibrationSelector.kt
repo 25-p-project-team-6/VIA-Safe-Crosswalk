@@ -3,7 +3,7 @@ package kr.co.gachon.pproject6.via.onboarding
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.ModelQuantization
 
-private const val CALIBRATION_TARGET_FPS = 30.0
+private const val CALIBRATION_TARGET_FPS = 20.0
 
 data class CalibrationProfileResult(
     val profile: InferenceModelProfile,

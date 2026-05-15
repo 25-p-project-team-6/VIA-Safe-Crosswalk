@@ -21,21 +21,21 @@ class CalibrationSelectorTest {
     }
 
     @Test
-    fun chooseBestPicksHighestResolutionMeetingThirtyFpsTarget() {
+    fun chooseBestPicksHighestResolutionMeetingTwentyFpsTarget() {
         val low = result("best_yolo26n_7cls_v2_float16_448.tflite", 31.0)
-        val high = result("best_yolo26n_7cls_v2_float16_512.tflite", 30.1)
-        val tooSlow = result("best_yolo26n_7cls_v2_float16_640.tflite", 20.0)
+        val mid = result("best_yolo26n_7cls_v2_float16_512.tflite", 30.1)
+        val high = result("best_yolo26n_7cls_v2_float16_640.tflite", 20.0)
 
-        val best = CalibrationSelector.chooseBest(listOf(low, high, tooSlow))
+        val best = CalibrationSelector.chooseBest(listOf(low, mid, high))
 
         assertNotNull(best)
-        assertEquals("best_yolo26n_7cls_v2_float16_512.tflite", best?.profile?.fileName)
+        assertEquals("best_yolo26n_7cls_v2_float16_640.tflite", best?.profile?.fileName)
     }
 
     @Test
     fun chooseBestFallsBackToFastestWhenNothingMeetsTarget() {
-        val faster = result("best_yolo26n_7cls_v2_float16_512.tflite", 29.0)
-        val slower = result("best_yolo26n_7cls_v2_float16_640.tflite", 20.0)
+        val faster = result("best_yolo26n_7cls_v2_float16_512.tflite", 19.0)
+        val slower = result("best_yolo26n_7cls_v2_float16_640.tflite", 18.0)
 
         val best = CalibrationSelector.chooseBest(listOf(slower, faster))
 

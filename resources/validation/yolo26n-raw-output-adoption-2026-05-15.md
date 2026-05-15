@@ -25,7 +25,7 @@ Local flatbuffer metadata check:
 - `DetectionLabels.modelFilesForActiveSchema()`는 raw YOLO26n 파일이 있으면 raw 파일만 노출한다.
 - 기존 non-raw YOLO26n 파일이 남아 있더라도 모델 spinner/온보딩 calibration이 raw 후보를 우선 사용하게 한다.
 - 앱 기본 안전 fallback 파일명도 raw-output 320 float16 후보로 갱신한다.
-- 2026-05-15 후속 튜닝 이후 실제 자동 추천/온보딩 기준은 최대 해상도보다 30fps 유지에 우선순위를 두며, raw 512 float16/GPU를 우선 후보로 사용한다. raw 640은 수동 디버그 비교 후보로 남긴다.
+- 2026-05-15 후속 튜닝에서 기본 정책은 raw 640 float16/GPU를 고해상도 후보로 유지하되, 실시간 처리 루프의 기본 최대 처리 FPS를 20fps로 제한해 발열과 장기 throttling을 줄이는 방향으로 정리했다. raw 512는 30fps 근처 비교/수동 후보로 남긴다.
 
 ## 포함 모델
 | 파일 | 입력 크기 | 출력 shape | 용도 |
@@ -84,13 +84,13 @@ input="Camera FPS: 29.98" processed="Processed FPS: 9.57"
 
 This confirms the input label is no longer a proxy for inference throughput. The processed FPS can still drop with thermal/inference cost, but Camera FPS stays near the requested 30fps capture range.
 
-## 30fps 우선 추천 정책 — 2026-05-15
-현장 관찰상 raw 640 float16/GPU는 대략 20fps대 처리, raw 512 float16/GPU는 30fps 근처 처리가 가능했다. 보행 신호 안내는 최고 해상도보다 프레임 연속성이 더 중요하므로 자동 추천과 온보딩 calibration 기준을 30fps 우선으로 조정했다.
+## 20fps 처리 cap 정책 — 2026-05-15
+현장 관찰상 raw 640 float16/GPU는 초반 안정 구간에서 대략 20fps대 처리, raw 512 float16/GPU는 30fps 근처 처리가 가능했다. 30fps를 계속 전부 처리하려고 밀어붙이면 발열/thermal throttling으로 오히려 장기 안정성이 떨어질 수 있으므로, 자동 추천은 고해상도 raw 640 후보를 유지하고 런타임 처리 루프에 기본 20fps cap을 둔다.
 
-- GPU float16 자동 추천 target input을 640에서 512로 낮췄다.
-- 기존 저장값이 640처럼 새 30fps 추천 후보보다 높은 GPU 해상도이면 시작 시 30fps 우선 추천 후보로 교체한다.
-- 온보딩 calibration 통과 기준을 15fps에서 30fps로 올렸다. 640이 30fps를 못 넘고 512가 넘으면 512가 선택된다.
-- Live camera는 이미 AE target range를 30fps로 제한한다.
+- GPU float16 자동 추천 target input은 640을 유지한다.
+- 온보딩 calibration 통과 기준은 20fps다. 640이 20fps를 넘으면 고해상도 후보가 선택된다.
+- Live camera capture는 Camera2 AE target range를 30fps로 유지하되, 분석 처리 루프는 기본 20fps로 최신 프레임만 샘플링한다.
+- 디버그 패널에서 Max Processed FPS를 10..30fps 범위로 조정할 수 있다. Replay도 같은 cap으로 샘플링한다.
 - Replay도 원본 영상이 60fps여도 앱 입력 목표 표시를 `Replay FPS: 30.00`으로 고정하고, 처리량은 `Processed FPS`에서 별도 확인한다.
 
 ## 로컬 검증

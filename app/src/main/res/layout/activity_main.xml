@@ -274,17 +274,39 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <TextView
-                    android:id="@+id/backendStatusText"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/debug_chip_background"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="8dp"
-                    android:text="Backend: unknown"
-                    android:textColor="@color/via_on_surface"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/backendStatusText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/debug_chip_background"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:text="Backend: unknown"
+                        android:textColor="@color/via_on_surface"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/debugCloseButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="10dp"
+                        android:minWidth="72dp"
+                        android:text="닫기"
+                        android:textAllCaps="false"
+                        android:textSize="14sp"
+                        app:cornerRadius="16dp" />
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/resetAppButton"
@@ -396,6 +418,25 @@
                     android:text="Stages: n/a"
                     android:textColor="@color/via_on_surface_variant"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/maxProcessedFpsLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Max Processed FPS: 20"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/maxProcessedFpsSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="20"
+                    android:valueFrom="10"
+                    android:valueTo="30"
+                    android:stepSize="1" />
 
                 <TextView
                     android:id="@+id/targetInfoText"

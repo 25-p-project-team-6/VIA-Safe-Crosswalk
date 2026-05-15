@@ -130,17 +130,17 @@ Post-fix live-camera evidence with raw 640/GPU while processing was thermally sl
 | Camera FPS 29.85 | Processed FPS 9.52 | Input metric no longer follows model latency |
 | Camera FPS 29.98 | Processed FPS 9.57 | Debug UI now separates capture cadence from throughput |
 
-## 30fps-first runtime policy — 2026-05-15
-Further field observation showed raw 640 float16/GPU tends to process around the 20fps range, while raw 512 float16/GPU can reach the 30fps target. Because signal continuity is more important than maximum input resolution for this guidance path, startup recommendation and onboarding calibration now prioritize the highest candidate that can meet a 30fps target.
+## 20fps processed-frame cap policy — 2026-05-15
+Further field observation showed raw 640 float16/GPU tends to process around the 20fps range, while raw 512 float16/GPU can reach roughly 30fps. For this guidance path, sustained thermal stability is more important than processing every 30fps camera frame, so startup recommendation keeps the high-resolution raw 640 candidate and the runtime pipeline samples the latest frame at a default 20fps cap.
 
 Applied policy:
 
-- GPU float16 startup recommendation target input is 512.
-- Legacy/saved GPU selections above the new frame-priority recommendation are replaced at startup.
-- Onboarding calibration target is 30fps, so a 640 result around 20fps no longer passes.
-- Replay input display is capped to the app target, `Replay FPS: 30.00`, even when the source video is 60fps; `Processed FPS` remains the model throughput metric.
+- GPU float16 startup recommendation target input remains 640.
+- Onboarding calibration target is 20fps, so a raw 640 result around 20fps can pass as the high-resolution default.
+- Live Camera FPS remains measured from Camera2 preview callbacks; Processed FPS is intentionally capped separately.
+- Debug panel exposes Max Processed FPS in the 10..30 range. Replay uses the same cap, so a 60fps file is not processed at 60fps by default.
 
 ## Acceptance criteria for closing #58
 - The 640 FPS regression is attributed to either export layout/delegate compatibility, analysis resolution cost, or model compute cost with evidence.
 - The team decides whether Android should use NMS-included or NMS-free TFLite exports.
-- Default model recommendation is frame-priority based rather than lowered blindly: raw 512 is preferred because raw 640 was observed around 20fps while 512 can meet the 30fps target.
+- Default runtime policy is high-resolution with a thermal-friendly processed-frame cap, not blindly lowering the model to 512 or int8.

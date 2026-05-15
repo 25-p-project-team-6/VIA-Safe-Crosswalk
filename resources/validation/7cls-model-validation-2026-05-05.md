@@ -6,8 +6,8 @@ Issue #40의 검증 기준을 앱 안에서 재현 가능하게 남긴다. 이 �
 ## 현재 앱에 포함된 7cls 후보
 | 모델 파일 | 용도 | 비고 |
 | --- | --- | --- |
-| `best_yolo26n_7cls_v2_float16_640.tflite` | 정확도 우선 | 수동 고해상도 비교 후보 |
-| `best_yolo26n_7cls_v2_float16_512.tflite` | 30fps 우선 | GPU/고성능 기기 우선 후보 |
+| `best_yolo26n_7cls_v2_float16_640.tflite` | 정확도 우선 | GPU/고성능 기기 우선 후보, 기본 20fps 처리 cap |
+| `best_yolo26n_7cls_v2_float16_512.tflite` | 30fps 근처 비교 | 수동 속도 비교 후보 |
 | `best_yolo26n_7cls_v2_float16_448.tflite` | 균형형 | 중간 해상도 비교 |
 | `best_yolo26n_7cls_v2_float16_416.tflite` | 균형/속도형 | 640보다 빠른 후보 |
 | `best_yolo26n_7cls_v2_float16_320.tflite` | 속도 우선 | 저성능/리플레이 빠른 점검 후보 |
@@ -81,5 +81,5 @@ S25+ 또는 유사 스마트폰 영상에서 빨간 보행자 신호가 일부 �
 ## raw-output update — 2026-05-15
 Issue #58 이후 현재 앱 모델 선택 목록은 NMS-free raw-output YOLO26n 후보(`best_yolo26n_7cls_v2_raw_*`)를 우선 노출한다. 기존 NMS 포함 `[1, 300, 6]` YOLO26n 파일은 640 FPS 저하 원인 비교용 기록으로만 유지한다.
 
-## 30fps 우선 update — 2026-05-15
-raw 640 float16/GPU는 처리 FPS가 20fps대, raw 512 float16/GPU는 30fps 근처로 관찰되어 기본 자동 추천과 온보딩 calibration 기준을 30fps 우선으로 조정했다. Replay도 원본 영상 fps가 60fps여도 앱 입력 목표는 30fps로 고정 표시하고, 모델 처리량은 `Processed FPS`로 분리해서 확인한다.
+## 20fps 처리 cap update — 2026-05-15
+raw 640 float16/GPU는 초반 안정 구간에서 처리 FPS가 20fps대, raw 512 float16/GPU는 30fps 근처로 관찰되었다. 기본 자동 추천과 온보딩 calibration은 raw 640을 고해상도 후보로 유지하되, 실시간 처리 루프와 Replay 샘플링은 기본 Max Processed FPS 20으로 제한한다. 디버그 패널에서 10..30fps 범위로 cap을 조정해 발열/처리량을 비교한다.
