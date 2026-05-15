@@ -12,7 +12,9 @@ import android.graphics.SurfaceTexture
 import android.location.Location
 import android.location.LocationManager
 import android.media.MediaPlayer
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -171,6 +173,7 @@ class MainActivity : AppCompatActivity() {
     private var videoReplaySurface: Surface? = null
     private var zoomCheckedBeforeReplay: Boolean? = null
     private var inputRateLabel = "Camera FPS"
+    private var fixedInputRateText: String? = null
     @Volatile
     private var lastCameraFrameAtElapsedMs = 0L
     @Volatile
@@ -756,7 +759,7 @@ class MainActivity : AppCompatActivity() {
         performanceTracker.update(inferenceTime, stageDurationsMs)
         
         // Update UI with results
-        inputFpsText.text = cameraRateTracker.displayString(inputRateLabel)
+        inputFpsText.text = currentInputRateDisplayString()
         fpsText.text = performanceTracker.currentFpsStr.replaceFirst("FPS", "Processed FPS")
         avgFpsText.text = performanceTracker.avgFpsStr.replaceFirst("Avg FPS", "Processed Avg FPS")
         avgLatencyText.text = performanceTracker.avgLatencyStr
@@ -782,6 +785,9 @@ class MainActivity : AppCompatActivity() {
                 "stages=\"${stageBreakdownText.text}\""
         )
     }
+
+    private fun currentInputRateDisplayString(): String =
+        fixedInputRateText ?: cameraRateTracker.displayString(inputRateLabel)
 
     private fun initDetector(
         useGpu: Boolean,
@@ -874,6 +880,7 @@ class MainActivity : AppCompatActivity() {
         videoReplayFrameView.visibility = View.GONE
         viewFinder.visibility = View.VISIBLE
         inputRateLabel = "Camera FPS"
+        fixedInputRateText = null
         videoReplayButton.text = "샘플 영상 선택"
         cameraManager?.stopCamera()
         hasStartedCamera = true
@@ -946,6 +953,7 @@ class MainActivity : AppCompatActivity() {
         videoReplayUri = uri
         videoReplayRunning.set(true)
         inputRateLabel = "Replay FPS"
+        fixedInputRateText = replaySourceFpsDisplayString(uri)
         resetPerformanceStats()
         guidanceRuntimeResetter.resetForTrafficLogicDisabled()
         viewFinder.removeCallbacks(cameraColdStartRecoveryRunnable)
@@ -1064,6 +1072,54 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun replaySourceFpsDisplayString(uri: Uri): String? {
+        val fps = runCatching {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(this, uri)
+                val captureFps =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        retriever
+                            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+                            ?.toDoubleOrNull()
+                    } else {
+                        null
+                    }
+
+                captureFps
+                    ?.takeIf { it.isFinite() && it > 0.0 }
+                    ?: estimateReplayFpsFromMetadata(retriever)
+            } finally {
+                retriever.release()
+            }
+        }.getOrNull() ?: return null
+
+        return String.format(Locale.US, "Replay FPS: %.2f", fps)
+    }
+
+    private fun estimateReplayFpsFromMetadata(
+        retriever: MediaMetadataRetriever
+    ): Double? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return null
+        }
+
+        val frameCount =
+            retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT)
+                ?.toLongOrNull()
+                ?.takeIf { it > 0L }
+                ?: return null
+        val durationMs =
+            retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?.takeIf { it > 0L }
+                ?: return null
+
+        return frameCount * 1_000.0 / durationMs
+    }
+
     private fun replaySurfaceTextureListener(
         attach: (SurfaceTexture) -> Unit
     ): TextureView.SurfaceTextureListener =
@@ -1173,6 +1229,7 @@ class MainActivity : AppCompatActivity() {
         zoomCheckedBeforeReplay = null
         overlay.clear()
         inputRateLabel = "Camera FPS"
+        fixedInputRateText = null
         resetPerformanceStats()
         guidanceRuntimeResetter.resetForTrafficLogicDisabled()
         publishBackendStatus("Backend: ${detector?.runtimeBackendLabel ?: "unknown"}")
@@ -1860,7 +1917,7 @@ class MainActivity : AppCompatActivity() {
     private fun resetPerformanceStats() {
         performanceTracker.clear()
         cameraRateTracker.clear()
-        inputFpsText.text = cameraRateTracker.displayString(inputRateLabel)
+        inputFpsText.text = currentInputRateDisplayString()
         avgFpsText.text = "Processed Avg FPS: 0"
         avgLatencyText.text = "Avg Latency: 0ms"
         fpsText.text = "Processed FPS: 0"
