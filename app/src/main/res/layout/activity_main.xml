@@ -447,7 +447,7 @@
                     android:lineSpacingExtra="4dp"
                     android:maxLines="4"
                     android:minLines="4"
-                    android:text="Target: None"
+                    android:text="Target : None&#10;Score  : 0.00&#10;Ratio  : --&#10;Caution: none"
                     android:textColor="@color/via_accent"
                     android:textSize="15sp"
                     android:textStyle="bold" />
@@ -460,8 +460,8 @@
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
                     android:maxLines="12"
-                    android:minLines="12"
-                    android:text="Decision: WAIT"
+                    android:minLines="8"
+                    android:text="Decision: WAIT&#10;Phase   : --&#10;Reason  : --&#10;Traffic : --&#10;Motion  : --&#10;Tilt    : --&#10;Window  : --&#10;GPSFix  : --&#10;Context : --&#10;Map     : --"
                     android:textColor="@color/via_on_surface"
                     android:textSize="14sp" />
 

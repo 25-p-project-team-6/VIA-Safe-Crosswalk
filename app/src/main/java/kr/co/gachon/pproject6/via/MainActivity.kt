@@ -222,7 +222,7 @@ class MainActivity : AppCompatActivity() {
     private val processingScheduled = AtomicBoolean(false)
     private val imageProxyTransformFactory =
         ImageProxyTransformFactory().apply {
-            setUsingCropRect(true)
+            setUsingCropRect(false)
             setUsingRotationDegrees(true)
         }
 
@@ -977,7 +977,10 @@ class MainActivity : AppCompatActivity() {
             if (maxZoom >= 2.0f) {
                 runOnUiThread {
                     zoomSwitch.isEnabled = true
-                    zoomSwitch.text = "2배 줌"
+                    zoomSwitch.text = "Use 2x Zoom"
+                    suppressZoomToggleCallback = true
+                    zoomSwitch.isChecked = true
+                    suppressZoomToggleCallback = false
                     applySelectedZoom()
                 }
             } else {
@@ -1355,7 +1358,6 @@ class MainActivity : AppCompatActivity() {
         try {
             val copyStartNs = SystemClock.elapsedRealtimeNanos()
             val analysisOutputTransform = imageProxyTransformFactory.getOutputTransform(imageProxy)
-            val cropRect = imageProxy.cropRect
             val bitmap = imageProxy.toBitmap()
             val rotationDegrees = imageProxy.imageInfo.rotationDegrees
             imageProxy.close()
@@ -1363,13 +1365,12 @@ class MainActivity : AppCompatActivity() {
             stageDurationsMs["copy"] = elapsedMillis(copyStartNs)
 
             val rotateStartNs = SystemClock.elapsedRealtimeNanos()
-            val croppedBitmap = ImageUtils.cropBitmap(bitmap, cropRect)
             val rotatedBitmap = ImageUtils.rotateBitmap(
-                bitmap = croppedBitmap,
+                bitmap = bitmap,
                 degrees = rotationDegrees.toFloat(),
                 reusableBitmap = reusableRotatedBitmap
             )
-            if (rotatedBitmap !== croppedBitmap) {
+            if (rotatedBitmap !== bitmap) {
                 reusableRotatedBitmap = rotatedBitmap
             }
             stageDurationsMs["rotate"] = elapsedMillis(rotateStartNs)
@@ -1515,7 +1516,7 @@ class MainActivity : AppCompatActivity() {
                 overlay.setResults(analysisResult.boxesToShow)
             }
         } else {
-            overlay.setResults(emptyList(), inViewCoordinates = true)
+            overlay.setResults(emptyList())
         }
     }
 
@@ -1583,11 +1584,16 @@ class MainActivity : AppCompatActivity() {
     ) {
         targetInfoText.text = if (enableTrafficLogic) {
             buildString {
-                appendLine("Target: ${analysisResult.targetClassName}")
-                appendLine("Score : ${String.format(Locale.US, "%.2f", analysisResult.targetScore)}")
-                if (analysisResult.targetBox != null && analysisResult.targetBox.debugRatio >= 0f) {
-                    appendLine("Ratio : ${String.format(Locale.US, "%.2f", analysisResult.targetBox.debugRatio)}")
-                }
+                appendLine("Target : ${analysisResult.targetClassName}")
+                appendLine("Score  : ${String.format(Locale.US, "%.2f", analysisResult.targetScore)}")
+                appendLine(
+                    "Ratio  : ${
+                        analysisResult.targetBox
+                            ?.takeIf { it.debugRatio >= 0f }
+                            ?.let { String.format(Locale.US, "%.2f", it.debugRatio) }
+                            ?: "--"
+                    }"
+                )
                 append(
                     if (analysisResult.occupancyCaution) {
                         "Caution: ${analysisResult.occupancyCautionLabels.joinToString(", ")}"
@@ -1597,7 +1603,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } else {
-            "Logic Disabled"
+            "Target : None\nScore  : 0.00\nRatio  : --\nCaution: none"
         }
     }
 
@@ -1636,7 +1642,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } else {
-            "Decision: DISABLED"
+            "Decision: DISABLED\nPhase   : --\nReason  : --\nTraffic : --\nMotion  : --\nTilt    : --\nWindow  : --\nGPSFix  : --\nContext : --\nMap     : --"
         }
     }
 
