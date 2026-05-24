@@ -14,7 +14,7 @@ data class CameraFlickerMitigationSettings(
 }
 
 object CameraFlickerMitigationPolicy {
-    private const val DEFAULT_MAX_INPUT_FPS = 20
+    private const val DEFAULT_TARGET_INPUT_FPS = 15
     private const val SAFE_FALLBACK_MAX_INPUT_FPS = 30
 
     fun chooseAntibandingMode(
@@ -37,28 +37,36 @@ object CameraFlickerMitigationPolicy {
 
     fun chooseTargetFpsRange(
         availableRanges: List<CameraFpsRange>,
-        maxInputFps: Int = DEFAULT_MAX_INPUT_FPS
+        targetInputFps: Int = DEFAULT_TARGET_INPUT_FPS
     ): CameraFpsRange? {
-        val cappedRanges =
+        availableRanges
+            .firstOrNull { it.lower == targetInputFps && it.upper == targetInputFps }
+            ?.let { return it }
+
+        // Prefer an exact low fixed input rate for thermal/battery stability.
+        // If a camera HAL lacks exact 15 FPS, use the nearest fixed range above it
+        // rather than a wide variable range whose actual cadence can be unstable.
+        val nearbyFixedRange =
             availableRanges
-                .filter { it.upper <= maxInputFps }
-                .sortedWith(
-                    compareByDescending<CameraFpsRange> { it.upper }
-                        .thenByDescending { it.lower }
+                .filter {
+                    it.lower == it.upper &&
+                        it.upper > targetInputFps &&
+                        it.upper <= SAFE_FALLBACK_MAX_INPUT_FPS
+                }
+                .minWithOrNull(
+                    compareBy<CameraFpsRange> { it.upper - targetInputFps }
+                        .thenBy { it.upper }
                 )
 
-        if (cappedRanges.isNotEmpty()) {
-            return cappedRanges.first()
+        if (nearbyFixedRange != null) {
+            return nearbyFixedRange
         }
 
-        // Some Camera2 HALs do not expose an exact <=20 FPS range. In that case,
-        // prefer a variable low-start range such as 15-30 instead of forcing 30-30,
-        // so AE can still settle below 30 when the device supports it.
         return availableRanges
-            .filter { it.lower <= maxInputFps && it.upper <= SAFE_FALLBACK_MAX_INPUT_FPS }
+            .filter { it.lower <= targetInputFps && it.upper <= SAFE_FALLBACK_MAX_INPUT_FPS }
             .sortedWith(
-                compareBy<CameraFpsRange> { it.upper }
-                    .thenBy { it.lower }
+                compareByDescending<CameraFpsRange> { it.upper }
+                    .thenByDescending { it.lower }
             )
             .firstOrNull()
     }

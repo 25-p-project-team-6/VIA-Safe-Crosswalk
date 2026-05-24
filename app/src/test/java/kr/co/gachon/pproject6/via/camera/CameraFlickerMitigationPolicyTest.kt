@@ -45,7 +45,7 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangePrefersExactTwentyFpsCap() {
+    fun targetFpsRangePrefersExactFifteenFpsWhenAvailable() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
@@ -53,37 +53,39 @@ class CameraFlickerMitigationPolicyTest {
                     CameraFpsRange(15, 30),
                     CameraFpsRange(30, 30),
                     CameraFpsRange(20, 20),
+                    CameraFpsRange(15, 15),
                     CameraFpsRange(15, 20)
                 )
             )
 
-        assertEquals(CameraFpsRange(20, 20), chosen)
+        assertEquals(CameraFpsRange(15, 15), chosen)
     }
 
     @Test
-    fun targetFpsRangeUsesHighestRangeCappedAtTwenty() {
+    fun targetFpsRangeUsesNearestFixedFpsWhenFifteenIsUnavailable() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
                     CameraFpsRange(15, 60),
                     CameraFpsRange(15, 30),
-                    CameraFpsRange(10, 20),
-                    CameraFpsRange(15, 15)
+                    CameraFpsRange(30, 30),
+                    CameraFpsRange(24, 24),
+                    CameraFpsRange(15, 20)
                 )
             )
 
-        assertEquals(CameraFpsRange(10, 20), chosen)
+        assertEquals(CameraFpsRange(24, 24), chosen)
     }
 
     @Test
-    fun targetFpsRangeFallsBackToLowStartThirtyRangeWhenTwentyUnavailable() {
+    fun targetFpsRangeFallsBackToBestVariableRangeWhenNoFixedRangeExists() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
                     CameraFpsRange(15, 60),
-                    CameraFpsRange(30, 30),
-                    CameraFpsRange(24, 30),
-                    CameraFpsRange(15, 30)
+                    CameraFpsRange(15, 30),
+                    CameraFpsRange(10, 15),
+                    CameraFpsRange(10, 10)
                 )
             )
 
@@ -91,11 +93,10 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangeDoesNotForceFixedThirtyWhenNoLowStartRangeExists() {
+    fun targetFpsRangeDoesNotForceFixedThirtyWhenNoUsableFallbackExists() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
-                    CameraFpsRange(30, 30),
                     CameraFpsRange(30, 60),
                     CameraFpsRange(60, 60)
                 )
