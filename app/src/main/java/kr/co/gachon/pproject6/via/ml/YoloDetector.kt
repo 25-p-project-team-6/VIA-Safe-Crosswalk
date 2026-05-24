@@ -3,7 +3,7 @@ package kr.co.gachon.pproject6.via.ml
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Rect
+import android.graphics.Paint
 import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
@@ -137,6 +137,7 @@ class YoloDetector(
     private var outputBuffer: ByteBuffer? = null
     private var scaledBitmapBuffer: Bitmap? = null
     private var pixelBuffer: IntArray = intArrayOf()
+    private val resizePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     var runtimeBackendLabel: String = "CPU"
         private set
     var compatibilityReportedSupported: Boolean = false
@@ -207,7 +208,7 @@ class YoloDetector(
 
         val inferenceStartTime = SystemClock.uptimeMillis()
 
-        fillInputBuffer(bitmap, activeInputBuffer)
+        val squareCropTransform = fillInputBuffer(bitmap, activeInputBuffer)
         activeOutputBuffer.rewind()
 
         // Run inference
@@ -217,7 +218,7 @@ class YoloDetector(
 
         // Post-process
         val outputArray = outputBufferToFloatArray(activeOutputBuffer)
-        val results = postProcess(outputArray, confidenceThreshold)
+        val results = postProcess(outputArray, confidenceThreshold, squareCropTransform)
 
         // Apply strict NMS first to reduce boxes
         val nmsResults = nms(results)
@@ -237,8 +238,15 @@ class YoloDetector(
         }
     }
 
-    private fun fillInputBuffer(bitmap: Bitmap, buffer: ByteBuffer) {
+    private fun fillInputBuffer(bitmap: Bitmap, buffer: ByteBuffer): SquareCropTransform {
         buffer.rewind()
+        val squareCropTransform =
+            SquareCropTransform.from(
+                sourceWidth = bitmap.width,
+                sourceHeight = bitmap.height,
+                inputWidth = inputImageWidth,
+                inputHeight = inputImageHeight
+            )
         val scaledBitmap =
             if (bitmap.width == inputImageWidth && bitmap.height == inputImageHeight) {
                 bitmap
@@ -253,12 +261,14 @@ class YoloDetector(
                         inputImageHeight,
                         Bitmap.Config.ARGB_8888
                     ).also { scaledBitmapBuffer = it }
-                Canvas(reusable).drawBitmap(
-                    bitmap,
-                    null,
-                    Rect(0, 0, inputImageWidth, inputImageHeight),
-                    null
-                )
+                Canvas(reusable).apply {
+                    drawBitmap(
+                        bitmap,
+                        squareCropTransform.sourceRect,
+                        squareCropTransform.destinationRect,
+                        resizePaint
+                    )
+                }
                 reusable
             }
         scaledBitmapBuffer?.let { previous ->
@@ -291,6 +301,7 @@ class YoloDetector(
             putInputChannel(buffer, blue)
         }
         buffer.rewind()
+        return squareCropTransform
     }
 
     private fun putInputChannel(buffer: ByteBuffer, value: Int) {
@@ -336,7 +347,11 @@ class YoloDetector(
         return output
     }
 
-    private fun postProcess(output: FloatArray, threshold: Float): List<OverlayView.BoundingBox> {
+    private fun postProcess(
+        output: FloatArray,
+        threshold: Float,
+        squareCropTransform: SquareCropTransform
+    ): List<OverlayView.BoundingBox> {
         return YoloOutputParser.parse(
             output = output,
             outputRows = outputRows,
@@ -347,12 +362,16 @@ class YoloDetector(
             labels = labels,
             threshold = threshold,
             specificConfidenceThresholds = specificConfidenceThresholds
-        ).map { detection ->
-            OverlayView.BoundingBox(
-                box = RectF(detection.left, detection.top, detection.right, detection.bottom),
-                clsName = detection.clsName,
-                score = detection.score
-            )
+        ).mapNotNull { detection ->
+            squareCropTransform.inputRectToSourceNormalized(
+                RectF(detection.left, detection.top, detection.right, detection.bottom)
+            )?.let { sourceBox ->
+                OverlayView.BoundingBox(
+                    box = sourceBox,
+                    clsName = detection.clsName,
+                    score = detection.score
+                )
+            }
         }
     }
 
