@@ -1,6 +1,7 @@
 package kr.co.gachon.pproject6.via.onboarding
 
 import android.content.Context
+import kr.co.gachon.pproject6.via.util.PhoneNumberFormatter
 
 class AppPreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -41,6 +42,44 @@ class AppPreferences(context: Context) {
         get() = prefs.getString(KEY_MAP_INSTALLATION_ID, null)
         set(value) = prefs.edit().putString(KEY_MAP_INSTALLATION_ID, value).apply()
 
+    var voiceGuidanceEnabled: Boolean
+        get() = prefs.getBoolean(KEY_VOICE_GUIDANCE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_VOICE_GUIDANCE_ENABLED, value).apply()
+
+    var hapticFeedbackEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HAPTIC_FEEDBACK_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_HAPTIC_FEEDBACK_ENABLED, value).apply()
+
+    var screenColorFeedbackEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_SCREEN_COLOR_FEEDBACK_ENABLED, value).apply()
+
+    var emergencyContactName: String?
+        get() = prefs.getString(KEY_EMERGENCY_CONTACT_NAME, null)
+        set(value) = prefs.edit().putString(KEY_EMERGENCY_CONTACT_NAME, value).apply()
+
+    var emergencyContactPhone: String?
+        get() = prefs.getString(KEY_EMERGENCY_CONTACT_PHONE, null)
+            ?.let(PhoneNumberFormatter::normalizeForStorage)
+            ?.takeIf { it.isNotBlank() }
+        set(value) {
+            val normalized = PhoneNumberFormatter.normalizeForStorage(value)
+            prefs.edit().apply {
+                if (normalized.isBlank()) {
+                    remove(KEY_EMERGENCY_CONTACT_PHONE)
+                } else {
+                    putString(KEY_EMERGENCY_CONTACT_PHONE, normalized)
+                }
+            }.apply()
+        }
+
+    fun clearEmergencyContact() {
+        prefs.edit()
+            .remove(KEY_EMERGENCY_CONTACT_NAME)
+            .remove(KEY_EMERGENCY_CONTACT_PHONE)
+            .apply()
+    }
+
     fun saveCalibration(
         result: CalibrationProfileResult,
         deviceSummary: String,
@@ -67,6 +106,12 @@ class AppPreferences(context: Context) {
             .apply()
     }
 
+    fun clearAll() {
+        prefs.edit()
+            .clear()
+            .apply()
+    }
+
     companion object {
         private const val PREF_NAME = "via_onboarding_preferences"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
@@ -78,5 +123,10 @@ class AppPreferences(context: Context) {
         private const val KEY_MAP_DATASET_VERSION = "map_dataset_version"
         private const val KEY_MAP_LAST_DATASET_CHECK_AT = "map_last_dataset_check_at"
         private const val KEY_MAP_INSTALLATION_ID = "map_installation_id"
+        private const val KEY_VOICE_GUIDANCE_ENABLED = "voice_guidance_enabled"
+        private const val KEY_HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled"
+        private const val KEY_SCREEN_COLOR_FEEDBACK_ENABLED = "screen_color_feedback_enabled"
+        private const val KEY_EMERGENCY_CONTACT_NAME = "emergency_contact_name"
+        private const val KEY_EMERGENCY_CONTACT_PHONE = "emergency_contact_phone"
     }
 }

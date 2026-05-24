@@ -1,0 +1,9 @@
+model=/home/prml/StudentsWork/SeokJin/Pprojects/yolo26n_human_vehicle_signal_7cls_v2/run_rebalanced_v2/weights/best.pt
+data=/home/prml/StudentsWork/SeokJin/Pprojects/works_car_focus/03_Training/datasets/mixed_dataset_human_vehicle_signal_7cls_v2/data.yaml
+best_yolo26n_7cls_v2_float16_640.tflite	5032780	input=[1, 640, 640, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_float16_512.tflite	4996960	input=[1, 512, 512, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_float16_448.tflite	4981861	input=[1, 448, 448, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_float16_416.tflite	4975061	input=[1, 416, 416, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_float16_320.tflite	4957673	input=[1, 320, 320, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_int8_640.tflite	2866233	input=[1, 640, 640, 3] output=[1, 300, 6]
+best_yolo26n_7cls_v2_int8_320.tflite	2715776	input=[1, 320, 320, 3] output=[1, 300, 6]

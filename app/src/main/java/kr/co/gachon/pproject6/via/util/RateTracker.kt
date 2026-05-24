@@ -1,5 +1,7 @@
 package kr.co.gachon.pproject6.via.util
 
+import java.util.Locale
+
 class RateTracker(
     private val label: String,
     private val timeProvider: () -> Long = System::currentTimeMillis,
@@ -7,25 +9,39 @@ class RateTracker(
 ) {
     private var windowStartedAt = timeProvider()
     private var sampleCount = 0
+    private var currentRate = 0.0
 
-    var rateStr: String = "$label: 0.00"
-        private set
+    @get:Synchronized
+    var rateStr: String = formatRate(label, currentRate)
+        @Synchronized private set
 
+    @Synchronized
     fun mark() {
         sampleCount++
         val currentTime = timeProvider()
         val elapsed = currentTime - windowStartedAt
         if (elapsed >= sampleWindowMs) {
-            val rate = sampleCount * 1000.0 / elapsed
-            rateStr = String.format("%s: %.2f", label, rate)
+            currentRate = sampleCount * 1000.0 / elapsed
+            rateStr = formatRate(label, currentRate)
             sampleCount = 0
             windowStartedAt = currentTime
         }
     }
 
+    @Synchronized
+    fun displayString(labelOverride: String = label): String =
+        formatRate(labelOverride, currentRate)
+
+    @Synchronized
     fun clear() {
         sampleCount = 0
         windowStartedAt = timeProvider()
-        rateStr = "$label: 0"
+        currentRate = 0.0
+        rateStr = formatRate(label, currentRate)
+    }
+
+    private companion object {
+        fun formatRate(label: String, rate: Double): String =
+            String.format(Locale.US, "%s: %.2f", label, rate)
     }
 }

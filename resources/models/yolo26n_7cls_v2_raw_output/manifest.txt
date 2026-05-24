@@ -1,0 +1,12 @@
+YOLO26n 7cls v2 raw-output TFLite exports
+model=yolo26n_human_vehicle_signal_7cls_v2/run_rebalanced_v2/weights/best.pt
+data=works_car_focus/03_Training/datasets/mixed_dataset_human_vehicle_signal_7cls_v2/data.yaml
+export_args_common=format=tflite optimize=False nms=False end2end=False
+layout=raw YOLO tensor: [1, 4+7, anchors] = [1, 11, anchors]
+best_yolo26n_7cls_v2_raw_float16_320.tflite	4897164	input=[1, 320, 320, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 2100] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_float16_416.tflite	4914551	input=[1, 416, 416, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 3549] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_float16_448.tflite	4921318	input=[1, 448, 448, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 4116] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_float16_512.tflite	4936420	input=[1, 512, 512, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 5376] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_float16_640.tflite	4971572	input=[1, 640, 640, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 8400] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_int8_320.tflite	2653480	input=[1, 320, 320, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 2100] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}
+best_yolo26n_7cls_v2_raw_int8_640.tflite	2804680	input=[1, 640, 640, 3] dtype=<class 'numpy.float32'>	output=[1, 11, 8400] dtype=<class 'numpy.float32'>	post_ops={'TOPK_V2': 0, 'GATHER_ND': 0, 'TILE': 0, 'FLOOR_MOD': 0, 'GATHER': 0}

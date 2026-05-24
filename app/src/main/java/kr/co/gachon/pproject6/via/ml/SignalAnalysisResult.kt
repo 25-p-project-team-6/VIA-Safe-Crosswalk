@@ -8,6 +8,12 @@ data class SignalAnalysisResult(
     val targetBox: OverlayView.BoundingBox?,
     val targetScore: Float,
     val targetClassName: String,
+    val trafficLightCount: Int,
+    val vehicleTrafficLightCount: Int = 0,
+    val multipleSignalDetected: Boolean,
+    val needsZoomSuggestion: Boolean,
+    val targetRecentlyReacquired: Boolean,
+    val recentMatchedClusterChangeCount: Int,
     val trafficState: TrafficLightState,
     val userGuidanceState: UserGuidanceState,
     val guidancePhase: GuidancePhase,
@@ -16,7 +22,14 @@ data class SignalAnalysisResult(
     val handoffDecision: CrosswalkHandoffDecision,
     val crossingSupportSnapshot: CrossingSupportSnapshot,
     val occupancyCaution: Boolean,
-    val occupancyCautionLabels: List<String>
+    val occupancyCautionLabels: List<String>,
+    val advisoryState: AdvisoryState = AdvisoryState.UNCERTAIN_VIEW,
+    val advisoryConfidenceLevel: AdvisoryConfidenceLevel = AdvisoryConfidenceLevel.LOW,
+    val advisoryConfidenceScore: Int = 0,
+    val advisoryConfidenceReasons: List<AdvisoryConfidenceReason> = emptyList(),
+    val advisoryTitleText: String = "",
+    val advisoryDetailText: String = "",
+    val advisorySpeechText: String = ""
 )
 
 fun SignalAnalysisResult.toGuidanceSnapshot(): GuidanceSnapshot {
@@ -40,5 +53,17 @@ fun SignalAnalysisResult.withGuidanceSnapshot(snapshot: GuidanceSnapshot): Signa
         guidanceContinuityTier = snapshot.guidanceContinuityTier,
         handoffDecision = snapshot.handoffDecision,
         occupancyCaution = snapshot.occupancyCaution
+    )
+}
+
+fun SignalAnalysisResult.withAdvisoryAssessment(assessment: AdvisoryAssessment): SignalAnalysisResult {
+    return copy(
+        advisoryState = assessment.state,
+        advisoryConfidenceLevel = assessment.confidenceLevel,
+        advisoryConfidenceScore = assessment.confidenceScore,
+        advisoryConfidenceReasons = assessment.confidenceReasons,
+        advisoryTitleText = assessment.titleText,
+        advisoryDetailText = assessment.detailText,
+        advisorySpeechText = assessment.speechText
     )
 }

@@ -14,6 +14,13 @@
         android:layout_height="match_parent"
         android:contentDescription="실시간 카메라 미리보기" />
 
+    <TextureView
+        android:id="@+id/videoReplayFrameView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="샘플 영상 리플레이 프레임"
+        android:visibility="gone" />
+
     <View
         android:id="@+id/statusTintOverlay"
         android:layout_width="match_parent"
@@ -76,15 +83,85 @@
         app:strokeColor="@color/via_surface_outline"
         app:strokeWidth="1dp">
 
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/settingsButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="설정 열기"
+                android:padding="14dp"
+                android:src="@android:drawable/ic_menu_manage"
+                app:tint="@color/via_on_surface" />
+
+            <ImageButton
+                android:id="@+id/usageGuideButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="앱 사용 안내 열기"
+                android:padding="14dp"
+                android:src="@android:drawable/ic_menu_help"
+                app:tint="@color/via_on_surface" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/debugShortcutCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="8dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/buildInfoCard"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
         <ImageButton
             android:id="@+id/debugToggleButton"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="디버그 정보 열기"
-            android:padding="14dp"
+            android:padding="11dp"
             android:src="@android:drawable/ic_menu_info_details"
-            app:tint="@color/via_on_surface" />
+            app:tint="@color/via_on_surface_variant" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/zoomControlCard"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="20dp"
+        app:cardBackgroundColor="@color/via_surface_scrim"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="0dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topControlCard"
+        app:strokeColor="@color/via_surface_outline"
+        app:strokeWidth="1dp">
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swZoom2x"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:contentDescription="2배 줌 켜기 또는 끄기"
+            android:minWidth="112dp"
+            android:minHeight="48dp"
+            android:paddingHorizontal="12dp"
+            android:text="2배 줌"
+            android:textColor="@color/via_on_surface"
+            android:textSize="15sp"
+            android:textStyle="bold" />
     </com.google.android.material.card.MaterialCardView>
 
     <com.google.android.material.card.MaterialCardView
@@ -135,14 +212,17 @@
                 android:textColor="@color/via_status_badge_on"
                 android:textSize="15sp"
                 android:textStyle="bold"
-                android:visibility="gone" />
+                android:visibility="invisible" />
 
             <TextView
                 android:id="@+id/statusTitleText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
+                android:ellipsize="end"
                 android:gravity="center"
+                android:maxLines="1"
+                android:minLines="1"
                 android:text="신호 상태 확인 중"
                 android:textColor="@color/via_on_surface"
                 android:textSize="30sp"
@@ -153,8 +233,11 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
+                android:ellipsize="end"
                 android:gravity="center"
                 android:lineSpacingExtra="4dp"
+                android:maxLines="2"
+                android:minLines="2"
                 android:text="카메라를 신호등 쪽으로 맞춰주세요"
                 android:textColor="@color/via_on_surface_variant"
                 android:textSize="18sp" />
@@ -172,16 +255,17 @@
         app:cardBackgroundColor="@color/via_surface_scrim"
         app:cardCornerRadius="28dp"
         app:cardElevation="0dp"
-        app:layout_constraintTop_toBottomOf="@id/topControlCard"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/topControlCard"
         app:strokeColor="@color/via_surface_outline"
         app:strokeWidth="1dp">
 
         <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
             android:fillViewport="true">
 
             <LinearLayout
@@ -190,17 +274,39 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <TextView
-                    android:id="@+id/backendStatusText"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/debug_chip_background"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="8dp"
-                    android:text="Backend: unknown"
-                    android:textColor="@color/via_on_surface"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/backendStatusText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/debug_chip_background"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:paddingHorizontal="12dp"
+                        android:paddingVertical="8dp"
+                        android:text="Backend: unknown"
+                        android:textColor="@color/via_on_surface"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/debugCloseButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="10dp"
+                        android:minWidth="72dp"
+                        android:text="닫기"
+                        android:textAllCaps="false"
+                        android:textSize="14sp"
+                        app:cornerRadius="16dp" />
+                </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/resetAppButton"
@@ -214,22 +320,46 @@
                     android:textSize="16sp"
                     app:cornerRadius="18dp" />
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/videoReplayButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:minHeight="56dp"
+                    android:text="샘플 영상 선택"
+                    android:textAllCaps="false"
+                    android:textSize="16sp"
+                    app:cornerRadius="18dp" />
+
                 <TextView
                     android:id="@+id/modelNameText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Model: Loading..."
+                    android:text="현재 모델: Loading..."
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/modelSpinnerLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="테스트할 모델 선택"
+                    android:textColor="@color/via_accent"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <Spinner
                     android:id="@+id/modelSpinner"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:backgroundTint="@color/via_accent_container"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/debug_spinner_outline_background"
+                    android:minHeight="52dp"
+                    android:paddingHorizontal="12dp"
                     android:importantForAccessibility="yes" />
 
                 <TextView
@@ -237,7 +367,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="Camera FPS: 0.0"
+                    android:text="Camera FPS: 0.00"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 
@@ -283,9 +413,30 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="5"
+                    android:minLines="5"
                     android:text="Stages: n/a"
                     android:textColor="@color/via_on_surface_variant"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/maxProcessedFpsLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Max Processed FPS: 20"
+                    android:textColor="@color/via_on_surface"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/maxProcessedFpsSlider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="20"
+                    android:valueFrom="10"
+                    android:valueTo="30"
+                    android:stepSize="1" />
 
                 <TextView
                     android:id="@+id/targetInfoText"
@@ -294,6 +445,7 @@
                     android:layout_marginTop="12dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="4"
                     android:minLines="4"
                     android:text="Target : None&#10;Score  : 0.00&#10;Ratio  : --&#10;Caution: none"
                     android:textColor="@color/via_accent"
@@ -307,6 +459,7 @@
                     android:layout_marginTop="8dp"
                     android:fontFamily="monospace"
                     android:lineSpacingExtra="4dp"
+                    android:maxLines="12"
                     android:minLines="8"
                     android:text="Decision: WAIT&#10;Phase   : --&#10;Reason  : --&#10;Traffic : --&#10;Motion  : --&#10;Tilt    : --&#10;Window  : --&#10;GPSFix  : --&#10;Context : --&#10;Map     : --"
                     android:textColor="@color/via_on_surface"
@@ -341,6 +494,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:maxLines="4"
+                    android:minLines="4"
                     android:text="Tuning: default"
                     android:textColor="@color/via_on_surface_variant"
                     android:textSize="13sp" />
@@ -382,15 +537,6 @@
                     android:layout_height="wrap_content"
                     android:minHeight="56dp"
                     android:text="Use GPU"
-                    android:textColor="@color/via_on_surface"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/swZoom2x"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="56dp"
-                    android:text="Use 2x Zoom"
                     android:textColor="@color/via_on_surface"
                     android:textSize="16sp" />
 

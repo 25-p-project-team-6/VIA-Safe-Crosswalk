@@ -7,10 +7,15 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.speech.tts.TextToSpeech
 import java.util.Locale
+import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
+import kr.co.gachon.pproject6.via.ml.AdvisoryState
 import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
-import kr.co.gachon.pproject6.via.ml.UserGuidanceState
 
 class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
+    private companion object {
+        private const val MANUAL_GUIDANCE_OVERRIDE_MS = 2_500L
+    }
+
     private val appContext = context.applicationContext
     private val tts = TextToSpeech(appContext, this)
     private val feedbackPolicy =
@@ -24,6 +29,7 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         }
 
     private var ttsReady = false
+    private var manualGuidanceOverrideUntilMs = Long.MIN_VALUE
     var voiceEnabled = true
     var hapticEnabled = true
 
@@ -39,32 +45,44 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         ttsReady = true
     }
 
-    fun onGuidanceStateChanged(
-        state: UserGuidanceState,
-        occupancyCaution: Boolean = false
+    fun onAdvisoryChanged(
+        assessment: AdvisoryAssessment
     ) {
-        if (!feedbackPolicy.shouldEmit(state, occupancyCaution)) {
+        if (System.currentTimeMillis() < manualGuidanceOverrideUntilMs) {
             return
         }
 
-        when (state) {
-            UserGuidanceState.STOP -> {
-                speak("멈추세요")
+        val family =
+            when (assessment.state) {
+                AdvisoryState.RED_CONFIRMED,
+                AdvisoryState.GREEN_CONFIRMED,
+                AdvisoryState.GREEN_WITH_CAUTION -> FeedbackRepeatFamily.ACTION_LIKE
+                AdvisoryState.TRANSITION_WAIT,
+                AdvisoryState.UNCERTAIN_VIEW -> FeedbackRepeatFamily.WAIT_LIKE
+            }
+        if (!feedbackPolicy.shouldEmit(assessment.speechText, family)) {
+            return
+        }
+
+        when (assessment.state) {
+            AdvisoryState.RED_CONFIRMED -> {
+                speak(assessment.speechText)
                 vibrate(longArrayOf(0, 400, 200, 400))
             }
 
-            UserGuidanceState.GO -> {
-                if (occupancyCaution) {
-                    speak("건너세요. 차량 주의.")
-                    vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
-                } else {
-                    speak("건너세요")
-                    vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
-                }
+            AdvisoryState.GREEN_CONFIRMED -> {
+                speak(assessment.speechText)
+                vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
             }
 
-            UserGuidanceState.WAIT -> {
-                speak("잠시 기다리세요")
+            AdvisoryState.GREEN_WITH_CAUTION -> {
+                speak(assessment.speechText)
+                vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
+            }
+
+            AdvisoryState.TRANSITION_WAIT,
+            AdvisoryState.UNCERTAIN_VIEW -> {
+                speak(assessment.speechText)
                 vibrate(longArrayOf(0, 140))
             }
         }
@@ -72,8 +90,16 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
 
     fun clearState() {
         feedbackPolicy.clear()
+        manualGuidanceOverrideUntilMs = Long.MIN_VALUE
         tts.stop()
         cancelVibration()
+    }
+
+    fun speakImmediate(message: String, utteranceId: String = "manual_guidance") {
+        manualGuidanceOverrideUntilMs = System.currentTimeMillis() + MANUAL_GUIDANCE_OVERRIDE_MS
+        feedbackPolicy.clear()
+        cancelVibration()
+        speak(message, utteranceId)
     }
 
     fun release() {
@@ -81,12 +107,12 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
         tts.shutdown()
     }
 
-    private fun speak(message: String) {
+    private fun speak(message: String, utteranceId: String = "traffic_light_state") {
         if (!voiceEnabled || !ttsReady) {
             return
         }
 
-        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, "traffic_light_state")
+        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 
     private fun vibrate(pattern: LongArray) {

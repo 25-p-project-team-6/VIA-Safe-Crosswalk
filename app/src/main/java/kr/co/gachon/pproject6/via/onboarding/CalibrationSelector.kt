@@ -3,6 +3,8 @@ package kr.co.gachon.pproject6.via.onboarding
 import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.ModelQuantization
 
+private const val CALIBRATION_TARGET_FPS = 20.0
+
 data class CalibrationProfileResult(
     val profile: InferenceModelProfile,
     val backendLabel: String,
@@ -13,11 +15,12 @@ data class CalibrationProfileResult(
     val compatibilityReportedSupported: Boolean,
     val isUsable: Boolean = true
 ) {
-    fun meetsTarget(targetFps: Double = 15.0): Boolean = isUsable && averageDetectFps >= targetFps
+    fun meetsTarget(targetFps: Double = CALIBRATION_TARGET_FPS): Boolean =
+        isUsable && averageDetectFps >= targetFps
 }
 
 object CalibrationSelector {
-    const val TARGET_FPS = 15.0
+    const val TARGET_FPS = CALIBRATION_TARGET_FPS
 
     fun calibrationCandidates(modelFiles: List<String>): List<InferenceModelProfile> {
         return modelFiles

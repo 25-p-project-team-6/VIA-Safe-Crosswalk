@@ -67,7 +67,7 @@ class CrosswalkOccupancyEvaluator(
 }
 
 data class CrosswalkOccupancyConfig(
-    val labels: Set<String> = setOf("bicycle", "car", "motorcycle", "bus", "train", "truck"),
+    val labels: Set<String> = DetectionLabels.occupancyLabels,
     val minScore: Float = 0.35f,
     val minBottom: Float = 0.45f,
     val minArea: Float = 0.015f,

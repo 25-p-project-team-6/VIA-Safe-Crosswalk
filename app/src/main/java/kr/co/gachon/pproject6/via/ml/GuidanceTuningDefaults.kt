@@ -7,6 +7,9 @@ object GuidanceTuningDefaults {
     val signalStateTrackingConfig = TrafficLightStateTrackingConfig(
         confirmDurationMs = 250L,
         switchConfirmDurationMs = 400L,
+        redToGreenSwitchConfirmDurationMs = 200L,
+        greenToRedSwitchConfirmDurationMs = 400L,
+        redCandidateUnknownBridgeDurationMs = 150L,
         redPersistenceDurationMs = 5_000L,
         greenPersistenceDurationMs = 2_500L,
         allowHighConfidenceImmediateCommit = false
@@ -43,16 +46,22 @@ object GuidanceTuningDefaults {
         stopConfirmDurationMs = 150L,
         waitConfirmDurationMs = 350L,
         cautionConfirmDurationMs = 400L,
-        goMinimumHoldMs = 500L
+        goMinimumHoldMs = 1_200L
     )
 
     val occupancyConfig = CrosswalkOccupancyConfig(
-        labels = setOf("bicycle", "car", "motorcycle", "bus", "train", "truck"),
+        labels = DetectionLabels.occupancyLabels,
         minScore = 0.35f,
         minBottom = 0.45f,
         minArea = 0.015f,
         centerBand = 0.2f..0.8f,
         confirmDurationMs = 400L
+    )
+
+    val advisoryConfig = AdvisoryHeuristicsConfig(
+        highConfidenceMinScore = 75,
+        mediumConfidenceMinScore = 55,
+        smallTargetAreaThreshold = 0.015f
     )
 
     val feedbackTimingConfig = SignalFeedbackTimingConfig(
@@ -67,6 +76,15 @@ object GuidanceTuningDefaults {
             append("ms")
             append(", switch hold=")
             append(signalStateTrackingConfig.switchConfirmDurationMs)
+            append("ms")
+            append(", red→green=")
+            append(signalStateTrackingConfig.redToGreenSwitchConfirmDurationMs)
+            append("ms")
+            append(", green→red=")
+            append(signalStateTrackingConfig.greenToRedSwitchConfirmDurationMs)
+            append("ms")
+            append(", red flicker bridge=")
+            append(signalStateTrackingConfig.redCandidateUnknownBridgeDurationMs)
             append("ms")
             append(", green keep=")
             append(signalStateTrackingConfig.greenPersistenceDurationMs)
@@ -137,6 +155,12 @@ object GuidanceTuningDefaults {
             append(", caution=")
             append(occupancyConfig.confirmDurationMs)
             append("ms")
+            append(", advisory high≥")
+            append(advisoryConfig.highConfidenceMinScore)
+            append(", medium≥")
+            append(advisoryConfig.mediumConfidenceMinScore)
+            append(", small<")
+            append("%.3f".format(advisoryConfig.smallTargetAreaThreshold))
             append(", wait=")
             append(feedbackTimingConfig.waitRepeatIntervalMs)
             append("ms, action=")
