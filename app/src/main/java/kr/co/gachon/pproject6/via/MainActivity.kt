@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         private const val CAMERA_COLD_START_TIMEOUT_MS = 3_500L
         private const val MAX_CAMERA_COLD_START_RECOVERIES = 1
-        private const val DEFAULT_MAX_PROCESSED_FPS = 20.0
+        private const val DEFAULT_MAX_PROCESSED_FPS = 15.0
         private const val MIN_MAX_PROCESSED_FPS = 10.0
         private const val MAX_MAX_PROCESSED_FPS = 30.0
         private const val VIDEO_REPLAY_CAPTURE_TIMEOUT_MS = 250L

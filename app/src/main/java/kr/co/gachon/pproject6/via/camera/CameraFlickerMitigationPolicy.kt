@@ -14,7 +14,7 @@ data class CameraFlickerMitigationSettings(
 }
 
 object CameraFlickerMitigationPolicy {
-    private const val DEFAULT_TARGET_INPUT_FPS = 20
+    private const val DEFAULT_TARGET_INPUT_FPS = 15
     private const val SAFE_FALLBACK_MAX_INPUT_FPS = 30
 
     fun chooseAntibandingMode(
@@ -43,10 +43,9 @@ object CameraFlickerMitigationPolicy {
             .firstOrNull { it.lower == targetInputFps && it.upper == targetInputFps }
             ?.let { return it }
 
-        // S25-class Camera2 HALs may expose 15-20 but no exact 20-20. Requesting
-        // 15-20 lets AE settle at 15 FPS, which is too low for guidance. Prefer a
-        // nearby fixed range such as 24-24, then keep processed inference capped at
-        // 20 FPS separately for the thermal/battery budget.
+        // Prefer an exact low fixed input rate for thermal/battery stability.
+        // If a camera HAL lacks exact 15 FPS, use the nearest fixed range above it
+        // rather than a wide variable range whose actual cadence can be unstable.
         val nearbyFixedRange =
             availableRanges
                 .filter {

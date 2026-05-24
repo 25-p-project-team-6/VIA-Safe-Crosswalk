@@ -45,7 +45,7 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangePrefersExactTwentyFpsWhenAvailable() {
+    fun targetFpsRangePrefersExactFifteenFpsWhenAvailable() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
@@ -53,15 +53,16 @@ class CameraFlickerMitigationPolicyTest {
                     CameraFpsRange(15, 30),
                     CameraFpsRange(30, 30),
                     CameraFpsRange(20, 20),
+                    CameraFpsRange(15, 15),
                     CameraFpsRange(15, 20)
                 )
             )
 
-        assertEquals(CameraFpsRange(20, 20), chosen)
+        assertEquals(CameraFpsRange(15, 15), chosen)
     }
 
     @Test
-    fun targetFpsRangePrefersNearbyFixedRangeOverVariableFifteenToTwenty() {
+    fun targetFpsRangeUsesNearestFixedFpsWhenFifteenIsUnavailable() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
@@ -69,8 +70,7 @@ class CameraFlickerMitigationPolicyTest {
                     CameraFpsRange(15, 30),
                     CameraFpsRange(30, 30),
                     CameraFpsRange(24, 24),
-                    CameraFpsRange(15, 20),
-                    CameraFpsRange(15, 15)
+                    CameraFpsRange(15, 20)
                 )
             )
 
@@ -78,14 +78,14 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangeFallsBackToBestVariableRangeWhenNoNearbyFixedRangeExists() {
+    fun targetFpsRangeFallsBackToBestVariableRangeWhenNoFixedRangeExists() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
                     CameraFpsRange(15, 60),
                     CameraFpsRange(15, 30),
-                    CameraFpsRange(15, 20),
-                    CameraFpsRange(15, 15)
+                    CameraFpsRange(10, 15),
+                    CameraFpsRange(10, 10)
                 )
             )
 

@@ -100,3 +100,12 @@ This confirms the input label is no longer a proxy for inference throughput. The
 - `./gradlew assembleDebug` ✅
 - Debug APK install and live-camera log capture ✅
 - Debug APK reinstall after input-FPS label fix; live-camera logs show Camera FPS ~30 while Processed FPS ~9..10 ✅
+
+## 15fps thermal-stability policy update — 2026-05-24
+S25+ field testing after the 24fps camera-input fallback showed that camera input held near 24fps, but sustained raw 640 float16/GPU processing dropped to roughly 11.6..12.0 Processed FPS as device temperature rose. To reduce oscillation and make onboarding recommendations match the demo operating point, the runtime policy is updated to prefer exact 15fps camera input when the HAL exposes it, set the default Max Processed FPS to 15, and lower onboarding calibration's pass target to 15fps.
+
+Policy after this update:
+- Live Camera2 target range prefers exact `15-15` for thermal/battery stability.
+- If exact 15fps is unavailable, the app can fall back to the nearest fixed range above 15 rather than a wide variable range.
+- Onboarding calibration target is 15fps, so model selection is evaluated against the same sustained demo target.
+- Debug Camera FPS remains the real callback rate; no synthetic FPS label is used.
