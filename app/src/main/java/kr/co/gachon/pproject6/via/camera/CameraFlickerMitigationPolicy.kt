@@ -14,6 +14,9 @@ data class CameraFlickerMitigationSettings(
 }
 
 object CameraFlickerMitigationPolicy {
+    private const val DEFAULT_MAX_INPUT_FPS = 20
+    private const val SAFE_FALLBACK_MAX_INPUT_FPS = 30
+
     fun chooseAntibandingMode(
         availableModes: IntArray?,
         preferredMode: Int,
@@ -32,12 +35,30 @@ object CameraFlickerMitigationPolicy {
         }
     }
 
-    fun chooseTargetFpsRange(availableRanges: List<CameraFpsRange>): CameraFpsRange? {
+    fun chooseTargetFpsRange(
+        availableRanges: List<CameraFpsRange>,
+        maxInputFps: Int = DEFAULT_MAX_INPUT_FPS
+    ): CameraFpsRange? {
+        val cappedRanges =
+            availableRanges
+                .filter { it.upper <= maxInputFps }
+                .sortedWith(
+                    compareByDescending<CameraFpsRange> { it.upper }
+                        .thenByDescending { it.lower }
+                )
+
+        if (cappedRanges.isNotEmpty()) {
+            return cappedRanges.first()
+        }
+
+        // Some Camera2 HALs do not expose an exact <=20 FPS range. In that case,
+        // prefer a variable low-start range such as 15-30 instead of forcing 30-30,
+        // so AE can still settle below 30 when the device supports it.
         return availableRanges
-            .filter { it.upper <= 30 }
+            .filter { it.lower <= maxInputFps && it.upper <= SAFE_FALLBACK_MAX_INPUT_FPS }
             .sortedWith(
-                compareByDescending<CameraFpsRange> { it.upper }
-                    .thenByDescending { it.lower }
+                compareBy<CameraFpsRange> { it.upper }
+                    .thenBy { it.lower }
             )
             .firstOrNull()
     }
