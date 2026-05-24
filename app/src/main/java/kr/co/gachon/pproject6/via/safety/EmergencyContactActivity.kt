@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.provider.ContactsContract
+import android.text.Editable
+import android.text.TextWatcher
 import android.telephony.SmsManager
 import android.view.Gravity
 import android.view.View
@@ -28,6 +30,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import kr.co.gachon.pproject6.via.R
 import kr.co.gachon.pproject6.via.onboarding.AppPreferences
+import kr.co.gachon.pproject6.via.util.PhoneNumberFormatter
 
 class EmergencyContactActivity : AppCompatActivity() {
     private lateinit var preferences: AppPreferences
@@ -37,6 +40,7 @@ class EmergencyContactActivity : AppCompatActivity() {
     private lateinit var sendButton: MaterialButton
     private lateinit var cancelButton: MaterialButton
     private var countdownTimer: CountDownTimer? = null
+    private var isFormattingPhoneInput = false
 
     private val requestSmsPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -68,7 +72,8 @@ class EmergencyContactActivity : AppCompatActivity() {
         cancelButton = views.cancelButton
 
         contactNameInput.setText(preferences.emergencyContactName.orEmpty())
-        contactPhoneInput.setText(preferences.emergencyContactPhone.orEmpty())
+        contactPhoneInput.setText(PhoneNumberFormatter.formatForDisplay(preferences.emergencyContactPhone))
+        installPhoneFormattingWatcher()
         val autoStartCountdown = intent.getBooleanExtra(EXTRA_AUTO_START_COUNTDOWN, false)
         if (autoStartCountdown && !preferences.emergencyContactPhone.isNullOrBlank()) {
             views.contactSettingsCard.visibility = View.GONE
@@ -116,7 +121,7 @@ class EmergencyContactActivity : AppCompatActivity() {
 
     private fun saveContact(): Boolean {
         val name = contactNameInput.text?.toString()?.trim().orEmpty()
-        val phone = contactPhoneInput.text?.toString()?.trim().orEmpty()
+        val phone = PhoneNumberFormatter.normalizeForStorage(contactPhoneInput.text?.toString())
         if (phone.isBlank()) {
             contactPhoneInput.error = "전화번호를 입력해 주세요"
             return false
@@ -124,9 +129,31 @@ class EmergencyContactActivity : AppCompatActivity() {
 
         preferences.emergencyContactName = name.ifBlank { "비상 연락처" }
         preferences.emergencyContactPhone = phone
+        contactPhoneInput.setText(PhoneNumberFormatter.formatForDisplay(phone))
+        contactPhoneInput.setSelection(contactPhoneInput.text?.length ?: 0)
         updateStatus()
         Toast.makeText(this, "비상 연락처를 저장했습니다.", Toast.LENGTH_SHORT).show()
         return true
+    }
+
+
+    private fun installPhoneFormattingWatcher() {
+        contactPhoneInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+
+            override fun afterTextChanged(s: Editable?) {
+                if (isFormattingPhoneInput) return
+                val formatted = PhoneNumberFormatter.formatForDisplay(s?.toString())
+                if (formatted == s?.toString().orEmpty()) return
+
+                isFormattingPhoneInput = true
+                contactPhoneInput.setText(formatted)
+                contactPhoneInput.setSelection(contactPhoneInput.text?.length ?: 0)
+                isFormattingPhoneInput = false
+            }
+        })
     }
 
     private fun openContactPicker() {
@@ -153,15 +180,16 @@ class EmergencyContactActivity : AppCompatActivity() {
             val phone =
                 if (phoneIndex >= 0) cursor.getString(phoneIndex).orEmpty() else ""
             contactNameInput.setText(name)
-            contactPhoneInput.setText(phone)
-            if (phone.isNotBlank()) {
+            val normalizedPhone = PhoneNumberFormatter.normalizeForStorage(phone)
+            contactPhoneInput.setText(PhoneNumberFormatter.formatForDisplay(normalizedPhone))
+            if (normalizedPhone.isNotBlank()) {
                 saveContact()
             }
         } ?: Toast.makeText(this, "연락처를 불러오지 못했습니다.", Toast.LENGTH_SHORT).show()
     }
 
     private fun ensureContactSaved(): Boolean {
-        val typedPhone = contactPhoneInput.text?.toString()?.trim().orEmpty()
+        val typedPhone = PhoneNumberFormatter.normalizeForStorage(contactPhoneInput.text?.toString())
         val savedPhone = preferences.emergencyContactPhone.orEmpty()
         return if (typedPhone.isNotBlank() && typedPhone != savedPhone) {
             saveContact()
@@ -268,7 +296,7 @@ class EmergencyContactActivity : AppCompatActivity() {
             if (phone.isNullOrBlank()) {
                 "연락처를 저장하면 비상 문자 기능을 사용할 수 있습니다."
             } else {
-                "등록된 연락처: ${name ?: "비상 연락처"} · $phone"
+                "등록된 연락처: ${name ?: "비상 연락처"} · ${PhoneNumberFormatter.formatForDisplay(phone)}"
             }
     }
 

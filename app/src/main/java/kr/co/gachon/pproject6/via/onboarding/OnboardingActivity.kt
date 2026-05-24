@@ -31,6 +31,7 @@ import kr.co.gachon.pproject6.via.ml.InferenceModelProfile
 import kr.co.gachon.pproject6.via.ml.YoloDetector
 import kr.co.gachon.pproject6.via.map.KineticGuestSessionManager
 import kr.co.gachon.pproject6.via.safety.EmergencyContactActivity
+import kr.co.gachon.pproject6.via.util.PhoneNumberFormatter
 import kr.co.gachon.pproject6.via.util.ImageUtils
 import org.tensorflow.lite.gpu.CompatibilityList
 import java.util.Locale
@@ -287,7 +288,7 @@ class OnboardingActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (savedPhone.isNullOrBlank()) {
                 "연락처 앱에서 보호자나 기관 번호를 선택할 수 있습니다. 지금 등록하지 않아도 나중에 설정에서 추가할 수 있습니다."
             } else {
-                "${preferences.emergencyContactName ?: "비상 연락처"} · $savedPhone"
+                "${preferences.emergencyContactName ?: "비상 연락처"} · ${PhoneNumberFormatter.formatForDisplay(savedPhone)}"
             }
         actionButton.isEnabled = true
         actionButton.text = if (savedPhone.isNullOrBlank()) "연락처 설정하기" else "다음"

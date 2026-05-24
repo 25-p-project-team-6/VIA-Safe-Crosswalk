@@ -1,6 +1,7 @@
 package kr.co.gachon.pproject6.via.onboarding
 
 import android.content.Context
+import kr.co.gachon.pproject6.via.util.PhoneNumberFormatter
 
 class AppPreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -59,7 +60,18 @@ class AppPreferences(context: Context) {
 
     var emergencyContactPhone: String?
         get() = prefs.getString(KEY_EMERGENCY_CONTACT_PHONE, null)
-        set(value) = prefs.edit().putString(KEY_EMERGENCY_CONTACT_PHONE, value).apply()
+            ?.let(PhoneNumberFormatter::normalizeForStorage)
+            ?.takeIf { it.isNotBlank() }
+        set(value) {
+            val normalized = PhoneNumberFormatter.normalizeForStorage(value)
+            prefs.edit().apply {
+                if (normalized.isBlank()) {
+                    remove(KEY_EMERGENCY_CONTACT_PHONE)
+                } else {
+                    putString(KEY_EMERGENCY_CONTACT_PHONE, normalized)
+                }
+            }.apply()
+        }
 
     fun clearEmergencyContact() {
         prefs.edit()
