@@ -45,7 +45,7 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangePrefersExactTwentyFpsCap() {
+    fun targetFpsRangePrefersExactTwentyFpsWhenAvailable() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
@@ -61,29 +61,31 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangeUsesHighestRangeCappedAtTwenty() {
+    fun targetFpsRangePrefersNearbyFixedRangeOverVariableFifteenToTwenty() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
                     CameraFpsRange(15, 60),
                     CameraFpsRange(15, 30),
-                    CameraFpsRange(10, 20),
+                    CameraFpsRange(30, 30),
+                    CameraFpsRange(24, 24),
+                    CameraFpsRange(15, 20),
                     CameraFpsRange(15, 15)
                 )
             )
 
-        assertEquals(CameraFpsRange(10, 20), chosen)
+        assertEquals(CameraFpsRange(24, 24), chosen)
     }
 
     @Test
-    fun targetFpsRangeFallsBackToLowStartThirtyRangeWhenTwentyUnavailable() {
+    fun targetFpsRangeFallsBackToBestVariableRangeWhenNoNearbyFixedRangeExists() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
                     CameraFpsRange(15, 60),
-                    CameraFpsRange(30, 30),
-                    CameraFpsRange(24, 30),
-                    CameraFpsRange(15, 30)
+                    CameraFpsRange(15, 30),
+                    CameraFpsRange(15, 20),
+                    CameraFpsRange(15, 15)
                 )
             )
 
@@ -91,11 +93,10 @@ class CameraFlickerMitigationPolicyTest {
     }
 
     @Test
-    fun targetFpsRangeDoesNotForceFixedThirtyWhenNoLowStartRangeExists() {
+    fun targetFpsRangeDoesNotForceFixedThirtyWhenNoUsableFallbackExists() {
         val chosen =
             CameraFlickerMitigationPolicy.chooseTargetFpsRange(
                 listOf(
-                    CameraFpsRange(30, 30),
                     CameraFpsRange(30, 60),
                     CameraFpsRange(60, 60)
                 )
