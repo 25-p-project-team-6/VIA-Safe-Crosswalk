@@ -60,24 +60,24 @@ object UsageGuidePracticeContent {
                 id = "practice_control_nearby_crosswalk",
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "주변 횡단보도 안내",
-                description = "메인 화면 버튼이나 블루투스 짧은 누름으로 실행하는 기능의 설명 예시입니다.",
-                speechText = "연습 예시입니다. 주변 횡단보도 안내는 현재 위치 기준 가까운 횡단보도의 거리와 방향을 알려줍니다. 지금은 실제 위치를 조회하지 않습니다.",
+                description = "메인 화면 버튼이나 블루투스 버튼을 짧게 눌렀을 때 실행되는 기능입니다.",
+                speechText = "연습 예시입니다. 주변 횡단보도 안내는 현재 위치 기준 가까운 횡단보도의 거리와 방향을 알려줍니다.",
                 hapticPattern = null
             ),
             PracticeFeedbackExample(
                 id = "practice_control_short_press",
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "블루투스 짧게 누르기",
-                description = "Space 키 방식 리모컨을 짧게 눌렀을 때의 설명 예시입니다.",
-                speechText = "연습 예시입니다. 블루투스 버튼을 짧게 누르면 주변 횡단보도 안내를 요청합니다. 지금은 실제 안내를 실행하지 않습니다.",
+                description = "블루투스 버튼을 짧게 눌렀을 때의 동작입니다.",
+                speechText = "연습 예시입니다. 블루투스 버튼을 짧게 누르면 주변 횡단보도 안내를 실행합니다.",
                 hapticPattern = null
             ),
             PracticeFeedbackExample(
                 id = "practice_control_long_press",
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "블루투스 길게 누르기",
-                description = "Space 키 방식 리모컨을 길게 눌렀을 때의 설명 예시입니다.",
-                speechText = "연습 예시입니다. 블루투스 버튼을 길게 누르면 비상 문자 5초 유예 화면을 엽니다. 지금은 비상 연락을 실행하지 않습니다.",
+                description = "블루투스 버튼을 길게 눌렀을 때의 동작입니다.",
+                speechText = "연습 예시입니다. 블루투스 버튼을 길게 누르면 비상 문자 5초 유예 화면을 엽니다. 유예 시간 안에 취소할 수 있습니다.",
                 hapticPattern = null
             )
         )

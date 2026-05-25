@@ -36,7 +36,7 @@ object UsageGuideContent {
     val quickActions: UsageGuideSection =
         UsageGuideSection(
             title = "빠른 조작",
-            body = "주변 횡단보도 안내와 블루투스 버튼 동작을 예시로 들어볼 수 있습니다. 예시는 실제 위치 조회나 비상 연락을 실행하지 않습니다."
+            body = "주변 횡단보도 안내와 블루투스 버튼 동작을 예시로 들어볼 수 있습니다. 짧게 누르면 주변 횡단보도 안내, 길게 누르면 비상 문자 5초 유예 화면을 엽니다."
         )
 
     val safetyNote: UsageGuideSection =

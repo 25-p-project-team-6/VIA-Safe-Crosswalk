@@ -66,15 +66,17 @@ class UsageGuideContentTest {
     }
 
     @Test
-    fun controlPracticeExamplesDoNotClaimRealActionsRun() {
+    fun controlPracticeExamplesExplainRealUserFacingBehavior() {
         val controlText =
             UsageGuidePracticeContent.controlExamples.joinToString("\n") { example ->
                 "${example.title}\n${example.description}\n${example.speechText}"
             }
 
-        listOf("실제 위치를 조회하지 않습니다", "실제 안내를 실행하지 않습니다", "비상 연락을 실행하지 않습니다").forEach { phrase ->
-            assertTrue("control practice should state no real action for '$phrase'", controlText.contains(phrase))
+        listOf("가까운 횡단보도의 거리와 방향", "짧게 누르면 주변 횡단보도 안내", "길게 누르면 비상 문자 5초 유예 화면").forEach { phrase ->
+            assertTrue("control practice should explain actual behavior for '$phrase'", controlText.contains(phrase))
         }
+        assertTrue("control practice should use user-facing Bluetooth wording", controlText.contains("블루투스 버튼"))
+        assertTrue("control practice should not mention implementation key wording", !controlText.contains("Space 키"))
     }
 
     private fun fullGuideText(): String {
