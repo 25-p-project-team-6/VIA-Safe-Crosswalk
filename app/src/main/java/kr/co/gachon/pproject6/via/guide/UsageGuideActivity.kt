@@ -96,6 +96,11 @@ class UsageGuideActivity : AppCompatActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
+            isClickable = true
+            isFocusable = true
+            minimumHeight = dp(156)
+            contentDescription = "${example.title}. 두 번 탭하면 예시를 재생합니다."
+            setOnClickListener { playPractice(example) }
             addView(
                 signalCircle(example),
                 LinearLayout.LayoutParams(dp(72), dp(72)).apply { gravity = Gravity.CENTER_HORIZONTAL }
@@ -138,10 +143,45 @@ class UsageGuideActivity : AppCompatActivity() {
             addView(sectionTitleText(UsageGuideContent.quickActions.title), matchWrap())
             addView(bodyText(UsageGuideContent.quickActions.body), matchWrap(topMargin = 8))
             UsageGuidePracticeContent.controlExamples.forEach { example ->
-                addView(playButton(example).apply { text = "▶ ${example.title} 예시" }, matchWrap(topMargin = 10))
-                addView(bodyText(example.description), matchWrap(topMargin = 4))
+                addView(quickActionItem(example), matchWrap(topMargin = 12))
             }
         }
+
+    private fun quickActionItem(example: PracticeFeedbackExample): MaterialCardView {
+        val itemContent =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(16), dp(18), dp(16))
+                addView(
+                    TextView(this@UsageGuideActivity).apply {
+                        text = "▶ ${example.title}"
+                        setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
+                        textSize = 20f
+                        setTypeface(typeface, Typeface.BOLD)
+                    },
+                    matchWrap()
+                )
+                addView(bodyText(example.description), matchWrap(topMargin = 6))
+                addView(
+                    accentText("두 번 탭하면 실제 동작 안내 예시를 재생합니다."),
+                    matchWrap(topMargin = 8)
+                )
+            }
+
+        return MaterialCardView(this).apply {
+            radius = dp(18).toFloat()
+            cardElevation = 0f
+            setCardBackgroundColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_accent_container))
+            strokeColor = ContextCompat.getColor(this@UsageGuideActivity, R.color.via_surface_outline)
+            strokeWidth = dp(1)
+            isClickable = true
+            isFocusable = true
+            minimumHeight = dp(116)
+            contentDescription = "${example.title}. ${example.description}. 두 번 탭하면 실제 동작 안내 예시를 재생합니다."
+            setOnClickListener { playPractice(example) }
+            addView(itemContent, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+    }
 
     private fun infoCard(section: UsageGuideSection): MaterialCardView =
         card {
