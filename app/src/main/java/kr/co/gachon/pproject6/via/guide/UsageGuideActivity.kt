@@ -99,7 +99,7 @@ class UsageGuideActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             minimumHeight = dp(156)
-            contentDescription = "${example.title}. 두 번 탭하면 예시를 재생합니다."
+            contentDescription = "${example.title}. 누르면 안내 예시를 재생합니다."
             setOnClickListener { playPractice(example) }
             addView(
                 signalCircle(example),
@@ -163,7 +163,7 @@ class UsageGuideActivity : AppCompatActivity() {
                 )
                 addView(bodyText(example.description), matchWrap(topMargin = 6))
                 addView(
-                    accentText("두 번 탭하면 실제 동작 안내 예시를 재생합니다."),
+                    bodyText("누르면 실제 사용 때 나오는 안내 예시를 들려줍니다."),
                     matchWrap(topMargin = 8)
                 )
             }
@@ -177,7 +177,7 @@ class UsageGuideActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             minimumHeight = dp(116)
-            contentDescription = "${example.title}. ${example.description}. 두 번 탭하면 실제 동작 안내 예시를 재생합니다."
+            contentDescription = "${example.title}. ${example.description}. 누르면 실제 사용 때 나오는 안내 예시를 재생합니다."
             setOnClickListener { playPractice(example) }
             addView(itemContent, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
@@ -193,7 +193,10 @@ class UsageGuideActivity : AppCompatActivity() {
         val played = practiceFeedbackPlayer.play(example)
         if (!played) {
             Toast.makeText(this, "음성 엔진을 준비 중입니다. 잠시 후 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
+            return
         }
+
+        Toast.makeText(this, example.speechText.removePrefix("연습 예시입니다.").trim(), Toast.LENGTH_LONG).show()
     }
 
     private fun signalSymbol(exampleId: String): String =
