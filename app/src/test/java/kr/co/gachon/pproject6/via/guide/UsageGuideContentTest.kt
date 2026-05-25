@@ -1,16 +1,33 @@
 package kr.co.gachon.pproject6.via.guide
 
-import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UsageGuideContentTest {
     @Test
-    fun guideExplainsRolePermissionsAndMajorFeatures() {
-        val content = fullGuideText()
+    fun guidePrioritizesOkoLikeInteractiveFeedbackPractice() {
+        assertEquals("사용 안내", UsageGuideContent.screenTitle)
+        assertEquals("어떤 피드백을 받나요?", UsageGuideContent.feedbackOverview.title)
 
-        listOf("보조", "카메라", "위치", "SMS", "신호", "횡단보도", "비상 문자", "블루투스").forEach { keyword ->
-            assertTrue("guide should contain $keyword", content.contains(keyword))
+        val signalTitles = UsageGuidePracticeContent.signalExamples.map { it.title }
+        assertEquals(
+            listOf("빨간불 예시", "초록불 예시", "주의 필요 예시", "확인 필요 예시"),
+            signalTitles
+        )
+    }
+
+    @Test
+    fun guideKeepsOnlyCompactUserNecessarySections() {
+        val titles = UsageGuideContent.sections.map { it.title }
+
+        listOf("어떻게 작동하나요?", "휴대폰은 어떻게 들까요?", "피드백이 없으면?", "빠른 조작", "안전 안내").forEach { title ->
+            assertTrue("guide should contain $title", titles.contains(title))
+        }
+
+        listOf("VIA가 하는 일", "중요 안전 안내", "권한을 쓰는 이유", "주요 기능", "블루투스 버튼", "상태 문구의 의미", "초기 최적화").forEach { oldTitle ->
+            assertFalse("guide should remove old long category $oldTitle", titles.contains(oldTitle))
         }
     }
 
@@ -18,8 +35,8 @@ class UsageGuideContentTest {
     fun guideIncludesClearSafetyDisclaimer() {
         val content = fullGuideText()
 
-        assertTrue(content.contains("최종 판단을 대신하지 않습니다"))
-        assertTrue(content.contains("주변 상황"))
+        assertTrue(content.contains("보행 판단을 대신하지 않습니다"))
+        assertTrue(content.contains("주변"))
     }
 
     @Test
@@ -29,38 +46,6 @@ class UsageGuideContentTest {
 
         forbiddenPhrases.forEach { phrase ->
             assertTrue("guide should not contain '$phrase'", !content.contains(phrase))
-        }
-    }
-
-    @Test
-    fun guideExplainsFinalAdvisoryStateLabels() {
-        val content = fullGuideText()
-
-        listOf(
-            "보행자 신호 초록으로 보임",
-            "보행자 신호 빨간색으로 보임",
-            "초록으로 보이나 주의 필요",
-            "신호 확인 불확실",
-            "다음 신호 대기 권장"
-        ).forEach { label ->
-            assertTrue("guide should explain '$label'", content.contains(label))
-        }
-    }
-
-    @Test
-    fun practiceModeIncludesApprovedSignalAndControlExamples() {
-        val titles = UsageGuidePracticeContent.allExamples.map { it.title }
-
-        listOf(
-            "빨간불 예시 듣기",
-            "초록불 예시 듣기",
-            "초록불 주의 예시 듣기",
-            "확인 필요 예시 듣기",
-            "주변 횡단보도 안내",
-            "블루투스 짧게 누르기",
-            "블루투스 길게 누르기"
-        ).forEach { title ->
-            assertTrue("practice examples should contain $title", titles.contains(title))
         }
     }
 
@@ -93,8 +78,14 @@ class UsageGuideContentTest {
     }
 
     private fun fullGuideText(): String {
-        return UsageGuideContent.sections.joinToString("\n") { section ->
-            "${section.title}\n${section.body}"
+        return buildString {
+            appendLine(UsageGuideContent.intro)
+            appendLine(UsageGuideContent.feedbackOverview.title)
+            appendLine(UsageGuideContent.feedbackOverview.body)
+            UsageGuideContent.sections.forEach { section ->
+                appendLine(section.title)
+                appendLine(section.body)
+            }
         }
     }
 }

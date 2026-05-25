@@ -23,7 +23,7 @@ object UsageGuidePracticeContent {
             PracticeFeedbackExample(
                 id = "practice_signal_red",
                 category = PracticeFeedbackCategory.SIGNAL,
-                title = "빨간불 예시 듣기",
+                title = "빨간불 예시",
                 description = "빨간 보행자 신호가 보일 때의 안내 예시입니다.",
                 speechText = "연습 예시입니다. 빨간불로 보입니다. 실제 이동 전 주변을 확인하세요.",
                 hapticPattern = SignalFeedbackPattern.RED_CONFIRMED
@@ -31,7 +31,7 @@ object UsageGuidePracticeContent {
             PracticeFeedbackExample(
                 id = "practice_signal_green",
                 category = PracticeFeedbackCategory.SIGNAL,
-                title = "초록불 예시 듣기",
+                title = "초록불 예시",
                 description = "초록 보행자 신호가 확인됐을 때의 안내 예시입니다.",
                 speechText = "연습 예시입니다. 초록불로 보입니다. 실제 이동 전 주변을 확인하세요.",
                 hapticPattern = SignalFeedbackPattern.GREEN_CONFIRMED
@@ -39,7 +39,7 @@ object UsageGuidePracticeContent {
             PracticeFeedbackExample(
                 id = "practice_signal_green_caution",
                 category = PracticeFeedbackCategory.SIGNAL,
-                title = "초록불 주의 예시 듣기",
+                title = "주의 필요 예시",
                 description = "초록 신호처럼 보여도 차량이나 주변 상황을 더 조심해야 할 때의 예시입니다.",
                 speechText = "연습 예시입니다. 초록불로 보여도 차량을 주의하세요.",
                 hapticPattern = SignalFeedbackPattern.GREEN_WITH_CAUTION
@@ -47,7 +47,7 @@ object UsageGuidePracticeContent {
             PracticeFeedbackExample(
                 id = "practice_signal_uncertain",
                 category = PracticeFeedbackCategory.SIGNAL,
-                title = "확인 필요 예시 듣기",
+                title = "확인 필요 예시",
                 description = "신호가 불확실하거나 카메라 시야가 부족할 때의 안내 예시입니다.",
                 speechText = "연습 예시입니다. 확인이 필요합니다. 멈추고 주변을 확인하세요.",
                 hapticPattern = SignalFeedbackPattern.WAIT_OR_UNCERTAIN

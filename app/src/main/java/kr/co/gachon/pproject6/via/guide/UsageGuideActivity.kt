@@ -1,7 +1,11 @@
 package kr.co.gachon.pproject6.via.guide
 
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -44,55 +48,132 @@ class UsageGuideActivity : AppCompatActivity() {
         root.addView(content, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
 
         content.addView(backButton().apply { setOnClickListener { finish() } })
-        content.addView(titleText("앱 사용 안내"), matchWrap(topMargin = 8))
-        content.addView(
-            bodyText("VIA는 보행 판단을 대신하지 않고, 신호·횡단보도·비상 연락을 보조적으로 안내합니다."),
-            matchWrap(topMargin = 8)
-        )
+        content.addView(titleText(UsageGuideContent.screenTitle), matchWrap(topMargin = 8))
+        content.addView(bodyText(UsageGuideContent.intro), matchWrap(topMargin = 8))
+        content.addView(feedbackPracticeCard(), matchWrap(topMargin = 20))
 
-        UsageGuideContent.sections.forEach { section ->
-            content.addView(
-                card {
-                    addView(sectionTitleText(section.title), matchWrap())
-                    addView(bodyText(section.body), matchWrap(topMargin = 8))
-                },
-                matchWrap(topMargin = 16)
-            )
+        UsageGuideContent.compactSections.forEach { section ->
+            content.addView(infoCard(section), matchWrap(topMargin = 18))
         }
-        content.addView(practiceCard(), matchWrap(topMargin = 16))
+        content.addView(quickActionsCard(), matchWrap(topMargin = 18))
+        content.addView(infoCard(UsageGuideContent.safetyNote), matchWrap(topMargin = 18))
         return root
     }
 
-    private fun practiceCard(): MaterialCardView =
+    private fun feedbackPracticeCard(): MaterialCardView =
         card {
-            addView(sectionTitleText("연습 모드"), matchWrap())
+            addView(sectionTitleText(UsageGuideContent.feedbackOverview.title), matchWrap())
+            addView(bodyText(UsageGuideContent.feedbackOverview.body), matchWrap(topMargin = 8))
+            addView(signalPracticeGrid(), matchWrap(topMargin = 20))
             addView(
-                bodyText("아래 버튼은 사용법을 익히기 위한 예시입니다. 실제 카메라 분석, 위치 조회, 비상 문자, 실시간 안내를 실행하지 않습니다."),
+                accentText("소리와 진동은 설정에 따라 다르게 느껴질 수 있습니다."),
+                matchWrap(topMargin = 18)
+            )
+        }
+
+    private fun signalPracticeGrid(): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            UsageGuidePracticeContent.signalExamples.chunked(2).forEachIndexed { rowIndex, rowExamples ->
+                addView(
+                    LinearLayout(this@UsageGuideActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        rowExamples.forEachIndexed { index, example ->
+                            addView(
+                                signalPracticeItem(example),
+                                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                                    if (index > 0) setMargins(dp(10), 0, 0, 0)
+                                }
+                            )
+                        }
+                    },
+                    matchWrap(topMargin = if (rowIndex == 0) 0 else 16)
+                )
+            }
+        }
+
+    private fun signalPracticeItem(example: PracticeFeedbackExample): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            addView(
+                signalCircle(example),
+                LinearLayout.LayoutParams(dp(72), dp(72)).apply { gravity = Gravity.CENTER_HORIZONTAL }
+            )
+            addView(
+                bodyText(example.title).apply {
+                    gravity = Gravity.CENTER
+                    textAlignment = View.TEXT_ALIGNMENT_CENTER
+                    setTypeface(typeface, Typeface.BOLD)
+                },
                 matchWrap(topMargin = 8)
             )
-            addView(sectionSubtitleText("소리와 진동 연습"), matchWrap(topMargin = 16))
-            UsageGuidePracticeContent.signalExamples.forEach { example ->
-                addView(practiceButton(example), matchWrap(topMargin = 8))
+            addView(playButton(example), matchWrap(topMargin = 8))
+        }
+
+    private fun signalCircle(example: PracticeFeedbackExample): TextView =
+        TextView(this).apply {
+            text = signalSymbol(example.id)
+            gravity = Gravity.CENTER
+            textSize = 30f
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(signalColor(example.id))
             }
-            addView(sectionSubtitleText("버튼 조작 연습"), matchWrap(topMargin = 18))
+            contentDescription = example.title
+        }
+
+    private fun playButton(example: PracticeFeedbackExample): MaterialButton =
+        MaterialButton(this, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
+            text = "▶ 재생"
+            isAllCaps = false
+            minHeight = dp(44)
+            setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_status_caution))
+            setOnClickListener { playPractice(example) }
+        }
+
+    private fun quickActionsCard(): MaterialCardView =
+        card {
+            addView(sectionTitleText(UsageGuideContent.quickActions.title), matchWrap())
+            addView(bodyText(UsageGuideContent.quickActions.body), matchWrap(topMargin = 8))
             UsageGuidePracticeContent.controlExamples.forEach { example ->
-                addView(practiceButton(example), matchWrap(topMargin = 8))
+                addView(playButton(example).apply { text = "▶ ${example.title} 예시" }, matchWrap(topMargin = 10))
                 addView(bodyText(example.description), matchWrap(topMargin = 4))
             }
         }
 
-    private fun practiceButton(example: PracticeFeedbackExample): MaterialButton =
-        MaterialButton(this).apply {
-            text = example.title
-            isAllCaps = false
-            minHeight = dp(48)
-            setOnClickListener {
-                val played = practiceFeedbackPlayer.play(example)
-                if (!played) {
-                    Toast.makeText(this@UsageGuideActivity, "음성 엔진을 준비 중입니다. 잠시 후 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
-                }
-            }
+    private fun infoCard(section: UsageGuideSection): MaterialCardView =
+        card {
+            addView(sectionTitleText(section.title), matchWrap())
+            addView(bodyText(section.body), matchWrap(topMargin = 8))
         }
+
+    private fun playPractice(example: PracticeFeedbackExample) {
+        val played = practiceFeedbackPlayer.play(example)
+        if (!played) {
+            Toast.makeText(this, "음성 엔진을 준비 중입니다. 잠시 후 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun signalSymbol(exampleId: String): String =
+        when (exampleId) {
+            "practice_signal_red" -> "✋"
+            "practice_signal_green" -> "🚶"
+            "practice_signal_green_caution" -> "!"
+            else -> "?"
+        }
+
+    private fun signalColor(exampleId: String): Int =
+        ContextCompat.getColor(
+            this,
+            when (exampleId) {
+                "practice_signal_red" -> R.color.via_status_stop
+                "practice_signal_green" -> R.color.via_status_go
+                "practice_signal_green_caution" -> R.color.via_status_caution
+                else -> R.color.via_status_wait
+            }
+        )
 
     private fun card(contentBuilder: LinearLayout.() -> Unit): MaterialCardView {
         val cardContent = LinearLayout(this).apply {
@@ -115,23 +196,15 @@ class UsageGuideActivity : AppCompatActivity() {
             this.text = text
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
             textSize = 34f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTypeface(typeface, Typeface.BOLD)
         }
 
     private fun sectionTitleText(text: String): TextView =
         TextView(this).apply {
             this.text = text
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
-            textSize = 22f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-        }
-
-    private fun sectionSubtitleText(text: String): TextView =
-        TextView(this).apply {
-            this.text = text
-            setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
-            textSize = 18f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            textSize = 24f
+            setTypeface(typeface, Typeface.BOLD)
         }
 
     private fun bodyText(text: String): TextView =
@@ -139,6 +212,14 @@ class UsageGuideActivity : AppCompatActivity() {
             this.text = text
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface_variant))
             textSize = 16f
+            setLineSpacing(dp(4).toFloat(), 1f)
+        }
+
+    private fun accentText(text: String): TextView =
+        TextView(this).apply {
+            this.text = text
+            setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_status_caution))
+            textSize = 15f
             setLineSpacing(dp(4).toFloat(), 1f)
         }
 
@@ -155,7 +236,7 @@ class UsageGuideActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL or Gravity.START
             minWidth = 0
             setPadding(0, paddingTop, dp(12), paddingBottom)
-            textAlignment = android.view.View.TEXT_ALIGNMENT_TEXT_START
+            textAlignment = View.TEXT_ALIGNMENT_TEXT_START
             textSize = 16f
             minHeight = dp(48)
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
