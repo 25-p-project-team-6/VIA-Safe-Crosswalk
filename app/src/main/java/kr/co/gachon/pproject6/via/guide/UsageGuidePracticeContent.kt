@@ -61,7 +61,7 @@ object UsageGuidePracticeContent {
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "주변 횡단보도 안내",
                 description = "메인 화면 버튼이나 블루투스 버튼을 짧게 눌렀을 때 실행되는 기능입니다.",
-                speechText = "연습 예시입니다. 주변 횡단보도 안내는 현재 위치 기준 가까운 횡단보도의 거리와 방향을 알려줍니다.",
+                speechText = "연습 예시입니다. 가장 가까운 횡단보도는 전방 약 18미터에 있습니다.",
                 hapticPattern = null
             ),
             PracticeFeedbackExample(
@@ -69,7 +69,7 @@ object UsageGuidePracticeContent {
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "블루투스 짧게 누르기",
                 description = "블루투스 버튼을 짧게 눌렀을 때의 동작입니다.",
-                speechText = "연습 예시입니다. 블루투스 버튼을 짧게 누르면 주변 횡단보도 안내를 실행합니다.",
+                speechText = "연습 예시입니다. 주변 횡단보도 안내를 실행합니다. 가장 가까운 횡단보도는 전방 약 18미터에 있습니다.",
                 hapticPattern = null
             ),
             PracticeFeedbackExample(
@@ -77,7 +77,7 @@ object UsageGuidePracticeContent {
                 category = PracticeFeedbackCategory.CONTROL,
                 title = "블루투스 길게 누르기",
                 description = "블루투스 버튼을 길게 눌렀을 때의 동작입니다.",
-                speechText = "연습 예시입니다. 블루투스 버튼을 길게 누르면 비상 문자 5초 유예 화면을 엽니다. 유예 시간 안에 취소할 수 있습니다.",
+                speechText = "연습 예시입니다. 비상 문자 화면을 엽니다. 5초 안에 취소하지 않으면 등록된 비상 연락처로 문자를 보냅니다.",
                 hapticPattern = null
             )
         )

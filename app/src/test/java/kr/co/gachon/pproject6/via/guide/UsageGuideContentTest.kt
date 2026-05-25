@@ -72,7 +72,7 @@ class UsageGuideContentTest {
                 "${example.title}\n${example.description}\n${example.speechText}"
             }
 
-        listOf("가까운 횡단보도의 거리와 방향", "짧게 누르면 주변 횡단보도 안내", "길게 누르면 비상 문자 5초 유예 화면").forEach { phrase ->
+        listOf("전방 약 18미터", "주변 횡단보도 안내를 실행합니다", "5초 안에 취소하지 않으면 등록된 비상 연락처로 문자를 보냅니다").forEach { phrase ->
             assertTrue("control practice should explain actual behavior for '$phrase'", controlText.contains(phrase))
         }
         assertTrue("control practice should use user-facing Bluetooth wording", controlText.contains("블루투스 버튼"))
