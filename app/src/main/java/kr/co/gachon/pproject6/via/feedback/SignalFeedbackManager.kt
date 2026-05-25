@@ -64,28 +64,8 @@ class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
             return
         }
 
-        when (assessment.state) {
-            AdvisoryState.RED_CONFIRMED -> {
-                speak(assessment.speechText)
-                vibrate(longArrayOf(0, 400, 200, 400))
-            }
-
-            AdvisoryState.GREEN_CONFIRMED -> {
-                speak(assessment.speechText)
-                vibrate(longArrayOf(0, 180, 120, 180, 120, 180))
-            }
-
-            AdvisoryState.GREEN_WITH_CAUTION -> {
-                speak(assessment.speechText)
-                vibrate(longArrayOf(0, 150, 100, 150, 250, 150))
-            }
-
-            AdvisoryState.TRANSITION_WAIT,
-            AdvisoryState.UNCERTAIN_VIEW -> {
-                speak(assessment.speechText)
-                vibrate(longArrayOf(0, 140))
-            }
-        }
+        speak(assessment.speechText)
+        vibrate(SignalFeedbackPatterns.forAdvisoryState(assessment.state))
     }
 
     fun clearState() {

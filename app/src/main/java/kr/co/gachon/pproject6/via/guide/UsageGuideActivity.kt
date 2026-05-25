@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
@@ -13,9 +14,22 @@ import com.google.android.material.card.MaterialCardView
 import kr.co.gachon.pproject6.via.R
 
 class UsageGuideActivity : AppCompatActivity() {
+    private lateinit var practiceFeedbackPlayer: PracticeFeedbackPlayer
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        practiceFeedbackPlayer = PracticeFeedbackPlayer(this)
         setContentView(createContentView())
+    }
+
+    override fun onPause() {
+        super.onPause()
+        practiceFeedbackPlayer.stop()
+    }
+
+    override fun onDestroy() {
+        practiceFeedbackPlayer.release()
+        super.onDestroy()
     }
 
     private fun createContentView(): ScrollView {
@@ -45,8 +59,40 @@ class UsageGuideActivity : AppCompatActivity() {
                 matchWrap(topMargin = 16)
             )
         }
+        content.addView(practiceCard(), matchWrap(topMargin = 16))
         return root
     }
+
+    private fun practiceCard(): MaterialCardView =
+        card {
+            addView(sectionTitleText("연습 모드"), matchWrap())
+            addView(
+                bodyText("아래 버튼은 사용법을 익히기 위한 예시입니다. 실제 카메라 분석, 위치 조회, 비상 문자, 실시간 안내를 실행하지 않습니다."),
+                matchWrap(topMargin = 8)
+            )
+            addView(sectionSubtitleText("소리와 진동 연습"), matchWrap(topMargin = 16))
+            UsageGuidePracticeContent.signalExamples.forEach { example ->
+                addView(practiceButton(example), matchWrap(topMargin = 8))
+            }
+            addView(sectionSubtitleText("버튼 조작 연습"), matchWrap(topMargin = 18))
+            UsageGuidePracticeContent.controlExamples.forEach { example ->
+                addView(practiceButton(example), matchWrap(topMargin = 8))
+                addView(bodyText(example.description), matchWrap(topMargin = 4))
+            }
+        }
+
+    private fun practiceButton(example: PracticeFeedbackExample): MaterialButton =
+        MaterialButton(this).apply {
+            text = example.title
+            isAllCaps = false
+            minHeight = dp(48)
+            setOnClickListener {
+                val played = practiceFeedbackPlayer.play(example)
+                if (!played) {
+                    Toast.makeText(this@UsageGuideActivity, "음성 엔진을 준비 중입니다. 잠시 후 다시 눌러 주세요.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
     private fun card(contentBuilder: LinearLayout.() -> Unit): MaterialCardView {
         val cardContent = LinearLayout(this).apply {
@@ -77,6 +123,14 @@ class UsageGuideActivity : AppCompatActivity() {
             this.text = text
             setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
             textSize = 22f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+
+    private fun sectionSubtitleText(text: String): TextView =
+        TextView(this).apply {
+            this.text = text
+            setTextColor(ContextCompat.getColor(this@UsageGuideActivity, R.color.via_on_surface))
+            textSize = 18f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
 
