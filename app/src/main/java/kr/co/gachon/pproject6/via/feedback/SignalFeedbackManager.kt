@@ -1,0 +1,125 @@
+package kr.co.gachon.pproject6.via.feedback
+
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+import kr.co.gachon.pproject6.via.ml.AdvisoryAssessment
+import kr.co.gachon.pproject6.via.ml.AdvisoryState
+import kr.co.gachon.pproject6.via.ml.GuidanceTuningDefaults
+
+class SignalFeedbackManager(context: Context) : TextToSpeech.OnInitListener {
+    private companion object {
+        private const val MANUAL_GUIDANCE_OVERRIDE_MS = 2_500L
+    }
+
+    private val appContext = context.applicationContext
+    private val tts = TextToSpeech(appContext, this)
+    private val feedbackPolicy =
+        SignalFeedbackPolicy(timingConfig = GuidanceTuningDefaults.feedbackTimingConfig)
+    private val vibrator: Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            appContext.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+
+    private var ttsReady = false
+    private var manualGuidanceOverrideUntilMs = Long.MIN_VALUE
+    var voiceEnabled = true
+    var hapticEnabled = true
+
+    override fun onInit(status: Int) {
+        if (status != TextToSpeech.SUCCESS) {
+            return
+        }
+
+        val preferred = tts.setLanguage(Locale.KOREAN)
+        if (preferred == TextToSpeech.LANG_MISSING_DATA || preferred == TextToSpeech.LANG_NOT_SUPPORTED) {
+            tts.setLanguage(Locale.getDefault())
+        }
+        ttsReady = true
+    }
+
+    fun onAdvisoryChanged(
+        assessment: AdvisoryAssessment
+    ) {
+        if (System.currentTimeMillis() < manualGuidanceOverrideUntilMs) {
+            return
+        }
+
+        val family =
+            when (assessment.state) {
+                AdvisoryState.RED_CONFIRMED,
+                AdvisoryState.GREEN_CONFIRMED,
+                AdvisoryState.GREEN_WITH_CAUTION -> FeedbackRepeatFamily.ACTION_LIKE
+                AdvisoryState.TRANSITION_WAIT,
+                AdvisoryState.UNCERTAIN_VIEW -> FeedbackRepeatFamily.WAIT_LIKE
+            }
+        if (!feedbackPolicy.shouldEmit(assessment.speechText, family)) {
+            return
+        }
+
+        speak(assessment.speechText)
+        vibrate(SignalFeedbackPatterns.forAdvisoryState(assessment.state))
+    }
+
+    fun clearState() {
+        feedbackPolicy.clear()
+        manualGuidanceOverrideUntilMs = Long.MIN_VALUE
+        tts.stop()
+        cancelVibration()
+    }
+
+    fun speakImmediate(message: String, utteranceId: String = "manual_guidance") {
+        manualGuidanceOverrideUntilMs = System.currentTimeMillis() + MANUAL_GUIDANCE_OVERRIDE_MS
+        feedbackPolicy.clear()
+        cancelVibration()
+        speak(message, utteranceId)
+    }
+
+    fun release() {
+        clearState()
+        tts.shutdown()
+    }
+
+    private fun speak(message: String, utteranceId: String = "traffic_light_state") {
+        if (!voiceEnabled || !ttsReady) {
+            return
+        }
+
+        tts.speak(message, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+
+    private fun vibrate(pattern: LongArray) {
+        if (!hapticEnabled) {
+            return
+        }
+
+        val targetVibrator = vibrator
+        if (targetVibrator == null || !targetVibrator.hasVibrator()) {
+            return
+        }
+
+        cancelVibration()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            targetVibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
+        } else {
+            @Suppress("DEPRECATION")
+            targetVibrator.vibrate(pattern, -1)
+        }
+    }
+
+    private fun cancelVibration() {
+        val targetVibrator = vibrator
+        if (targetVibrator == null || !targetVibrator.hasVibrator()) {
+            return
+        }
+
+        targetVibrator.cancel()
+    }
+}
