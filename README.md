@@ -210,4 +210,6 @@ Then validate on a physical device outdoors or with representative replay footag
 
 ## License
 
-No repository-level open-source license file is currently present in this checkout. Treat the code, bundled models, map data, and documentation as all-rights-reserved/internal project material until the project owner adds an explicit license and third-party attribution policy.
+This project is released under the MIT License. See [LICENSE](LICENSE) for the full license text.
+
+Third-party libraries, model artifacts, and map/open-data sources may have their own licenses or attribution requirements; review their upstream terms before redistribution.
